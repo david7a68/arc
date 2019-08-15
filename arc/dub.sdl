@@ -1,0 +1,5 @@
+name "arc"
+description "A minimal D application."
+authors "David"
+copyright "Copyright © 2019, David"
+license "proprietary"

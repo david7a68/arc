@@ -1,0 +1,11 @@
+*/.dub
+arc.so
+arc.dylib
+arc.dll
+arc.a
+arc.lib
+arc-test-*
+*.exe
+*.o
+*.obj
+*.lst
