@@ -9,3 +9,5 @@ arc-test-*
 *.o
 *.obj
 *.lst
+*/.vs
+*/*.sln

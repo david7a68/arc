@@ -17,3 +17,33 @@
     [ ] Chunked invalid characters
         [ ] Invalid character identification
             [ ] Tested
+    [ ] Profiled
+[ ] Syntactical analysis
+    [ ] AST struct
+    [ ] Pooling allocator for AST nodes
+        [x] Allocate
+            [x] Tested
+        [x] Free
+            [x] Tested
+        [x] Clear
+            [x] Tested
+        [ ] Out of memory handling
+            [ ] Tested
+        [ ] Profiled
+    [ ] Syntax reporter
+        [ ] Line-and-column finder
+            [ ] Tested
+        [ ] AST printer
+            [ ] Tested
+        [ ] Error handlers (refer to syntax_errors.md)
+            [ ] Tested
+    [ ] Parser
+        [ ] Automatic delimiter (comma, semicolon) insertion
+            [ ] Tested
+        [ ] Tuples
+            [ ] Tested
+        [ ] Names
+            [ ] Tested
+        [ ] Integers
+            [ ] Tested
+        [ ] Profiled
