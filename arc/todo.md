@@ -1,5 +1,13 @@
 # Todo
 
+## Current
+
+- [ ] Add test for NodeMemoryImpl with children (free_children)
+- [ ] Add tests for parser.{expression, tuple, name, integer}
+- [ ] Implement and test tree printer
+
+## List
+
 - [ ] Lexical analysis
   - [x] Whitespace skipping
     - [x] Tested
@@ -19,11 +27,15 @@
       - [ ] Tested
   - [ ] Profiled
 - [ ] Syntactical analysis
-  - [ ] AST struct
+  - [x] AST struct
   - [ ] Pooling allocator for AST nodes
     - [x] Allocate
       - [x] Tested
     - [x] Free
+      - [x] Tested
+    - [x] FreeChildren
+      - [x] Tested
+    - [x] FreeOnly
       - [x] Tested
     - [x] Clear
       - [x] Tested
