@@ -1,11 +1,11 @@
 module arc.output.ast_printer;
 
-import arc.syntax.ast: AstNode, AstNodeVisitor;
+import arc.syntax.ast;
 
 /**
  * Returns the string representation of an AST node
  */
-const(char)[] repr(AstNode* node) {
+const(char)[] repr(AstNode node) {
     switch (node.type) with (AstNode.Type) {
         case Invalid:
             return "Invalid";
@@ -44,7 +44,7 @@ const(char)[] repr(AstNode* node) {
  *       └─ Null
  *  ```
  */
-final class AstPrinter: AstNodeVisitor {
+final class AstPrinter: AstVisitor {
     import std.container.array: Array;
     import std.array: appender, Appender;
 
@@ -56,23 +56,21 @@ final class AstPrinter: AstNodeVisitor {
     /**
      * Accesses the string managed by the printer
      */
-    string data() {
-        return str.data;
+    const(char)[] data() {
+        return cast(const(char)[]) str.data;
     }
 
     import std.traits: EnumMembers;
     static foreach(member; EnumMembers!(AstNode.Type)) {
-        import std.format: fmt = format;
+        import std.format: format;
         import std.conv: to;
-        import std.uni: toLower;
 
-        mixin("override void visit_%s(AstNode* n) {
+        mixin("override void visit(%s n) {
             str.put(repr(n));
             str.put(\"\\n\");
 
-            if (n.first_child !is null)
-                write_and_adjescent(n.first_child);
-        }".fmt(member.to!string.toLower));
+            write_children(n);
+        }".format(member.to!string));
     }
 
     /**
@@ -97,16 +95,12 @@ private:
     Array!IndentType stack;
     Appender!(char[]) str;
 
-    void write_and_adjescent(AstNode* n) {
-        const first = n;
-        auto next = n;
-        do {
-            auto current = next;
-            next = next.next;
-
+    void write_children(AstNode n) {
+        foreach (i, child; n.children) {
             indent();
 
-            if (next is first) {
+            if (i + 1 == n.children.length) {
+                // this is the last child
                 str.put(lbar);
                 stack.insertBack(IndentType.Space);
             }
@@ -115,15 +109,43 @@ private:
                 stack.insertBack(IndentType.Bar);
             }
 
-            if (current.first_child !is null)
-                current.first_child.accept(this);
-            else str.put("Null\n");
+            child.accept(this);
             stack.removeBack();
-        } while (next !is first);
+        }
     }
 
     void indent() {
         foreach (type; stack[])
             str.put(indent_str[type]);
     }
+}
+
+version(unittest):
+
+immutable test_result = "Tuple
+ ├─ a
+ ├─ b
+ └─ Tuple
+     ├─ c
+     └─ 102
+";
+
+unittest {
+    const s = "a b c 102";
+
+    auto tup = new Tuple();
+    tup.add_member(new Name(&s[0], 1));
+    tup.add_member(new Name(&s[2], 1));
+    tup.add_member(new Tuple()
+                    .add_member(new Name(&s[4], 1))
+                    .add_member(new Integer(&s[6], 3)));
+
+    auto p = new AstPrinter;
+    p.visit(tup);
+    assert(p.data == test_result);
+
+    p.reset();
+
+    p.visit(tup);
+    assert(p.data == test_result);
 }
