@@ -6,13 +6,23 @@ abstract class AstVisitor {
     /// Functions for visiting ast nodes
     void visit(Invalid n)       { visit_children(n); }
     /// ditto
+    void visit(Name n)          { visit_children(n); }
+    /// ditto
+    void visit(Integer n)       { visit_children(n); }
+    /// ditto
     void visit(Tuple n)         { visit_children(n); }
     /// ditto
     void visit(Vector n)        { visit_children(n); }
     /// ditto
-    void visit(Integer n)       { visit_children(n); }
+    void visit(Add n)           { visit_children(n); }
     /// ditto
-    void visit(Name n)          { visit_children(n); }
+    void visit(Subtract n)      { visit_children(n); }
+    /// ditto
+    void visit(Multiply n)      { visit_children(n); }
+    /// ditto
+    void visit(Divide n)        { visit_children(n); }
+    /// ditto
+    void visit(Call n)          { visit_children(n); }
 
     void visit_children(AstNode n) {
         foreach (child; n.children)
@@ -24,10 +34,15 @@ abstract class AstVisitor {
 abstract class AstNode {
     enum Type {
         Invalid,
+        Name,
+        Integer,
         Tuple,
         Vector,
-        Integer,
-        Name
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Call,
     }
 
     /// The location of the start of the node's text
@@ -62,6 +77,31 @@ final class Invalid: Expression {
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
+final class Integer: Expression {
+    private ulong _value;
+
+    this(const(char)* start, size_t span) {
+        super(Type.Integer);
+        this.start = start;
+        this.span = span;
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Name: Expression {
+    this(const(char)* start, size_t span) {
+        super(Type.Name);
+        this.start = start;
+        this.span = span;
+    }
+
+    /// The text represented by this name
+    const(char)[] text() { return start[0 .. span]; }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
 final class Tuple: Expression {
     private AstNode[] _members;
 
@@ -88,27 +128,59 @@ final class Vector: Expression {
     Vector add_member(AstNode n) { _members ~= n; return this; }
 }
 
-final class Integer: Expression {
-    private ulong _value;
+abstract class Binary: Expression {
+    private AstNode[2] _members;
 
-    this(const(char)* start, size_t span) {
-        super(Type.Integer);
-        this.start = start;
-        this.span = span;
+    this(Type type, AstNode left, AstNode right) {
+        super(type);
+        _members = [left, right];
+    }
+
+    AstNode left() { return _members[0]; }
+    void left(AstNode n) { _members[0] = n; }
+
+    AstNode right() { return _members[1]; }
+    void right(AstNode n) { _members[1] = n; }
+
+    override AstNode[] children() { return _members; }
+}
+
+final class Add: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Add, left, right);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
-final class Name: Expression {
-    this(const(char)* start, size_t span) {
-        super(Type.Name);
-        this.start = start;
-        this.span = span;
+final class Subtract: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Subtract, left, right);
     }
 
-    /// The text represented by this name
-    const(char)[] text() { return start[0 .. span]; }
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Multiply: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Multiply, left, right);
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Divide: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Divide, left, right);
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Call: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Call, left, right);
+    }
 
     override void accept(AstVisitor v) { v.visit(this); }
 }

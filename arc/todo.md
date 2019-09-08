@@ -51,12 +51,27 @@
   - [ ] Parser
     - [ ] Automatic delimiter (comma, semicolon) insertion
       - [ ] Tested
-    - [x] Tuples
-      - [x] Tested
-    - [x] Vectors
-      - [x] Tested
-    - [ ] Names
-      - [ ] Tested
-    - [ ] Integers
-      - [ ] Tested
+    - [ ] Expressions
+      - [ ] Tuples
+        - [x] Unnamed tuples
+          - [ ] Tested
+        - [ ] Named elements
+          - [ ] Tested
+      - [x] Vectors
+        - [x] Tested
+      - [x] Names
+        - [ ] Tested
+      - [x] Integers
+        - [ ] Tested
+      - [ ] Binary Operators
+        - [ ] Add
+        - [ ] Subtract
+        - [ ] Multiply
+        - [ ] Divide
+        - [ ] Call
+        - [ ] Index
+      - [ ] Function literals
+    - [ ] Statements
+      - [ ] If-else branching
+      - [ ] Goto and labels
     - [ ] Profiled

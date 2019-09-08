@@ -9,13 +9,23 @@ const(char)[] repr(AstNode node) {
     switch (node.type) with (AstNode.Type) {
         case Invalid:
             return "Invalid";
+        case Name:
+        case Integer:
+            return node.start[0 .. node.span];
         case Tuple:
             return "Tuple";
         case Vector:
             return "Vector";
-        case Name:
-        case Integer:
-            return node.start[0 .. node.span];
+        case Add:
+            return "Add";
+        case Subtract:
+            return "Subtract";
+        case Multiply:
+            return "Multiply";
+        case Divide:
+            return "Divide";
+        case Call:
+            return "Call";
         default:
             assert(false);
     }
@@ -63,10 +73,15 @@ final class AstPrinter: AstVisitor {
     }
 
     override void visit(Invalid n)  { write(n); }
+    override void visit(Name n)     { write(n); }
+    override void visit(Integer n)  { write(n); }
     override void visit(Tuple n)    { write(n); }
     override void visit(Vector n)   { write(n); }
-    override void visit(Integer n)  { write(n); }
-    override void visit(Name n)     { write(n); }
+    override void visit(Add n)      { write(n); }
+    override void visit(Subtract n) { write(n); }
+    override void visit(Multiply n) { write(n); }
+    override void visit(Divide n)   { write(n); }
+    override void visit(Call n)     { write(n); }
 
     void write(AstNode n) {
         str.put(repr(n));
