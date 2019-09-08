@@ -3,10 +3,12 @@
 ## Syntax Errors
 
 [ ] Invalid character sequence
-[ ] Missing expected comma
+[x] Missing expected comma
 [ ] Missng expected semicolon
-[ ] Unclosed parentheses or brackets around tuple
+[x] Unclosed parentheses or brackets around tuple
+[x] Mismatched parentheses or brackets around tuple
 [ ] Unexpected comma in expression
+[ ] Unexpected end of file
 
 ## Syntax Warnings
 

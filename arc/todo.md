@@ -2,9 +2,8 @@
 
 ## Current
 
-- [ ] Add test for NodeMemoryImpl with children (free_children)
-- [ ] Add tests for parser.{expression, tuple, name, integer}
-- [ ] Implement and test tree printer
+- [ ] Automatic delimiter insertion
+  - [ ] Lexer does not yet produce EOL tokens
 
 ## List
 
@@ -52,8 +51,10 @@
   - [ ] Parser
     - [ ] Automatic delimiter (comma, semicolon) insertion
       - [ ] Tested
-    - [ ] Tuples
-      - [ ] Tested
+    - [x] Tuples
+      - [x] Tested
+    - [x] Vectors
+      - [x] Tested
     - [ ] Names
       - [ ] Tested
     - [ ] Integers

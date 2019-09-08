@@ -4,13 +4,15 @@ module arc.syntax.ast;
 abstract class AstVisitor {
 
     /// Functions for visiting ast nodes
-    void visit(Invalid n)   { visit_children(n); }
+    void visit(Invalid n)       { visit_children(n); }
     /// ditto
-    void visit(Tuple n)     { visit_children(n); }
+    void visit(Tuple n)         { visit_children(n); }
     /// ditto
-    void visit(Integer n)   { visit_children(n); }
+    void visit(Vector n)        { visit_children(n); }
     /// ditto
-    void visit(Name n)      { visit_children(n); }
+    void visit(Integer n)       { visit_children(n); }
+    /// ditto
+    void visit(Name n)          { visit_children(n); }
 
     void visit_children(AstNode n) {
         foreach (child; n.children)
@@ -23,6 +25,7 @@ abstract class AstNode {
     enum Type {
         Invalid,
         Tuple,
+        Vector,
         Integer,
         Name
     }
@@ -43,12 +46,20 @@ abstract class AstNode {
     AstNode[] children() { return []; }
 }
 
-final class Invalid: AstNode {
-    this() { super(Type.Invalid); }
-}
-
 abstract class Expression: AstNode {
     this(Type type) { super(type); }
+}
+
+final class Invalid: Expression {
+    this() { super(Type.Invalid); }
+
+    this(const(char)* start, size_t span) {
+        this();
+        this.start = start;
+        this.span = span;
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
 }
 
 final class Tuple: Expression {
@@ -62,6 +73,19 @@ final class Tuple: Expression {
 
     /// Add a member to the tuple
     Tuple add_member(AstNode n) { _members ~= n; return this; }
+}
+
+final class Vector: Expression {
+    private AstNode[] _members;
+
+    this() { super(Type.Vector); }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+
+    override AstNode[] children() { return _members; }
+
+    /// Add a member to the vector
+    Vector add_member(AstNode n) { _members ~= n; return this; }
 }
 
 final class Integer: Expression {

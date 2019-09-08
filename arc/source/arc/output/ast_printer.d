@@ -11,6 +11,8 @@ const(char)[] repr(AstNode node) {
             return "Invalid";
         case Tuple:
             return "Tuple";
+        case Vector:
+            return "Vector";
         case Name:
         case Integer:
             return node.start[0 .. node.span];
@@ -60,17 +62,16 @@ final class AstPrinter: AstVisitor {
         return cast(const(char)[]) str.data;
     }
 
-    import std.traits: EnumMembers;
-    static foreach(member; EnumMembers!(AstNode.Type)) {
-        import std.format: format;
-        import std.conv: to;
+    override void visit(Invalid n)  { write(n); }
+    override void visit(Tuple n)    { write(n); }
+    override void visit(Vector n)   { write(n); }
+    override void visit(Integer n)  { write(n); }
+    override void visit(Name n)     { write(n); }
 
-        mixin("override void visit(%s n) {
-            str.put(repr(n));
-            str.put(\"\\n\");
-
-            write_children(n);
-        }".format(member.to!string));
+    void write(AstNode n) {
+        str.put(repr(n));
+        str.put("\n");
+        write_children(n);
     }
 
     /**
