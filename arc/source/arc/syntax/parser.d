@@ -9,10 +9,6 @@ struct Parser {
     Token token;
     Lexer lexer;
 
-    Expression parse(const(char)[] source, SyntaxReporter reporter) {
-        return expression(source, reporter);
-    }
-
     Expression expression(const(char)[] source, SyntaxReporter reporter) {
         lexer.reset(source);
         error = reporter;
@@ -22,101 +18,7 @@ struct Parser {
     }
 
     Expression expression() {
-        return primary();
-    }
-
-    Expression primary() {
-        switch (token.type) {
-        case Token.Lparen:
-            return tuple();
-        case Token.Lbracket:
-            return vector();
-        case Token.Name:
-            return name();
-        case Token.Integer:
-            return integer();
-        default:
-            error.token_cannot_start_expr(token);
-            return null; // unreachable except in testing
-        }
-    }
-
-    Vector vector() {
-        const start = token.start;
-        advance();
-
-        // skip leading commas
-        while(token.type == Token.Comma)
-            advance();
-
-        auto node = new Vector;
-        while (token.type != Token.Rbracket) {
-            node.add_member(expression());
-
-            if (token.type == Token.Comma) {
-                do {
-                    advance();
-                } while (token.type == Token.Comma);
-            }
-            else if (token.type == Token.Eof) {
-                error.unexpected_end_of_file(token.start);
-                return null;
-            }
-            else {
-                error.vector_missing_comma(start, token.start);
-                return null;
-            }
-        }
-
-        node.start = start;
-        node.span = (token.start + token.span) - start;
-        const correct = consume(Token.Rbracket);
-        assert(correct);
-        return node;
-    }
-
-    Expression tuple() {
-        const start = token.start;
-        advance();
-
-        // skip leading commas
-        while(token.type == Token.Comma)
-            advance();
-
-        auto node = new Tuple;
-        while (token.type != Token.Rparen) {
-            node.add_member(expression());
-
-            if (token.type == Token.Comma) {
-                do {
-                    advance();
-                } while (token.type == Token.Comma);
-            }
-            else if (token.type == Token.Eof) {
-                error.unexpected_end_of_file(token.start);
-                return new Invalid(start, token.start - start);
-            }
-            else {
-                error.tuple_missing_comma(start, token.start);
-                return new Invalid(start, token.start - start);
-            }
-        }
-
-        node.start = start;
-        node.span = (token.start + token.span) - start;
-        const correct = consume(Token.Rparen);
-        assert(correct);
-        return node;
-    }
-
-    Name name() {
-        scope(exit) advance();
-        return new Name(token.start, token.span);
-    }
-
-    Integer integer() {
-        scope(exit) advance();
-        return new Integer(token.start, token.span);
+        return primary(this, error);
     }
 
     void advance() {
@@ -132,19 +34,23 @@ struct Parser {
     }
 }
 
-version(unittest):
+private:
 
-SyntaxReporter.ReportingFunction_loc_err report_loc_err_set_flag = (r, l1, l2) {
-    *(cast(bool*) r.user_data) = true;
-};
-
-SyntaxReporter.ReportingFunction_loc report_loc_set_flag = (r, l) {
-    *(cast(bool*) r.user_data) = true;
-};
-
-SyntaxReporter.ReportingFunction_token report_bad_token_set_flag = (r, t) {
-    *(cast(bool*) r.user_data) = true;
-};
+Expression primary(ref Parser p, ref SyntaxReporter error) {
+    switch (p.token.type) {
+    case Token.Lparen:
+        return tuple(p, error);
+    case Token.Lbracket:
+        return vector(p, error);
+    case Token.Name:
+        return name(p);
+    case Token.Integer:
+        return integer(p);
+    default:
+        error.token_cannot_start_expr(p.token);
+        return null; // unreachable except in testing
+    }
+}
 
 unittest {
     Parser parser;
@@ -155,6 +61,41 @@ unittest {
     err.token_cannot_start_expr_impl = report_bad_token_set_flag;
     auto e = parser.expression("]", err);
     assert(bad_token);
+}
+
+Expression vector(ref Parser p, ref SyntaxReporter error) {
+    const start = p.token.start;
+    p.advance();
+
+    // skip leading commas
+    while(p.token.type == Token.Comma)
+        p.advance();
+
+    auto node = new Vector;
+    while (p.token.type != Token.Rbracket) {
+        node.add_member(p.expression());
+
+        if (p.token.type == Token.Comma) {
+            do {
+                p.advance();
+            } while (p.token.type == Token.Comma);
+        }
+        else if (p.token.type == Token.Eof) {
+            error.unexpected_end_of_file(p.token.start);
+            return new Invalid(start, p.token.start - start);
+        }
+        else {
+            error.vector_missing_comma(start, p.token.start);
+            return new Invalid(start, p.token.start - start);
+        }
+    }
+
+    const close = p.token;
+    p.consume(Token.Rbracket);
+
+    node.start = start;
+    node.span = (close.start + close.span) - start;
+    return node;
 }
 
 unittest {
@@ -179,6 +120,41 @@ unittest {
     assert(unexpected_eof);
 }
 
+Expression tuple(ref Parser p, ref SyntaxReporter error) {
+    const start = p.token.start;
+    p.advance();
+
+    // skip leading commas
+    while(p.token.type == Token.Comma)
+        p.advance();
+
+    auto node = new Tuple;
+    while (p.token.type != Token.Rparen) {
+        node.add_member(p.expression());
+
+        if (p.token.type == Token.Comma) {
+            do {
+                p.advance();
+            } while (p.token.type == Token.Comma);
+        }
+        else if (p.token.type == Token.Eof) {
+            error.unexpected_end_of_file(p.token.start);
+            return new Invalid(start, p.token.start - start);
+        }
+        else {
+            error.tuple_missing_comma(start, p.token.start);
+            return new Invalid(start, p.token.start - start);
+        }
+    }
+
+    const close = p.token;
+    p.consume(Token.Rparen);
+
+    node.start = start;
+    node.span = (close.start + close.span) - start;
+    return node;
+}
+
 unittest {
     Parser parser;
     
@@ -199,4 +175,28 @@ unittest {
     err.unexpected_end_of_file_impl = report_loc_set_flag;
     auto e = parser.expression("(a", err);
     assert(unexpected_eof);
+}
+
+Name name(ref Parser p) {
+    scope(exit) p.advance();
+    return new Name(p.token.start, p.token.span);
+}
+
+Integer integer(ref Parser p) {
+    scope(exit) p.advance();
+    return new Integer(p.token.start, p.token.span);
+}
+
+version(unittest) {
+    SyntaxReporter.ReportingFunction_loc_err report_loc_err_set_flag = (r, l1, l2) {
+        *(cast(bool*) r.user_data) = true;
+    };
+
+    SyntaxReporter.ReportingFunction_loc report_loc_set_flag = (r, l) {
+        *(cast(bool*) r.user_data) = true;
+    };
+
+    SyntaxReporter.ReportingFunction_token report_bad_token_set_flag = (r, t) {
+        *(cast(bool*) r.user_data) = true;
+    };
 }
