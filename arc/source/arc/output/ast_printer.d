@@ -16,6 +16,8 @@ const(char)[] repr(AstNode node) {
             return "Tuple";
         case Vector:
             return "Vector";
+        case Negate:
+            return "Negate";
         case Add:
             return "Add";
         case Subtract:
@@ -77,6 +79,7 @@ final class AstPrinter: AstVisitor {
     override void visit(Integer n)  { write(n); }
     override void visit(Tuple n)    { write(n); }
     override void visit(Vector n)   { write(n); }
+    override void visit(Negate n)   { write(n); }
     override void visit(Add n)      { write(n); }
     override void visit(Subtract n) { write(n); }
     override void visit(Multiply n) { write(n); }

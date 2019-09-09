@@ -19,7 +19,8 @@ struct Token {
 
         Lparen = '(', Rparen = ')',
         Lbracket = '[', Rbracket = ']',
-        Comma = ','
+        Comma = ',', Dot = '.',
+        Plus = '+', Minus = '-', Slash = '/', Star = '*',
     }
 
     alias Type this;
@@ -99,6 +100,26 @@ struct Lexer {
             case ',':
                 source_text++;
                 current = Token(Token.Comma, start, 1);
+                break;
+            case '.':
+                source_text++;
+                current = Token(Token.Dot, start, 1);
+                break;
+            case '+':
+                source_text++;
+                current = Token(Token.Plus, start, 1);
+                break;
+            case '-':
+                source_text++;
+                current = Token(Token.Minus, start, 1);
+                break;
+            case '*':
+                source_text++;
+                current = Token(Token.Star, start, 1);
+                break;
+            case '/':
+                source_text++;
+                current = Token(Token.Slash, start, 1);
                 break;
             case 'a': .. case 'z':
             case 'A': .. case 'Z':

@@ -14,6 +14,8 @@ abstract class AstVisitor {
     /// ditto
     void visit(Vector n)        { visit_children(n); }
     /// ditto
+    void visit(Negate n)        { visit_children(n); }
+    /// ditto
     void visit(Add n)           { visit_children(n); }
     /// ditto
     void visit(Subtract n)      { visit_children(n); }
@@ -38,6 +40,7 @@ abstract class AstNode {
         Integer,
         Tuple,
         Vector,
+        Negate,
         Add,
         Subtract,
         Multiply,
@@ -126,6 +129,19 @@ final class Vector: Expression {
 
     /// Add a member to the vector
     Vector add_member(AstNode n) { _members ~= n; return this; }
+}
+
+final class Negate: Expression {
+    private AstNode _expression;
+
+    this(AstNode expr) {
+        super(Type.Negate);
+        _expression = expr;
+    }
+
+    override AstNode[] children() { return [_expression]; }
+
+    override void accept(AstVisitor v) { v.visit(this); }
 }
 
 abstract class Binary: Expression {
