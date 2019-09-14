@@ -5,20 +5,12 @@ import arc.syntax.lexer;
 import arc.syntax.syntax_reporter;
 
 struct Parser {
-    SyntaxReporter error;
     Token token;
     Lexer lexer;
 
-    Expression expression(const(char)[] source, SyntaxReporter reporter) {
+    void reset(const(char)[] source) {
         lexer.reset(source);
-        error = reporter;
-
         advance();
-        return expression();
-    }
-
-    Expression expression() {
-        return primary(this, error);
     }
 
     void advance() {
@@ -32,6 +24,10 @@ struct Parser {
         advance();
         return true;
     }
+}
+
+Expression expression(ref Parser p, ref SyntaxReporter error) {
+    return primary(p, error);
 }
 
 private:
@@ -59,7 +55,8 @@ unittest {
     bool bad_token;
     auto err = SyntaxReporter(0, &bad_token);
     err.token_cannot_start_expr_impl = report_bad_token_set_flag;
-    auto e = parser.expression("]", err);
+    parser.reset("]");
+    auto e = parser.expression(err);
     assert(bad_token);
 }
 
@@ -73,7 +70,7 @@ Expression vector(ref Parser p, ref SyntaxReporter error) {
 
     auto node = new Vector;
     while (p.token.type != Token.Rbracket) {
-        node.add_member(p.expression());
+        node.add_member(p.expression(error));
 
         if (p.token.type == Token.Comma) {
             do {
@@ -105,7 +102,8 @@ unittest {
     bool missing_comma;
     auto err = SyntaxReporter(0, &missing_comma);
     err.vector_missing_comma_impl = report_loc_err_set_flag;
-    auto e = parser.expression("[a)", err);
+    parser.reset("[a)");
+    auto e = parser.expression(err);
     assert(missing_comma);
 }
 
@@ -116,7 +114,8 @@ unittest {
     bool unexpected_eof;
     auto err = SyntaxReporter(0, &unexpected_eof);
     err.unexpected_end_of_file_impl = report_loc_set_flag;
-    auto e = parser.expression("[a", err);
+    parser.reset("[a");
+    auto e = parser.expression(err);
     assert(unexpected_eof);
 }
 
@@ -130,7 +129,7 @@ Expression tuple(ref Parser p, ref SyntaxReporter error) {
 
     auto node = new Tuple;
     while (p.token.type != Token.Rparen) {
-        node.add_member(p.expression());
+        node.add_member(p.expression(error));
 
         if (p.token.type == Token.Comma) {
             do {
@@ -162,7 +161,8 @@ unittest {
     bool missing_comma;
     auto err = SyntaxReporter(0, &missing_comma);
     err.tuple_missing_comma_impl = report_loc_err_set_flag;
-    auto e = parser.expression("(a]", err);
+    parser.reset("(a]");
+    auto e = parser.expression(err);
     assert(missing_comma);
 }
 
@@ -173,7 +173,8 @@ unittest {
     bool unexpected_eof;
     auto err = SyntaxReporter(0, &unexpected_eof);
     err.unexpected_end_of_file_impl = report_loc_set_flag;
-    auto e = parser.expression("(a", err);
+    parser.reset("(a");
+    auto e = parser.expression(err);
     assert(unexpected_eof);
 }
 
