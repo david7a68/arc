@@ -31,17 +31,18 @@ struct SyntaxReporter {
     /**
      * Reports that the tuple starting at 'loc' is missing a comma at 'err_loc'
      */
-    ReportingFunction_loc_err tuple_missing_comma_impl = (reporter, expr_loc, err_loc) {
-        assert(false, "Error: Missing comma in tuple expression");
-    };
+    // ReportingFunction_loc_err list_missing_comma_impl = (reporter, expr_loc, err_loc) {
+    //     assert(false, "Error: Missing comma in tuple expression");
+    // };
 
     /**
-     * Reports that the vector starting at 'loc' is missing a comma at 'err_loc'
+     * Reports that the list does not have a matching closing token. Either the
+     * end of the file has been reached unexpectedly, or the next token is not a
+     * comma or closing token.
      */
-    ReportingFunction_loc_err vector_missing_comma_impl = (reporter, expr_loc, err_loc) {
-        assert(false, "Error: Missing comma in vector expression");
-    };
-
+    ReportingFunction_loc_err list_not_closed_impl = (reporter, expr_loc, err_loc) {
+        assert(false, "Error: The list is not properly closed");
+    }; 
     /**
      * Reports that the described token cannot start an expression
      */

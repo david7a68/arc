@@ -10,9 +10,7 @@ abstract class AstVisitor {
     /// ditto
     void visit(Integer n)       { visit_children(n); }
     /// ditto
-    void visit(Tuple n)         { visit_children(n); }
-    /// ditto
-    void visit(Vector n)        { visit_children(n); }
+    void visit(List n)         { visit_children(n); }
     /// ditto
     void visit(Negate n)        { visit_children(n); }
     /// ditto
@@ -38,8 +36,7 @@ abstract class AstNode {
         Invalid,
         Name,
         Integer,
-        Tuple,
-        Vector,
+        List,
         Negate,
         Add,
         Subtract,
@@ -47,6 +44,8 @@ abstract class AstNode {
         Divide,
         Call,
     }
+
+    alias Type this;
 
     /// The location of the start of the node's text
     const(char)* start;
@@ -105,30 +104,27 @@ final class Name: Expression {
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
-final class Tuple: Expression {
+/**
+ * A List represents a possibly heterogenous sequence of ordered elements that 
+ * may be referred to by numerical index or name.
+ */
+final class List: Expression {
     private AstNode[] _members;
 
-    this() { super(Type.Tuple); }
+    this(const(char)* start, size_t span) {
+        super(Type.List);
+        this.start = start;
+        this.span = span;
+    }
 
     override void accept(AstVisitor v) { v.visit(this); }
 
     override AstNode[] children() { return _members; }
 
-    /// Add a member to the tuple
-    Tuple add_member(AstNode n) { _members ~= n; return this; }
-}
+    void children(AstNode[] n) { _members = n; }
 
-final class Vector: Expression {
-    private AstNode[] _members;
-
-    this() { super(Type.Vector); }
-
-    override void accept(AstVisitor v) { v.visit(this); }
-
-    override AstNode[] children() { return _members; }
-
-    /// Add a member to the vector
-    Vector add_member(AstNode n) { _members ~= n; return this; }
+    /// Add a member to the list
+    List add_member(AstNode n) { _members ~= n; return this; }
 }
 
 final class Negate: Expression {

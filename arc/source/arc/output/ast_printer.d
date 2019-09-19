@@ -12,10 +12,8 @@ const(char)[] repr(AstNode node) {
         case Name:
         case Integer:
             return node.start[0 .. node.span];
-        case Tuple:
-            return "Tuple";
-        case Vector:
-            return "Vector";
+        case List:
+            return "List";
         case Negate:
             return "Negate";
         case Add:
@@ -74,11 +72,17 @@ final class AstPrinter: AstVisitor {
         return cast(const(char)[]) str.data;
     }
 
-    override void visit(Invalid n)  { write(n); }
+    override void visit(Invalid n)  {
+        str.put(repr(n));
+        str.put(" \"");
+        str.put(n.start[0 .. n.span]);
+        str.put("\"\n");
+        write_children(n);
+    }
+
     override void visit(Name n)     { write(n); }
     override void visit(Integer n)  { write(n); }
-    override void visit(Tuple n)    { write(n); }
-    override void visit(Vector n)   { write(n); }
+    override void visit(List n)     { write(n); }
     override void visit(Negate n)   { write(n); }
     override void visit(Add n)      { write(n); }
     override void visit(Subtract n) { write(n); }
@@ -141,10 +145,10 @@ private:
 
 version(unittest):
 
-immutable test_result = "Tuple
+immutable test_result = "List
  ├─ a
  ├─ b
- └─ Tuple
+ └─ List
      ├─ c
      └─ 102
 ";
@@ -152,10 +156,10 @@ immutable test_result = "Tuple
 unittest {
     const s = "a b c 102";
 
-    auto tup = new Tuple();
+    auto tup = new List(&s[0], s.length);
     tup.add_member(new Name(&s[0], 1));
     tup.add_member(new Name(&s[2], 1));
-    tup.add_member(new Tuple()
+    tup.add_member(new List(&s[4], 5)
                     .add_member(new Name(&s[4], 1))
                     .add_member(new Integer(&s[6], 3)));
 

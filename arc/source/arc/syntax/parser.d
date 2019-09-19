@@ -16,6 +16,8 @@ struct Parser {
     void advance() {
         lexer.lex();
         token = lexer.current;
+
+        import std.stdio; writeln(token);
     }
 
     bool consume(Token.Type type) {
@@ -35,9 +37,8 @@ private:
 Expression primary(ref Parser p, ref SyntaxReporter error) {
     switch (p.token.type) {
     case Token.Lparen:
-        return tuple(p, error);
     case Token.Lbracket:
-        return vector(p, error);
+        return list(p, error);
     case Token.Name:
         return name(p);
     case Token.Integer:
@@ -60,122 +61,122 @@ unittest {
     assert(bad_token);
 }
 
-Expression vector(ref Parser p, ref SyntaxReporter error) {
+Expression list(ref Parser p, ref SyntaxReporter error) {
     const start = p.token.start;
+    const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
     p.advance();
 
     // skip leading commas
     while(p.token.type == Token.Comma)
         p.advance();
 
-    auto node = new Vector;
-    while (p.token.type != Token.Rbracket) {
-        node.add_member(p.expression(error));
+    AstNode[] members;
+    while (p.token.type != closing_tok) {
+        auto e = p.expression(error);
+
+        if (e.type == AstNode.Invalid) {
+            // a subexpression is invalid
+            // skip everything in the list and return invalid
+            return e;
+        }
+
+        members ~= e;
 
         if (p.token.type == Token.Comma) {
             do {
                 p.advance();
             } while (p.token.type == Token.Comma);
         }
-        else if (p.token.type == Token.Eof) {
-            error.unexpected_end_of_file(p.token.start);
-            return new Invalid(start, p.token.start - start);
-        }
-        else {
-            error.vector_missing_comma(start, p.token.start);
-            return new Invalid(start, p.token.start - start);
+        else if (p.token.type != closing_tok) {
+            import std.stdio; "bad".writeln;
+
+            error.list_not_closed(start, p.token.start);
+            auto err = new Invalid(start, (p.token.start + p.token.span) - start);
+            p.advance();
+            return err;
         }
     }
 
     const close = p.token;
-    p.consume(Token.Rbracket);
+    p.consume(closing_tok);
+    auto lst = new List(start, (close.start + close.span) - start);
+    lst.children = members;
+    return lst;
+}
 
-    node.start = start;
-    node.span = (close.start + close.span) - start;
-    return node;
+unittest {
+    Parser parser;
+    auto err = SyntaxReporter();
+    parser.reset("[]");
+    auto e = parser.expression(err);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.List);
+    assert(e.children.length == 0);
+}
+
+unittest {
+    Parser parser;
+    auto err = SyntaxReporter();
+    parser.reset("[a]");
+    auto e = parser.expression(err);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.List);
+    assert(e.children.length == 1);
+    assert(e.children[0].type == AstNode.Name);
+}
+
+unittest {
+    Parser parser;
+    auto err = SyntaxReporter();
+    parser.reset("[a, (b)]");
+    auto e = parser.expression(err);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.List);
+    assert(e.children.length == 2);
+    assert(e.children[0].type == AstNode.Name);
+    assert(e.children[1].type == AstNode.List);
 }
 
 unittest {
     Parser parser;
     
-    // vector_missing_comma
-    bool missing_comma;
-    auto err = SyntaxReporter(0, &missing_comma);
-    err.vector_missing_comma_impl = report_loc_err_set_flag;
+    // list not closed, incorrect closing delimiter
+    bool not_closed;
+    auto err = SyntaxReporter(0, &not_closed);
+    err.list_not_closed_impl = report_loc_err_set_flag;
     parser.reset("[a)");
     auto e = parser.expression(err);
-    assert(missing_comma);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.Invalid);
+    assert(not_closed);
 }
 
 unittest {
     Parser parser;
 
-    // vector_unexpected_eof
-    bool unexpected_eof;
-    auto err = SyntaxReporter(0, &unexpected_eof);
-    err.unexpected_end_of_file_impl = report_loc_set_flag;
+    // list not closed, unexpected end of file
+    bool not_closed;
+    auto err = SyntaxReporter(0, &not_closed);
+    err.list_not_closed_impl = report_loc_err_set_flag;
     parser.reset("[a");
     auto e = parser.expression(err);
-    assert(unexpected_eof);
-}
-
-Expression tuple(ref Parser p, ref SyntaxReporter error) {
-    const start = p.token.start;
-    p.advance();
-
-    // skip leading commas
-    while(p.token.type == Token.Comma)
-        p.advance();
-
-    auto node = new Tuple;
-    while (p.token.type != Token.Rparen) {
-        node.add_member(p.expression(error));
-
-        if (p.token.type == Token.Comma) {
-            do {
-                p.advance();
-            } while (p.token.type == Token.Comma);
-        }
-        else if (p.token.type == Token.Eof) {
-            error.unexpected_end_of_file(p.token.start);
-            return new Invalid(start, p.token.start - start);
-        }
-        else {
-            error.tuple_missing_comma(start, p.token.start);
-            return new Invalid(start, p.token.start - start);
-        }
-    }
-
-    const close = p.token;
-    p.consume(Token.Rparen);
-
-    node.start = start;
-    node.span = (close.start + close.span) - start;
-    return node;
-}
-
-unittest {
-    Parser parser;
-    
-    // tuple_missing_comma
-    bool missing_comma;
-    auto err = SyntaxReporter(0, &missing_comma);
-    err.tuple_missing_comma_impl = report_loc_err_set_flag;
-    parser.reset("(a]");
-    auto e = parser.expression(err);
-    assert(missing_comma);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.Invalid);
+    assert(not_closed);
 }
 
 unittest {
     Parser parser;
 
-    // tuple_unexpected_eof
-    bool unexpected_eof;
-    auto err = SyntaxReporter(0, &unexpected_eof);
-    err.unexpected_end_of_file_impl = report_loc_set_flag;
-    parser.reset("(a");
+    // list not closed, unexpected end of file
+    bool not_closed;
+    auto err = SyntaxReporter(0, &not_closed);
+    err.list_not_closed_impl = report_loc_err_set_flag;
+    parser.reset("[a, [b)]");
     auto e = parser.expression(err);
-    assert(unexpected_eof);
+    assert(parser.token.type == Token.Eof);
+    assert(e.type == AstNode.Invalid);
+    assert(not_closed);
 }
 
 Name name(ref Parser p) {
