@@ -7,12 +7,17 @@ struct SyntaxReporter {
     StringID source_id;
     void* user_data;
 
+    alias ExprLoc = const(char)*;
+    alias ErrorLoc = const(char)*;
+
     /// Function type that reports the location of the error, and the location of its enclosing expression
-    alias ReportingFunction_loc_err = void function(SyntaxReporter*, const(char)* expr, const(char)* err);
+    alias ReportingFunction_loc_err = void function(SyntaxReporter*, ExprLoc, ErrorLoc);
     /// Function type that reports the location of the error
-    alias ReportingFunction_loc = void function(SyntaxReporter*, const(char)* loc);
+    alias ReportingFunction_loc = void function(SyntaxReporter*, ErrorLoc);
     /// Function type that reports a particular token
-    alias ReportingFunction_token = void function(SyntaxReporter*, Token token);
+    alias ReportingFunction_token = void function(SyntaxReporter*, Token);
+    /// Function type that reporst the start of the expression, and the token
+    alias ReportingFunction_loc_token = void function(SyntaxReporter*, ExprLoc, Token);
 
     /**
      * Quality of life dispatcher that lets us pretend that the error handlers
@@ -29,11 +34,12 @@ struct SyntaxReporter {
     }
 
     /**
-     * Reports that the tuple starting at 'loc' is missing a comma at 'err_loc'
+     * Reports the unexpected end of the file while parsing the syntactical
+     * artifact starting at 'loc'
      */
-    // ReportingFunction_loc_err list_missing_comma_impl = (reporter, expr_loc, err_loc) {
-    //     assert(false, "Error: Missing comma in tuple expression");
-    // };
+    ReportingFunction_loc unexpected_end_of_file_impl = (reporter, loc) {
+        assert(false, "Error: Unexpected end of file!");
+    };
 
     /**
      * Reports that the list does not have a matching closing token. Either the
@@ -43,6 +49,7 @@ struct SyntaxReporter {
     ReportingFunction_loc_err list_not_closed_impl = (reporter, expr_loc, err_loc) {
         assert(false, "Error: The list is not properly closed");
     }; 
+    
     /**
      * Reports that the described token cannot start an expression
      */
@@ -51,10 +58,9 @@ struct SyntaxReporter {
     };
 
     /**
-     * Reports the unexpected end of the file while parsing the syntactical
-     * artifact starting at 'loc'
+     * Reports that the token is not an operator (cannot be in infix position).
      */
-    ReportingFunction_loc unexpected_end_of_file_impl = (reporter, loc) {
-        assert(false, "Error: Unexpected end of file!");
+    ReportingFunction_loc_token token_is_not_an_operator_impl = (reporter, loc, token) {
+        assert(false, "Error: The token (" ~ token.start[0 .. token.span] ~ ") is not an operator");
     };
 }

@@ -79,18 +79,6 @@ final class Invalid: Expression {
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
-final class Integer: Expression {
-    private ulong _value;
-
-    this(const(char)* start, size_t span) {
-        super(Type.Integer);
-        this.start = start;
-        this.span = span;
-    }
-
-    override void accept(AstVisitor v) { v.visit(this); }
-}
-
 final class Name: Expression {
     this(const(char)* start, size_t span) {
         super(Type.Name);
@@ -100,6 +88,18 @@ final class Name: Expression {
 
     /// The text represented by this name
     const(char)[] text() { return start[0 .. span]; }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Integer: Expression {
+    private ulong _value;
+
+    this(const(char)* start, size_t span) {
+        super(Type.Integer);
+        this.start = start;
+        this.span = span;
+    }
 
     override void accept(AstVisitor v) { v.visit(this); }
 }
