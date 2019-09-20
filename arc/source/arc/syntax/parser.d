@@ -16,8 +16,6 @@ struct Parser {
     void advance() {
         lexer.lex();
         token = lexer.current;
-
-        import std.stdio; writeln(token);
     }
 
     bool consume(Token.Type type) {
@@ -71,14 +69,12 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
         p.advance();
 
     AstNode[] members;
+    bool subexpression_error = false;
     while (p.token.type != closing_tok) {
         auto e = p.expression(error);
 
-        if (e.type == AstNode.Invalid) {
-            // a subexpression is invalid
-            // skip everything in the list and return invalid
-            return e;
-        }
+        if (e.type == AstNode.Invalid)
+            subexpression_error = true;
 
         members ~= e;
 
@@ -88,8 +84,6 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
             } while (p.token.type == Token.Comma);
         }
         else if (p.token.type != closing_tok) {
-            import std.stdio; "bad".writeln;
-
             error.list_not_closed(start, p.token.start);
             auto err = new Invalid(start, (p.token.start + p.token.span) - start);
             p.advance();
@@ -99,9 +93,15 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
 
     const close = p.token;
     p.consume(closing_tok);
-    auto lst = new List(start, (close.start + close.span) - start);
-    lst.children = members;
-    return lst;
+    if (!subexpression_error) {
+        auto lst = new List(start, (close.start + close.span) - start);
+        lst.children = members;
+        return lst;
+    }
+    else {
+        auto inv = new Invalid(start, (close.start + close.span) - start);
+        return inv;
+    }
 }
 
 unittest {
