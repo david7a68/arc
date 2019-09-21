@@ -24,6 +24,8 @@ const(char)[] repr(AstNode node) {
             return "Multiply";
         case Divide:
             return "Divide";
+        case Power:
+            return "Power";
         case Call:
             return "Call";
         default:
@@ -88,6 +90,7 @@ final class AstPrinter: AstVisitor {
     override void visit(Subtract n) { write(n); }
     override void visit(Multiply n) { write(n); }
     override void visit(Divide n)   { write(n); }
+    override void visit(Power n)    { write(n); }
     override void visit(Call n)     { write(n); }
 
     void write(AstNode n) {

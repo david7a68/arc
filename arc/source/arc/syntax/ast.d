@@ -22,6 +22,8 @@ abstract class AstVisitor {
     /// ditto
     void visit(Divide n)        { visit_children(n); }
     /// ditto
+    void visit(Power n)         { visit_children(n); }
+    /// ditto
     void visit(Call n)          { visit_children(n); }
 
     void visit_children(AstNode n) {
@@ -42,6 +44,7 @@ abstract class AstNode {
         Subtract,
         Multiply,
         Divide,
+        Power,
         Call,
     }
 
@@ -184,6 +187,14 @@ final class Multiply: Binary {
 final class Divide: Binary {
     this(AstNode left, AstNode right) {
         super(Type.Divide, left, right);
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class Power: Binary {
+    this(AstNode left, AstNode right) {
+        super(Type.Power, left, right);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }

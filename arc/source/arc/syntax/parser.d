@@ -83,10 +83,11 @@ struct Infix {
 immutable Infix[256] infix_parslets = () {
     Infix[256] p;
 
-    p[Token.Plus]        = Infix(Infix.Sum, &add);
-    p[Token.Minus]   = Infix(Infix.Sum, &subtract);
-    p[Token.Star]   = Infix(Infix.Product, &multiply);
-    p[Token.Slash]     = Infix(Infix.Product, &divide);
+    p[Token.Plus]       = Infix(Infix.Sum, &add);
+    p[Token.Minus]      = Infix(Infix.Sum, &subtract);
+    p[Token.Star]       = Infix(Infix.Product, &multiply);
+    p[Token.Slash]      = Infix(Infix.Product, &divide);
+    p[Token.Caret]      = Infix(Infix.Power, &power);
 
     return p;
 } ();
@@ -278,6 +279,18 @@ Expression divide(ref Parser p, ref SyntaxReporter error, Expression lhs) {
     auto rhs = p.expression(error, cast(Infix.Precedence)(Infix.Product + 1));
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
         return new Divide(lhs, rhs);
+
+    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
+}
+
+Expression power(ref Parser p, ref SyntaxReporter error, Expression lhs) {
+    p.consume(Token.Caret);
+
+    // we don't do (Infix.Power + 1) because we want '<' in expression() instead
+    // of '<='
+    auto rhs = p.expression(error, Infix.Power);
+    if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
+        return new Power(lhs, rhs);
 
     return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
 }
