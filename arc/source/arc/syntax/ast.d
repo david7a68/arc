@@ -144,24 +144,26 @@ final class Negate: Expression {
 }
 
 abstract class Binary: Expression {
-    private AstNode[2] _members;
+    private Expression[2] _members;
 
-    this(Type type, AstNode left, AstNode right) {
+    this(Type type, Expression left, Expression right) {
         super(type);
         _members = [left, right];
+        start = left.start;
+        span = (right.start + right.span) - left.start;
     }
 
-    AstNode left() { return _members[0]; }
-    void left(AstNode n) { _members[0] = n; }
+    Expression left() { return _members[0]; }
+    void left(Expression n) { _members[0] = n; }
 
-    AstNode right() { return _members[1]; }
-    void right(AstNode n) { _members[1] = n; }
+    Expression right() { return _members[1]; }
+    void right(Expression n) { _members[1] = n; }
 
-    override AstNode[] children() { return _members; }
+    override AstNode[] children() { return cast(AstNode[]) _members; }
 }
 
 final class Add: Binary {
-    this(AstNode left, AstNode right) {
+    this(Expression left, Expression right) {
         super(Type.Add, left, right);
     }
 
@@ -169,7 +171,7 @@ final class Add: Binary {
 }
 
 final class Subtract: Binary {
-    this(AstNode left, AstNode right) {
+    this(Expression left, Expression right) {
         super(Type.Subtract, left, right);
     }
 
@@ -177,7 +179,7 @@ final class Subtract: Binary {
 }
 
 final class Multiply: Binary {
-    this(AstNode left, AstNode right) {
+    this(Expression left, Expression right) {
         super(Type.Multiply, left, right);
     }
 
@@ -185,7 +187,7 @@ final class Multiply: Binary {
 }
 
 final class Divide: Binary {
-    this(AstNode left, AstNode right) {
+    this(Expression left, Expression right) {
         super(Type.Divide, left, right);
     }
 
@@ -193,7 +195,7 @@ final class Divide: Binary {
 }
 
 final class Power: Binary {
-    this(AstNode left, AstNode right) {
+    this(Expression left, Expression right) {
         super(Type.Power, left, right);
     }
 
@@ -201,9 +203,12 @@ final class Power: Binary {
 }
 
 final class Call: Binary {
-    this(AstNode left, AstNode right) {
-        super(Type.Call, left, right);
+    this(Expression target, Expression arguments) {
+        super(Type.Call, target, arguments);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
+
+    Expression target() { return _members[0]; }
+    Expression arguments() { return _members[1]; }
 }

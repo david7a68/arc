@@ -88,6 +88,8 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Star]       = Infix(Infix.Product, &multiply);
     p[Token.Slash]      = Infix(Infix.Product, &divide);
     p[Token.Caret]      = Infix(Infix.Power, &power);
+    p[Token.Lparen]     = Infix(Infix.Call, &call);
+    p[Token.Lbracket]   = Infix(Infix.Call, &call);
 
     return p;
 } ();
@@ -236,62 +238,33 @@ Expression negate(ref Parser p, ref SyntaxReporter error) {
     const start = p.token.start;
     p.consume(Token.Minus);
 
-    auto expr = p.expression(error);
+    auto expr = prefix_parslets[p.token.type](p, error);
     if (expr.type != AstNode.Invalid)
         return new Negate(expr);
 
     return new Invalid(start, (expr.start + expr.span) - start);
 }
 
-Expression add(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    p.consume(Token.Plus);
+Expression binary(T, int prec, Token.Type ttype)(ref Parser p, ref SyntaxReporter error, Expression lhs) {
+    p.consume(ttype);
 
-    auto rhs = p.expression(error, cast(Infix.Precedence)(Infix.Sum + 1));
+    auto rhs = p.expression(error, cast(Infix.Precedence) prec);
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
-        return new Add(lhs, rhs);
-
+        return new T(lhs, rhs);
     return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
 }
 
-Expression subtract(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    p.consume(Token.Minus);
+alias add = binary!(Add, Infix.Sum + 1, Token.Plus);
+alias subtract = binary!(Subtract, Infix.Sum + 1, Token.Minus);
+alias multiply = binary!(Multiply, Infix.Product + 1, Token.Star);
+alias divide = binary!(Divide, Infix.Product + 1, Token.Slash);
+alias power = binary!(Power, Infix.Power, Token.Caret);
 
-    auto rhs = p.expression(error, cast(Infix.Precedence)(Infix.Sum + 1));
+Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
+    auto rhs = p.list(error);
+
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
-        return new Subtract(lhs, rhs);
-
-    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
-}
-
-Expression multiply(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    p.consume(Token.Star);
-
-    auto rhs = p.expression(error, cast(Infix.Precedence)(Infix.Product + 1));
-    if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
-        return new Multiply(lhs, rhs);
-
-    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
-}
-
-Expression divide(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    p.consume(Token.Slash);
-
-    auto rhs = p.expression(error, cast(Infix.Precedence)(Infix.Product + 1));
-    if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
-        return new Divide(lhs, rhs);
-
-    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
-}
-
-Expression power(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    p.consume(Token.Caret);
-
-    // we don't do (Infix.Power + 1) because we want '<' in expression() instead
-    // of '<='
-    auto rhs = p.expression(error, Infix.Power);
-    if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
-        return new Power(lhs, rhs);
-
+        return new Call(lhs, rhs);
     return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
 }
 
