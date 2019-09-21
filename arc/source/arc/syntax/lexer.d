@@ -14,12 +14,12 @@ struct Token {
      * called an abstract syntax tree (AST).
      */
     enum Type: ubyte {
-        Invalid, Eof,
+        Invalid, Eof, Eol = '\n',
         Name, Integer,
 
         Lparen = '(', Rparen = ')',
         Lbracket = '[', Rbracket = ']',
-        Comma = ',', Dot = '.',
+        Comma = ',', Dot = '.', Semicolon = ';',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^'
     }
 
@@ -38,13 +38,17 @@ struct Token {
  * Output: Sequence of classified sections of the arbitrary data.
  */
 struct Lexer {
+    import std.container.array: Array;
+
     /// A pointer to the current character in the source text
     const(char)* source_text;
     /// A pointer to the end of the source text
     const(char)* end_of_text;
     /// The ID with which the source text may be referred to
     /// The most recently analyzed token
-    Token current;
+    Token next, current;
+
+    Array!(Token.Type) eol_type_stack;
 
     /**
      * Sets up the lexer to analyze a new source document
@@ -52,7 +56,36 @@ struct Lexer {
     void reset(const(char)[] source) {
         source_text = source.ptr;
         end_of_text = source.ptr + source.length;
-        current = Token();
+        eol_type_stack.clear();
+        advance();
+    }
+
+    void push_eol_type(Token.Type t) {
+        eol_type_stack.insertBack(t);
+    }
+
+    void pop_eol_type() {
+        eol_type_stack.removeBack();
+    }
+
+    void advance() {
+        if (next.type == Token.Eol) {
+            switch (current.type) with (Token.Type) {
+            case Rparen:
+            case Rbracket:
+            case Name:
+            case Integer:
+                current = Token(eol_type_stack.back, next.start, 0);
+                break;
+            default:
+                do {
+                    lex();
+                } while (current.type == Token.Eol);
+            }
+        }
+        else {
+            lex();
+        }
     }
 
     /**
@@ -63,11 +96,12 @@ struct Lexer {
      * using a simple switch statement to determine the type of each character.
      */
     void lex() {
+        current = next;
         auto start = source_text;
 
         switch_start:
         if (source_text >= end_of_text) {
-            current = Token(Token.Eof, source_text, 0);
+            next = Token(Token.Eof, source_text, 0);
             return;
         }
 
@@ -75,55 +109,62 @@ struct Lexer {
         // @Optimize A character-table driven approach may be more performant.
         switch (*source_text) {
             case ' ':
-            case '\n':
             case '\t':
             case '\r':
                 source_text++;
                 start++;
                 goto switch_start;
+            case '\n':
+                source_text++;
+                next = Token(Token.Eol, start, 1);
+                break;
             case '(':
                 source_text++;
-                current = Token(Token.Lparen, start, 1);
+                next = Token(Token.Lparen, start, 1);
                 break;
             case ')':
                 source_text++;
-                current = Token(Token.Rparen, start, 1);
+                next = Token(Token.Rparen, start, 1);
                 break;
             case '[':
                 source_text++;
-                current = Token(Token.Lbracket, start, 1);
+                next = Token(Token.Lbracket, start, 1);
                 break;
             case ']':
                 source_text++;
-                current = Token(Token.Rbracket, start, 1);
+                next = Token(Token.Rbracket, start, 1);
                 break;
             case ',':
                 source_text++;
-                current = Token(Token.Comma, start, 1);
+                next = Token(Token.Comma, start, 1);
                 break;
             case '.':
                 source_text++;
-                current = Token(Token.Dot, start, 1);
+                next = Token(Token.Dot, start, 1);
+                break;
+            case ';':
+                source_text++;
+                next = Token(Token.Semicolon, start, 1);
                 break;
             case '+':
                 source_text++;
-                current = Token(Token.Plus, start, 1);
+                next = Token(Token.Plus, start, 1);
                 break;
             case '-':
                 source_text++;
-                current = Token(Token.Minus, start, 1);
+                next = Token(Token.Minus, start, 1);
                 break;
             case '*':
                 source_text++;
-                current = Token(Token.Star, start, 1);
+                next = Token(Token.Star, start, 1);
                 break;
             case '/':
                 source_text++;
-                current = Token(Token.Slash, start, 1);
+                next = Token(Token.Slash, start, 1);
                 break;
             case '^':
                 source_text++;
-                current = Token(Token.Caret, start, 1);
+                next = Token(Token.Caret, start, 1);
                 break;
             case 'a': .. case 'z':
             case 'A': .. case 'Z':
@@ -139,21 +180,21 @@ struct Lexer {
                         goto name_start;
                     default:
                 }
-                current = Token(Token.Name, start, source_text - start);
+                next = Token(Token.Name, start, source_text - start);
                 break;
             case '1': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
                     source_text++;
                 
-                current = Token(Token.Integer, start, source_text - start);
+                next = Token(Token.Integer, start, source_text - start);
                 break;
             default:
                 source_text++;
-                current = Token(Token.Invalid, start, source_text - start);
+                next = Token(Token.Invalid, start, source_text - start);
         }
 
-        if (current.type == Token.Invalid) goto switch_start;
+        if (next.type == Token.Invalid) goto switch_start;
     }
 }
 
@@ -169,7 +210,7 @@ unittest {
 // Test empty lexer with whitespace
 unittest {
     Lexer lexer;
-    lexer.reset("  \n\n\r\t\t\t\t    ");
+    lexer.reset("  \r\t\t\t\t    ");
     lexer.lex();
     assert(lexer.current.type == Token.Eof);
 }
@@ -178,8 +219,8 @@ unittest {
 unittest {
     import std.range: zip;
 
-    const strings = ["(", ")", "[", "]", ",", "129400_81", "anb_wo283"];
-    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Integer, Token.Name];
+    const strings = ["(", ")", "[", "]", ",", ".", ";", "129400_81", "anb_wo283"];
+    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon,Token.Integer, Token.Name];
     assert(strings.length == types.length);
 
     Lexer lexer;

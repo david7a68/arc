@@ -2,9 +2,6 @@
 
 ## Current
 
-- [ ] Automatic delimiter insertion
-  - [ ] Lexer does not yet produce EOL tokens
-
 ## List
 
 - [ ] Lexical analysis
@@ -12,7 +9,9 @@
     - [x] Tested
   - [x] End-of-file tokens
     - [x] Tested
-  - [x] Delimiters: [ ] ( ) ,
+  - [x] End-of-line tokens
+    - [ ] Tested
+  - [x] Delimiters: [ ] ( ) , ;
     - [x] Tested
   - [x] Alphanumeric identifiers
     - [x] Tested
@@ -44,34 +43,33 @@
   - [ ] Syntax reporter
     - [ ] Line-and-column finder
       - [ ] Tested
-    - [ ] AST printer
-      - [ ] Tested
-    - [ ] Error handlers (refer to syntax_errors.md)
-      - [ ] Tested
+    - [x] AST printer
+      - [x] Tested
+    - [x] Error handlers (refer to syntax_errors.md)
+      - [x] Tested
   - [ ] Parser
-    - [ ] Automatic delimiter (comma, semicolon) insertion
+    - [x] Automatic delimiter (comma, semicolon) insertion
       - [ ] Tested
     - [ ] Expressions
-      - [ ] Tuples
-        - [x] Unnamed tuples
+      - [ ] Lists
+        - [x] Unnamed members
+          - [x] Tested
+        - [ ] Named members
           - [ ] Tested
-        - [ ] Named elements
-          - [ ] Tested
-      - [x] Vectors
-        - [x] Tested
       - [x] Names
         - [ ] Tested
       - [x] Integers
         - [ ] Tested
       - [ ] Binary Operators
-        - [ ] Add
-        - [ ] Subtract
-        - [ ] Multiply
-        - [ ] Divide
-        - [ ] Call
-        - [ ] Index
+        - [x] Add
+        - [x] Subtract
+        - [x] Multiply
+        - [x] Divide
+        - [x] Call
+        - [x] Index
+        - [ ] Tested
       - [ ] Function literals
     - [ ] Statements
       - [ ] If-else branching
-      - [ ] Goto and labels
+      - [ ] While-loops
     - [ ] Profiled

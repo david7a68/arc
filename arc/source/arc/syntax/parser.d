@@ -14,7 +14,7 @@ struct Parser {
     }
 
     void advance() {
-        lexer.lex();
+        lexer.advance();
         token = lexer.current;
     }
 
@@ -142,6 +142,8 @@ Integer integer(ref Parser p, ref SyntaxReporter error) {
 Expression list(ref Parser p, ref SyntaxReporter error) {
     const start = p.token.start;
     const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
+    p.lexer.push_eol_type(Token.Comma);
+    scope(exit) p.lexer.pop_eol_type();
     p.advance();
 
     // skip leading commas
