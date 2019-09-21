@@ -3,37 +3,6 @@ module arc.output.ast_printer;
 import arc.syntax.ast;
 
 /**
- * Returns the string representation of an AST node
- */
-const(char)[] repr(AstNode node) {
-    switch (node.type) with (AstNode.Type) {
-        case Invalid:
-            return "Invalid";
-        case Name:
-        case Integer:
-            return node.start[0 .. node.span];
-        case List:
-            return "List";
-        case Negate:
-            return "Negate";
-        case Add:
-            return "Add";
-        case Subtract:
-            return "Subtract";
-        case Multiply:
-            return "Multiply";
-        case Divide:
-            return "Divide";
-        case Power:
-            return "Power";
-        case Call:
-            return "Call";
-        default:
-            assert(false);
-    }
-}
-
-/**
  * AstVisitor that generates a string representation of the syntax tree.
  *
  * Formats an expression as an expanding tree to look something like the following:
@@ -59,8 +28,9 @@ const(char)[] repr(AstNode node) {
  *  ```
  */
 final class AstPrinter: AstVisitor {
-    import std.container.array: Array;
     import std.array: appender, Appender;
+    import std.container.array: Array;
+    import std.conv: to;
 
     /// Initialize the printer
     this() {
@@ -84,14 +54,59 @@ final class AstPrinter: AstVisitor {
 
     override void visit(Name n)     { write(n); }
     override void visit(Integer n)  { write(n); }
-    override void visit(List n)     { write(n); }
+    
+    override void visit(List n) {
+        str.put(repr(n));
+        str.put(" (");
+        str.put(n.children.length.to!string);
+        str.put(")\n");
+
+        foreach (i, child; n.children) {
+            indent();
+
+            if (i + 1 == n.children.length) {
+                // this is the last child
+                str.put(lbar);
+                stack.insertBack(IndentType.Space);
+            }
+            else {
+                str.put(tbar);
+                stack.insertBack(IndentType.Bar);
+            }
+
+            name_override = "#" ~ i.to!string ~ " " ~ repr(child);
+            child.accept(this);
+            stack.removeBack();
+        }
+    }
+    
     override void visit(Negate n)   { write(n); }
     override void visit(Add n)      { write(n); }
     override void visit(Subtract n) { write(n); }
     override void visit(Multiply n) { write(n); }
     override void visit(Divide n)   { write(n); }
     override void visit(Power n)    { write(n); }
-    override void visit(Call n)     { write(n); }
+
+    override void visit(Call n) {
+        str.put(repr(n));
+        str.put(" (");
+        str.put(n.children[1].children.length.to!string);
+        str.put(")\n");
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Target: ";
+        n.children[0].accept(this);
+        stack.removeBack();
+
+        indent();
+        str.put(lbar);
+        stack.insertBack(IndentType.Space);
+        name_override = "Members: ";
+        n.children[1].accept(this);
+        stack.removeBack();
+    }
 
     void write(AstNode n) {
         str.put(repr(n));
@@ -120,6 +135,7 @@ private:
 
     Array!IndentType stack;
     Appender!(char[]) str;
+    const(char)[] name_override;
 
     void write_children(AstNode n) {
         foreach (i, child; n.children) {
@@ -143,6 +159,39 @@ private:
     void indent() {
         foreach (type; stack[])
             str.put(indent_str[type]);
+    }
+
+    /**
+    * Returns the string representation of an AST node
+    */
+    const(char)[] repr(AstNode node) {
+        scope(exit) name_override = "";
+
+        switch (node.type) with (AstNode.Type) {
+            case Invalid:
+                return "Invalid";
+            case Name:
+            case Integer:
+                return node.start[0 .. node.span];
+            case List:
+                return name_override ~ "List";
+            case Negate:
+                return name_override ~ "Negate";
+            case Add:
+                return name_override ~ "Add";
+            case Subtract:
+                return name_override ~ "Subtract";
+            case Multiply:
+                return name_override ~ "Multiply";
+            case Divide:
+                return name_override ~ "Divide";
+            case Power:
+                return name_override ~ "Power";
+            case Call:
+                return name_override ~ "Call";
+            default:
+                assert(false);
+        }
     }
 }
 
