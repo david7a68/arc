@@ -24,6 +24,14 @@ struct Parser {
         advance();
         return true;
     }
+
+    void push_eol_type(Token.Type type) {
+        lexer.push_eol_type(type);
+    }
+
+    void pop_eol_type() {
+        lexer.pop_eol_type();
+    }
 }
 
 Expression expression(ref Parser p, ref SyntaxReporter error) {
@@ -142,8 +150,8 @@ Integer integer(ref Parser p, ref SyntaxReporter error) {
 Expression list(ref Parser p, ref SyntaxReporter error) {
     const start = p.token.start;
     const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
-    p.lexer.push_eol_type(Token.Comma);
-    scope(exit) p.lexer.pop_eol_type();
+    p.push_eol_type(Token.Comma);
+    scope(exit) p.pop_eol_type();
     p.advance();
 
     // skip leading commas
