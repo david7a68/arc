@@ -74,7 +74,7 @@ final class AstPrinter: AstVisitor {
                 stack.insertBack(IndentType.Bar);
             }
 
-            name_override = "#" ~ i.to!string ~ " " ~ repr(child);
+            name_override = "#" ~ i.to!string ~ " ";
             child.accept(this);
             stack.removeBack();
         }
@@ -122,6 +122,7 @@ final class AstPrinter: AstVisitor {
      */
     void reset() {
         str.clear();
+        name_override = "";
     }
 
 private:
@@ -172,7 +173,7 @@ private:
                 return "Invalid";
             case Name:
             case Integer:
-                return node.start[0 .. node.span];
+                return name_override ~ node.start[0 .. node.span];
             case List:
                 return name_override ~ "List";
             case Negate:
@@ -197,12 +198,12 @@ private:
 
 version(unittest):
 
-immutable test_result = "List
- ├─ a
- ├─ b
- └─ List
-     ├─ c
-     └─ 102
+immutable test_result = "List (3)
+ ├─ #0 a
+ ├─ #1 b
+ └─ #2 List (2)
+     ├─ #0 c
+     └─ #1 102
 ";
 
 unittest {
