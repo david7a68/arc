@@ -2,6 +2,18 @@
 
 ## Current
 
+- [ ] Test end-of-line tokens
+- [ ] Implement parsing for integer value
+  - [ ] Test integer value parsing
+- [ ] Implement chunking of invalid characters
+  - [ ] Implement checking and reporting of UTF8 characters as names
+- [ ] Elaborate syntax reporter error messages
+- [ ] Test automatic delimiter insertion
+- [ ] Implement parsing for named list members
+- [ ] Test parsing of binary operators
+- [ ] Test compound or complex expression
+- [ ] Refactoring/Refining pass on parser and lexer (2 hour limit!!!)
+
 ## List
 
 - [ ] Lexical analysis
@@ -23,23 +35,11 @@
   - [ ] Chunked invalid characters
     - [ ] Invalid character identification
       - [ ] Tested
+  - [x] Automatic delimiter (comma, semicolon) insertion
+    - [ ] Tested
   - [ ] Profiled
 - [ ] Syntactical analysis
-  - [x] AST struct
-  - [ ] Pooling allocator for AST nodes
-    - [x] Allocate
-      - [x] Tested
-    - [x] Free
-      - [x] Tested
-    - [x] FreeChildren
-      - [x] Tested
-    - [x] FreeOnly
-      - [x] Tested
-    - [x] Clear
-      - [x] Tested
-    - [ ] Out of memory handling
-      - [ ] Tested
-    - [ ] Profiled
+  - [x] AST classes
   - [ ] Syntax reporter
     - [ ] Line-and-column finder
       - [ ] Tested
@@ -48,8 +48,6 @@
     - [x] Error handlers (refer to syntax_errors.md)
       - [x] Tested
   - [ ] Parser
-    - [x] Automatic delimiter (comma, semicolon) insertion
-      - [ ] Tested
     - [ ] Expressions
       - [ ] Lists
         - [x] Unnamed members
@@ -61,14 +59,16 @@
       - [x] Integers
         - [ ] Tested
       - [ ] Binary Operators
+        - [x] Negate
         - [x] Add
         - [x] Subtract
         - [x] Multiply
         - [x] Divide
+        - [x] Power
         - [x] Call
-        - [x] Index
         - [ ] Tested
       - [ ] Function literals
+      - [ ] Tested
     - [ ] Statements
       - [ ] If-else branching
       - [ ] While-loops
