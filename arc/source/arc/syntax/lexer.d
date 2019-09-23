@@ -182,11 +182,13 @@ struct Lexer {
                 }
                 next = Token(Token.Name, start, source_text - start);
                 break;
-            case '1': .. case '9':
+            case '0': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
                     source_text++;
-                
+                // We have to traverse the integer again in the parser
+                // Yes, this is not exactly efficient. No, it doesn't really
+                // matter right now
                 next = Token(Token.Integer, start, source_text - start);
                 break;
             default:

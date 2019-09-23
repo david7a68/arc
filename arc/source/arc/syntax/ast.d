@@ -64,6 +64,8 @@ abstract class AstNode {
 
     /// Retrieves the children of this node as a slice.
     AstNode[] children() { return []; }
+
+    const(char)[] text() { return start[0 .. span]; }
 }
 
 abstract class Expression: AstNode {
@@ -89,22 +91,22 @@ final class Name: Expression {
         this.span = span;
     }
 
-    /// The text represented by this name
-    const(char)[] text() { return start[0 .. span]; }
-
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
 final class Integer: Expression {
     private ulong _value;
 
-    this(const(char)* start, size_t span) {
+    this(const(char)* start, size_t span, ulong value) {
         super(Type.Integer);
         this.start = start;
         this.span = span;
+        _value = value;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
+
+    ulong value() { return _value; }
 }
 
 /**

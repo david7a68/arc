@@ -2,16 +2,10 @@
 
 ## Current
 
-- [ ] Test end-of-line tokens
-- [ ] Implement parsing for integer value
-  - [ ] Test integer value parsing
 - [ ] Implement chunking of invalid characters
   - [ ] Implement checking and reporting of UTF8 characters as names
 - [ ] Elaborate syntax reporter error messages
-- [ ] Test automatic delimiter insertion
 - [ ] Implement parsing for named list members
-- [ ] Test parsing of binary operators
-- [ ] Test compound or complex expression
 - [ ] Refactoring/Refining pass on parser and lexer (2 hour limit!!!)
 
 ## List
@@ -27,11 +21,11 @@
     - [x] Tested
   - [x] Alphanumeric identifiers
     - [x] Tested
-  - [ ] Decimal numbers with underscore separator
+  - [x] Decimal numbers with underscore separator
     - [x] Token identification
       - [x] Tested
-        - [ ] Value parsing
-          - [ ] Tested
+        - [x] Value parsing
+          - [x] Tested
   - [ ] Chunked invalid characters
     - [ ] Invalid character identification
       - [ ] Tested
@@ -55,10 +49,10 @@
         - [ ] Named members
           - [ ] Tested
       - [x] Names
-        - [ ] Tested
+        - [x] Tested
       - [x] Integers
-        - [ ] Tested
-      - [ ] Binary Operators
+        - [x] Tested
+      - [x] Binary Operators
         - [x] Negate
         - [x] Add
         - [x] Subtract
@@ -66,7 +60,7 @@
         - [x] Divide
         - [x] Power
         - [x] Call
-        - [ ] Tested
+        - [x] Tested
       - [ ] Function literals
       - [ ] Tested
     - [ ] Statements

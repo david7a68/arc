@@ -214,7 +214,7 @@ unittest {
     tup.add_member(new Name(&s[2], 1));
     tup.add_member(new List(&s[4], 5)
                     .add_member(new Name(&s[4], 1))
-                    .add_member(new Integer(&s[6], 3)));
+                    .add_member(new Integer(&s[6], 3, 102)));
 
     auto p = new AstPrinter;
     p.visit(tup);
