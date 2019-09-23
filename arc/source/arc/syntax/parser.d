@@ -78,7 +78,8 @@ struct Infix {
         Product,
         Power,
         Unary,
-        Call
+        Call,
+        FunctionLiteral
     }
 
     Precedence precedence;
@@ -92,6 +93,7 @@ struct Infix {
 immutable Infix[256] infix_parslets = () {
     Infix[256] p;
 
+    p[Token.Rarrow]     = Infix(Infix.FunctionLiteral, &function_);
     p[Token.Plus]       = Infix(Infix.Sum, &add);
     p[Token.Minus]      = Infix(Infix.Sum, &subtract);
     p[Token.Star]       = Infix(Infix.Product, &multiply);
@@ -171,7 +173,7 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
     while(p.token.type == Token.Comma)
         p.advance();
 
-    AstNode[] members;
+    Expression[] members;
     bool subexpression_error = false;
     while (p.token.type != closing_tok) {
         auto e = p.expression(error);
@@ -197,9 +199,9 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
     const close = p.token;
     p.consume(closing_tok);
     if (!subexpression_error) {
-        auto lst = new List(start, (close.start + close.span) - start);
-        lst.children = members;
-        return lst;
+        auto list = new List(start, (close.start + close.span) - start);
+        list.children = members;
+        return list;
     }
     else {
         auto inv = new Invalid(start, (close.start + close.span) - start);
@@ -271,6 +273,27 @@ Expression negate(ref Parser p, ref SyntaxReporter error) {
         return new Negate(expr);
 
     return new Invalid(start, (expr.start + expr.span) - start);
+}
+
+Expression function_(ref Parser p, ref SyntaxReporter error, Expression params) {
+    p.consume(Token.Rarrow);
+
+    auto body = p.expression(error);
+
+    if (params.type != AstNode.Invalid && body.type != AstNode.Invalid)
+        return new Function(params, body);
+
+    return new Invalid(params.start, (body.start + body.span) - params.start);
+}
+
+unittest {
+    Parser parser;
+    auto err = SyntaxReporter();
+    parser.reset("() -> ()");
+    auto e = cast(Function) parser.expression(err);
+    assert(parser.token.type == Token.Eof);
+    assert(e.parameters.type == AstNode.List);
+    assert(e.body.type == AstNode.List);
 }
 
 Expression binary(T, int prec, Token.Type ttype)(ref Parser p, ref SyntaxReporter error, Expression lhs) {

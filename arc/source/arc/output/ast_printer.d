@@ -80,6 +80,27 @@ final class AstPrinter: AstVisitor {
         }
     }
     
+    override void visit(Function n) {
+        str.put(repr(n));
+        str.put(" (");
+        str.put(n.children.length.to!string);
+        str.put(")\n");
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Params: ";
+        n.children[0].accept(this);
+        stack.removeBack();
+
+        indent();
+        str.put(lbar);
+        stack.insertBack(IndentType.Space);
+        name_override = "Body: ";
+        n.children[1].accept(this);
+        stack.removeBack();
+    }
+
     override void visit(Negate n)   { write(n); }
     override void visit(Add n)      { write(n); }
     override void visit(Subtract n) { write(n); }
@@ -176,6 +197,8 @@ private:
                 return name_override ~ node.start[0 .. node.span];
             case List:
                 return name_override ~ "List";
+            case Function:
+                return name_override ~ "Function";
             case Negate:
                 return name_override ~ "Negate";
             case Add:

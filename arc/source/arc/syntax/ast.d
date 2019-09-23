@@ -10,7 +10,9 @@ abstract class AstVisitor {
     /// ditto
     void visit(Integer n)       { visit_children(n); }
     /// ditto
-    void visit(List n)         { visit_children(n); }
+    void visit(List n)          { visit_children(n); }
+    /// ditto
+    void visit(Function n)      { visit_children(n); }
     /// ditto
     void visit(Negate n)        { visit_children(n); }
     /// ditto
@@ -39,6 +41,7 @@ abstract class AstNode {
         Name,
         Integer,
         List,
+        Function,
         Negate,
         Add,
         Subtract,
@@ -114,7 +117,7 @@ final class Integer: Expression {
  * may be referred to by numerical index or name.
  */
 final class List: Expression {
-    private AstNode[] _members;
+    private Expression[] _members;
 
     this(const(char)* start, size_t span) {
         super(Type.List);
@@ -124,12 +127,31 @@ final class List: Expression {
 
     override void accept(AstVisitor v) { v.visit(this); }
 
-    override AstNode[] children() { return _members; }
+    override AstNode[] children() { return cast(AstNode[]) _members; }
 
-    void children(AstNode[] n) { _members = n; }
+    void children(Expression[] n) { _members = n; }
 
     /// Add a member to the list
-    List add_member(AstNode n) { _members ~= n; return this; }
+    List add_member(Expression n) { _members ~= n; return this; }
+}
+
+final class Function: Expression {
+    private Expression[2] _members;
+
+    this(Expression params, Expression body) {
+        super(Type.Function);
+        _members = [params, body];
+        start = params.start;
+        span = (body.start + body.span) - params.start;
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+
+    override AstNode[] children() { return cast(AstNode[]) _members; }
+
+    Expression parameters() { return _members[0]; }
+
+    Expression body() { return _members[1]; }
 }
 
 final class Negate: Expression {

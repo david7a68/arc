@@ -1,20 +1,24 @@
 import std.stdio;
+import arc.source;
+import arc.syntax.ast;
 import arc.syntax.lexer;
+import arc.syntax.parser;
+import arc.syntax.syntax_reporter;
+import arc.output.ast_printer;
+
 
 void main() {
-	const str = "[[]]],19281_2918 (_aiw19)_";
-    const types = [
-        Token.Lbracket, Token.Lbracket,Token.Rbracket, Token.Rbracket, Token.Rbracket, Token.Comma,
-        Token.Integer, Token.Lparen, Token.Name, Token.Rparen, Token.Name
-    ];
-
-    Lexer lexer;
-    lexer.reset(str);
-    foreach (i; 0 .. types.length) {
-        lexer.lex();
-
-		const token = lexer.current;
-        assert(token.type == types[i]);
-		writeln(token.start[0..token.span]);
-    }
+    auto p = new AstPrinter;
+    
+    Parser parser;
+    auto err = SyntaxReporter();
+    parser.reset("(a, b) -> [
+        a
+        a * b
+        b
+    ]");
+    auto e = parser.expression(err);
+    assert(parser.token.type == Token.Eof);
+    e.accept(p);
+    writeln(p.data);
 }

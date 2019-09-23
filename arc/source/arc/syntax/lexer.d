@@ -20,7 +20,8 @@ struct Token {
         Lparen = '(', Rparen = ')',
         Lbracket = '[', Rbracket = ']',
         Comma = ',', Dot = '.', Semicolon = ';',
-        Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^'
+        Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
+        Rarrow,
     }
 
     alias Type this;
@@ -152,7 +153,13 @@ struct Lexer {
                 break;
             case '-':
                 source_text++;
-                next = Token(Token.Minus, start, 1);
+                if (*source_text == '>') {
+                    source_text++;
+                    next = Token(Token.Rarrow, start, 2);
+                }
+                else {
+                    next = Token(Token.Minus, start, 1);
+                }
                 break;
             case '*':
                 source_text++;
@@ -221,8 +228,8 @@ unittest {
 unittest {
     import std.range: zip;
 
-    const strings = ["(", ")", "[", "]", ",", ".", ";", "129400_81", "anb_wo283"];
-    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon,Token.Integer, Token.Name];
+    const strings = ["(", ")", "[", "]", ",", ".", ";", "->", "129400_81", "anb_wo283"];
+    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon, Token.Rarrow, Token.Integer, Token.Name];
     assert(strings.length == types.length);
 
     Lexer lexer;
