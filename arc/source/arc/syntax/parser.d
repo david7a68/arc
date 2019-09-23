@@ -322,7 +322,7 @@ Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
 unittest {
     Parser parser;
     auto err = SyntaxReporter();
-    parser.reset("[][()");
+    parser.reset("[][()]");
     auto e = parser.expression(err);
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Call);
