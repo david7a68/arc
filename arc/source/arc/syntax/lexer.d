@@ -19,8 +19,9 @@ struct Token {
 
         Lparen = '(', Rparen = ')',
         Lbracket = '[', Rbracket = ']',
-        Comma = ',', Dot = '.', Semicolon = ';',
+        Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
+        Equals = '=',
         Rarrow,
     }
 
@@ -147,6 +148,10 @@ struct Lexer {
                 source_text++;
                 next = Token(Token.Semicolon, start, 1);
                 break;
+            case ':':
+                source_text++;
+                next = Token(Token.Colon, start, 1);
+                break;
             case '+':
                 source_text++;
                 next = Token(Token.Plus, start, 1);
@@ -173,6 +178,10 @@ struct Lexer {
                 source_text++;
                 next = Token(Token.Caret, start, 1);
                 break;
+            case '=':
+                source_text++;
+                next = Token(Token.Equals, start, 1);
+                break;
             case 'a': .. case 'z':
             case 'A': .. case 'Z':
             case '_':
@@ -187,6 +196,7 @@ struct Lexer {
                         goto name_start;
                     default:
                 }
+
                 next = Token(Token.Name, start, source_text - start);
                 break;
             case '0': .. case '9':

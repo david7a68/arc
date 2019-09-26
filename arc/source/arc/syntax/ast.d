@@ -27,6 +27,8 @@ abstract class AstVisitor {
     void visit(Power n)         { visit_children(n); }
     /// ditto
     void visit(Call n)          { visit_children(n); }
+    /// ditto
+    void visit(VarExpression n) { visit_children(n); }
 
     void visit_children(AstNode n) {
         foreach (child; n.children)
@@ -49,6 +51,7 @@ abstract class AstNode {
         Divide,
         Power,
         Call,
+        VarExpression,
     }
 
     alias Type this;
@@ -117,7 +120,7 @@ final class Integer: Expression {
  * may be referred to by numerical index or name.
  */
 final class List: Expression {
-    private Expression[] _members;
+    private VarExpression[] _members;
 
     this(const(char)* start, size_t span) {
         super(Type.List);
@@ -128,11 +131,12 @@ final class List: Expression {
     override void accept(AstVisitor v) { v.visit(this); }
 
     override AstNode[] children() { return cast(AstNode[]) _members; }
+    alias members = children;
 
-    void children(Expression[] n) { _members = n; }
+    void children(VarExpression[] n) { _members = n; }
 
     /// Add a member to the list
-    List add_member(Expression n) { _members ~= n; return this; }
+    List add_member(VarExpression n) { _members ~= n; return this; }
 }
 
 final class Function: Expression {
@@ -235,4 +239,61 @@ final class Call: Binary {
 
     Expression target() { return _members[0]; }
     Expression arguments() { return _members[1]; }
+}
+
+/**
+ * A variable declaration. This is used not only in let declarations, but also
+ * to represent list members.
+ *
+ * In a list, a vardecl would typically just be a value, but it may also have
+ * a name. In the particular case of a parameter list, it must have a name, and
+ * possibly a type and/or a default value. If type is omitted, it must be
+ * derivable either from the type of the default value, or from its context.
+ *
+ * VarDecl is also used in trees of `let` and `def` declarations.
+ *
+ * A `let` declaration must have a name, and either a type or a value, or both.
+ * A `def` declaration must have a name, and either a type or a value, or both.
+ * If the type is not present, it must be derivable.
+ */
+final class VarExpression: Expression {
+    Expression[3] _members;
+
+    /**
+     * We include `const(char)* start` and `size_t span` because that is more
+     * easily calculated by the parser and it saves us some effort here
+     */
+    this(Expression pattern, Expression type_expr, Expression value_expr, const(char)* start, size_t span) {
+        super(Type.VarExpression);
+        _members = [pattern, type_expr, value_expr];
+        this.start = start;
+        this.span = span;
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+    override AstNode[] children() { return cast(AstNode[]) _members; }
+
+    Expression pattern() { return _members[0]; }
+    Expression type_expr() { return _members[1]; }
+    Expression value_expr() { return _members[2]; }
+}
+
+abstract class Statement: AstNode {
+    this(Type type) { super(type); }
+}
+
+abstract class Declaration: AstNode {
+    Name name;
+    Expression value_type_expr;
+    Expression value_expr;
+
+    this(Type type, Name name, Expression value_type_expr, Expression value_expr) {
+        super(type);
+        start = name.start;
+        span = (value_expr.start + value_expr.span) - name.start;
+        
+        this.name = name;
+        this.value_type_expr = value_type_expr;
+        this.value_expr = value_expr;
+    }
 }

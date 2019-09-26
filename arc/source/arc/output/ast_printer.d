@@ -118,21 +118,48 @@ final class AstPrinter: AstVisitor {
         str.put(tbar);
         stack.insertBack(IndentType.Bar);
         name_override = "Target: ";
-        n.children[0].accept(this);
+        write(n.children[0]);
         stack.removeBack();
 
         indent();
         str.put(lbar);
         stack.insertBack(IndentType.Space);
         name_override = "Members: ";
-        n.children[1].accept(this);
+        write(n.children[1]);
+        stack.removeBack();
+    }
+
+    override void visit(VarExpression n) {
+        str.put(repr(n));
+        str.put("\n");
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Pattern: ";
+        write(n.pattern);
+        stack.removeBack();
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Type: ";
+        write(n.type_expr);
+        stack.removeBack();
+
+        indent();
+        str.put(lbar);
+        stack.insertBack(IndentType.Space);
+        name_override = "Value: ";
+        write(n.value_expr);
         stack.removeBack();
     }
 
     void write(AstNode n) {
         str.put(repr(n));
         str.put("\n");
-        write_children(n);
+
+        if (n) write_children(n);
     }
 
     /**
@@ -187,64 +214,19 @@ private:
     * Returns the string representation of an AST node
     */
     const(char)[] repr(AstNode node) {
+        import std.conv: to;
+
         scope(exit) name_override = "";
 
+        if (node is null)
+            return name_override ~ "Null";
+
         switch (node.type) with (AstNode.Type) {
-            case Invalid:
-                return "Invalid";
             case Name:
             case Integer:
                 return name_override ~ node.start[0 .. node.span];
-            case List:
-                return name_override ~ "List";
-            case Function:
-                return name_override ~ "Function";
-            case Negate:
-                return name_override ~ "Negate";
-            case Add:
-                return name_override ~ "Add";
-            case Subtract:
-                return name_override ~ "Subtract";
-            case Multiply:
-                return name_override ~ "Multiply";
-            case Divide:
-                return name_override ~ "Divide";
-            case Power:
-                return name_override ~ "Power";
-            case Call:
-                return name_override ~ "Call";
             default:
-                assert(false);
+                return name_override ~ node.type.to!string;
         }
     }
-}
-
-version(unittest):
-
-immutable test_result = "List (3)
- ├─ #0 a
- ├─ #1 b
- └─ #2 List (2)
-     ├─ #0 c
-     └─ #1 102
-";
-
-unittest {
-    const s = "a b c 102";
-
-    auto tup = new List(&s[0], s.length);
-    tup.add_member(new Name(&s[0], 1));
-    tup.add_member(new Name(&s[2], 1));
-    tup.add_member(new List(&s[4], 5)
-                    .add_member(new Name(&s[4], 1))
-                    .add_member(new Integer(&s[6], 3, 102)));
-
-    auto p = new AstPrinter;
-    p.visit(tup);
-    assert(p.data == test_result);
-
-    p.reset();
-
-    p.visit(tup);
-    assert(p.data == test_result);
 }

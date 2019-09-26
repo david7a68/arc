@@ -44,7 +44,7 @@ unittest {
 
     // token_cannot_start_expr_impl
     bool bad_token;
-    auto err = SyntaxReporter(0, &bad_token);
+    err.user_data = &bad_token;
     err.token_cannot_start_expr_impl = report_bad_token_set_flag;
     parser.reset("]");
     auto e = parser.expression(err);
@@ -105,7 +105,6 @@ immutable Infix[256] infix_parslets = () {
     return p;
 } ();
 
-
 Expression expression(ref Parser p, ref SyntaxReporter error, Infix.Precedence prec) {
     auto parselet = prefix_parslets[p.token.type];
 
@@ -155,6 +154,7 @@ Integer integer(ref Parser p, ref SyntaxReporter error) {
 unittest {
     Parser parser;
     auto err = SyntaxReporter();
+
     parser.reset("10294");
     auto e = parser.expression(err);
     assert(parser.token.type == Token.Eof);
@@ -173,15 +173,16 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
     while(p.token.type == Token.Comma)
         p.advance();
 
-    Expression[] members;
+    VarExpression[] members;
     bool subexpression_error = false;
     while (p.token.type != closing_tok) {
-        auto e = p.expression(error);
+        auto e = p.var_expr(error);
 
+        assert(e.type == AstNode.Invalid || e.type == AstNode.VarExpression);
         if (e.type == AstNode.Invalid)
             subexpression_error = true;
-
-        members ~= e;
+        else
+            members ~= cast(VarExpression) e;
 
         if (p.token.type == Token.Comma) {
             do {
@@ -212,56 +213,50 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
 unittest {
     Parser parser;
     auto err = SyntaxReporter();
-    parser.reset("[]");
-    auto e = parser.expression(err);
-    assert(parser.token.type == Token.Eof);
-    assert(e.type == AstNode.List);
-    assert(e.children.length == 0);
-}
 
-unittest {
-    Parser parser;
-    auto err = SyntaxReporter();
-    parser.reset("[a\n\n\n(b)]");
-    auto e = parser.expression(err);
-    assert(parser.token.type == Token.Eof);
-    assert(e.type == AstNode.List);
-    assert(e.children.length == 2);
-    assert(e.children[0].type == AstNode.Name);
-    assert(e.children[1].type == AstNode.List);
-}
+    {
+        parser.reset("[]");
+        auto e = parser.expression(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.List);
+        assert(e.children.length == 0);
+    }
+    {
+        parser.reset("[a\n\n\n(b)]");
+        auto e = parser.expression(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.List);
+        assert(e.children.length == 2);
+        assert(e.children[0].type == AstNode.VarExpression);
+        assert(e.children[1].type == AstNode.VarExpression);
+    }
+    {
+        bool[2] errors; // [0]: cannot start expr, [1]: list not closed
+        err.user_data = &errors;
+        err.token_cannot_start_expr_impl = (self, tok) {
+            (cast(bool[2]*) self.user_data)[0] = true;
+        };
+        err.list_not_closed_impl = (self, loc, erloc) {
+            (cast(bool[2]*) self.user_data)[1] = true;
+        };
 
-unittest {
-    Parser parser;
-    
-    // list not closed, incorrect closing delimiter
-    bool[2] errors; // [0]: cannot start expr, [1]: list not closed
-    auto err = SyntaxReporter(0, &errors);
-    err.token_cannot_start_expr_impl = (self, tok) {
-        (cast(bool[2]*) self.user_data)[0] = true;
-    };
-    err.list_not_closed_impl = (self, loc, erloc) {
-        (cast(bool[2]*) self.user_data)[1] = true;
-    };
-    parser.reset("[a\n)");
-    auto e = parser.expression(err);
-    assert(parser.token.type == Token.Eof);
-    assert(e.type == AstNode.Invalid);
-    assert(errors[0] && errors[1]);
-}
+        parser.reset("[a\n)");
+        auto e = parser.expression(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.Invalid);
+        assert(errors[0] && errors[1]);
+    }
+    {
+        bool not_closed;
+        err.user_data = &not_closed;
+        err.list_not_closed_impl = report_loc_err_set_flag;
 
-unittest {
-    Parser parser;
-
-    // list not closed, unexpected end of file
-    bool not_closed;
-    auto err = SyntaxReporter(0, &not_closed);
-    err.list_not_closed_impl = report_loc_err_set_flag;
-    parser.reset("[a, [b)]");
-    auto e = parser.expression(err);
-    assert(parser.token.type == Token.Eof);
-    assert(e.type == AstNode.Invalid);
-    assert(not_closed);
+        parser.reset("[a, [b)]");
+        auto e = parser.expression(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.Invalid);
+        assert(not_closed);
+    }
 }
 
 Expression negate(ref Parser p, ref SyntaxReporter error) {
@@ -289,6 +284,7 @@ Expression function_(ref Parser p, ref SyntaxReporter error, Expression params) 
 unittest {
     Parser parser;
     auto err = SyntaxReporter();
+
     parser.reset("() -> ()");
     auto e = cast(Function) parser.expression(err);
     assert(parser.token.type == Token.Eof);
@@ -311,29 +307,6 @@ alias multiply = binary!(Multiply, Infix.Product + 1, Token.Star);
 alias divide = binary!(Divide, Infix.Product + 1, Token.Slash);
 alias power = binary!(Power, Infix.Power, Token.Caret);
 
-unittest {
-    Parser parser;
-    auto err = SyntaxReporter();
-    // ((a + b - c) * (d ^ e)) / f
-    parser.reset("(a + b - c) * d ^ e / f");
-    auto e = parser.expression(err);
-
-    assert(parser.token.type == Token.Eof);
-    assert(e.type == AstNode.Divide);
-    assert(e.children[0].type == AstNode.Multiply);
-    assert(e.children[0].children[0].type == AstNode.List);
-    assert(e.children[0].children[0].children[0].type == AstNode.Subtract);
-    assert(e.children[0].children[0].children[0].children[0].type == AstNode.Add);
-    assert(e.children[0].children[0].children[0].children[0].children[0].text == "a");
-    assert(e.children[0].children[0].children[0].children[0].children[1].text == "b");
-    assert(e.children[0].children[0].children[0].children[1].text == "c");
-    assert(e.children[0].children[1].type == AstNode.Power);
-    assert(e.children[0].children[1].children[0].text == "d");
-    assert(e.children[0].children[1].children[1].text == "e");
-    assert(e.children[1].text == "f");
-
-}
-
 Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
     auto rhs = p.list(error);
 
@@ -345,14 +318,116 @@ Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
 unittest {
     Parser parser;
     auto err = SyntaxReporter();
+
     parser.reset("[][()]");
-    auto e = parser.expression(err);
+    auto e = cast(Call) parser.expression(err);
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Call);
     assert(e.children.length == 2);
-    assert(e.children[0].type == AstNode.List);
-    assert(e.children[1].type == AstNode.List);
-    assert(e.children[1].children[0].type == AstNode.List);
+    assert(e.target.type == AstNode.List);
+    assert(e.arguments.type == AstNode.List);
+    assert((cast(VarExpression) e.arguments.children[0]).value_expr.type == AstNode.List);
+}
+
+/**
+ * var_expr : Expression ((":" Expression ("=" Expression)?) |
+                          ("=" Expression))?
+ */
+Expression var_expr(ref Parser p, ref SyntaxReporter error) {
+    Expression first, type_expr, value_expr;
+    const start = p.token.start;
+    const(char)* end = start;
+    bool subexpression_error;
+
+    first = p.expression(error);
+    end = first.start + first.span;
+    if (first.type == AstNode.Invalid)
+        subexpression_error = true;
+
+    if (p.consume(Token.Colon)) {
+        // var_expr : Expression (":" Expression)?
+        type_expr = p.expression(error);
+        end = type_expr.start + type_expr.span;
+        if (type_expr.type == AstNode.Invalid)
+            subexpression_error = true;
+
+        if (p.consume(Token.Equals)) {
+            // var_expr : Expression (":" Expression ("=" Expression)?)?
+            value_expr = p.expression(error);
+            end = value_expr.start + value_expr.span;
+            if (value_expr.type == AstNode.Invalid)
+                subexpression_error = true;
+        }
+    }
+    else if (p.consume(Token.Equals)) {
+        // var_expr : Expression ("=" Expression)?
+        value_expr = p.expression(error);
+        end = value_expr.start + value_expr.span;
+        if (value_expr.type == AstNode.Invalid)
+                subexpression_error = true;
+    }
+    else {
+        // var_expr : Expression
+        value_expr = first;
+        first = null;
+    }
+
+    if (subexpression_error)
+        return new Invalid(start, end - start);
+    else
+        return new VarExpression(first, type_expr, value_expr, start, end - start);
+}
+
+unittest {
+    Parser parser;
+    auto err = SyntaxReporter();
+
+    {
+        parser.reset("a");
+        auto e = cast(VarExpression) parser.var_expr(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.VarExpression);
+        assert(e.pattern is null);
+        assert(e.type_expr is null);
+        assert(e.value_expr.type == AstNode.Name);
+    }
+    {
+        parser.reset("a:b");
+        auto e = cast(VarExpression) parser.var_expr(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.VarExpression);
+        assert(e.pattern.type == AstNode.Name);
+        assert(e.type_expr.type == AstNode.Name);
+        assert(e.value_expr is null);
+    }
+    {
+        parser.reset("a:b=c");
+        auto e = cast(VarExpression) parser.var_expr(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.VarExpression);
+        assert(e.pattern.type == AstNode.Name);
+        assert(e.type_expr.type == AstNode.Name);
+        assert(e.value_expr.type == AstNode.Name);
+    }
+    {
+        parser.reset("a=c");
+        auto e = cast(VarExpression) parser.var_expr(err);
+        assert(parser.token.type == Token.Eof);
+        assert(e.type == AstNode.VarExpression);
+        assert(e.pattern.type == AstNode.Name);
+        assert(e.type_expr is null);
+        assert(e.value_expr.type == AstNode.Name);
+    }
+    {
+        bool var_error;
+        err.user_data = &var_error;
+        err.token_cannot_start_expr_impl = report_bad_token_set_flag;
+        
+        parser.reset("a:=c");
+        auto e = parser.var_expr(err);
+        assert(parser.token.type == Token.Eof);
+        assert(var_error);
+    }
 }
 
 version(unittest) {

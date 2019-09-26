@@ -4,8 +4,8 @@
 
 - [ ] Implement chunking of invalid characters
   - [ ] Implement checking and reporting of UTF8 characters as names
+  - [ ] Parse invalid tokens into invalid nodes
 - [ ] Elaborate syntax reporter error messages
-- [ ] Implement parsing for named list members
 - [ ] Refactoring/Refining pass on parser and lexer (2 hour limit!!!)
 
 ## List
@@ -42,12 +42,12 @@
     - [x] Error handlers (refer to syntax_errors.md)
       - [x] Tested
   - [ ] Parser
-    - [ ] Expressions
-      - [ ] Lists
+    - [x] Expressions
+      - [x] Lists
         - [x] Unnamed members
           - [x] Tested
-        - [ ] Named members
-          - [ ] Tested
+        - [x] Named members
+          - [x] Tested
       - [x] Names
         - [x] Tested
       - [x] Integers
@@ -61,9 +61,15 @@
         - [x] Power
         - [x] Call
         - [x] Tested
-      - [ ] Function literals
-      - [ ] Tested
+      - [x] Function literals
+      - [x] Tested
     - [ ] Statements
       - [ ] If-else branching
       - [ ] While-loops
+    - [ ] Declarations
+      - [ ] Let declarations
+      - [ ] Def declarations
     - [ ] Profiled
+  - [ ] Semantic Definitions
+    - [ ] Partial tuple initialization
+    - [ ] Dependency carrying functions, operator carrying tuples
