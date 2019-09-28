@@ -8,6 +8,8 @@ module arc.syntax.lexer;
  * the responsibility of higher-level modules to keep track of.
  */
 struct Token {
+    import arc.hash: Key;
+
     /**
      * Every token has a type, which informs the parser how it needs to process
      * the token into a useful representation of an analyzed piece of code
@@ -33,6 +35,9 @@ struct Token {
     const(char)* start;
     /// The length of the token in bytes
     size_t span;
+    /// The unique key that identifies a string. This member is unused if the
+    /// token is not an name
+    Key key;
 }
 
 /**
@@ -42,6 +47,8 @@ struct Token {
 struct Lexer {
     import std.container.array: Array;
 
+    import arc.stringtable: StringTable;
+
     /// A pointer to the current character in the source text
     const(char)* source_text;
     /// A pointer to the end of the source text
@@ -50,30 +57,41 @@ struct Lexer {
     /// The most recently analyzed token
     Token next, current;
 
+    /**
+     * Stores a stack of delimiters that will be automatically inserted after
+     * any of: ) ] <NAME> <INTEGER>
+     */
     Array!(Token.Type) eol_type_stack;
+
+    StringTable* table;
 
     /**
      * Sets up the lexer to analyze a new source document
      */
-    void reset(const(char)[] source) {
+    void reset(const(char)[] source, StringTable* table) {
         source_text = source.ptr;
         end_of_text = source.ptr + source.length;
         eol_type_stack.clear();
+        this.table = table;
     }
 
+    /// Advances the lexer so that `current` is the first-read token.
     void ready() {
         advance();
         advance();
     }
 
+    /// Push a token onto the automatic-delimiter-insertion stack
     void push_eol_type(Token.Type t) {
         eol_type_stack.insertBack(t);
     }
 
+    /// Pop a token from the automatic-delimiter-insertion stack
     void pop_eol_type() {
         eol_type_stack.removeBack();
     }
 
+    /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
         if (next.type == Token.Eol) {
             switch (current.type) with (Token.Type) {
@@ -96,6 +114,7 @@ struct Lexer {
         }
     }
 
+    /// Scans a token and nothing else.
     Token scan_token() {
         auto start = source_text;
 
@@ -179,7 +198,8 @@ struct Lexer {
                     default:
                 }
 
-                return Token(Token.Name, start, source_text - start);
+                auto slice = start[0 .. source_text - start];
+                return Token(Token.Name, start, source_text - start, table.insert(slice));
             case '0': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
@@ -201,48 +221,54 @@ struct Lexer {
 
 
 version(unittest) {
-    Lexer lex(const(char)[] src) {
+    import arc.stringtable: StringTable;
+    Lexer lex(const(char)[] src, StringTable *table) {
         Lexer lexer;
-        lexer.reset(src);
+        lexer.reset(src, table);
         return lexer;
     }
 }
 
 // Test empty lexer
 unittest {
-    auto lexer = lex("");
+    auto lexer = lex("", null);
     assert(lexer.current.type == Token.Invalid);
     assert(lexer.scan_token.type == Token.Eof);
 }
 
 // Test empty lexer with whitespace
 unittest {
-    assert(lex("  \r\t\t\t\t    ").scan_token.type == Token.Eof);
+    assert(lex("  \r\t\t\t\t    ", null).scan_token.type == Token.Eof);
 }
 
 // Test isolated tokens
 unittest {
     import std.range: zip;
+    import arc.stringtable: StringTable;
 
     const strings = ["(", ")", "[", "]", ",", ".", ";", "->", "129400_81", "anb_wo283"];
     const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon, Token.Rarrow, Token.Integer, Token.Name];
     assert(strings.length == types.length);
 
+    StringTable table;
     foreach (pair; zip(strings, types)) {
-        auto t = lex(pair[0]).scan_token;
+        auto t = lex(pair[0], &table).scan_token;
         assert(t.type == pair[1] && t.start[0 .. t.span] == pair[0]);
     }
 }
 
 // Test adjescent tokens
 unittest {
+    import arc.stringtable: StringTable;
+
     const str = "[[]]],19281_2918 (_aiw19)_";
     const types = [
         Token.Lbracket, Token.Lbracket,Token.Rbracket, Token.Rbracket, Token.Rbracket, Token.Comma,
         Token.Integer, Token.Lparen, Token.Name, Token.Rparen, Token.Name
     ];
 
-    auto lexer = lex(str);
+    StringTable table;
+    auto lexer = lex(str, &table);
     foreach (i; 0 .. types.length) {
         assert(lexer.scan_token.type == types[i]);
     }

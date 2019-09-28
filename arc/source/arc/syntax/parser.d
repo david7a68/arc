@@ -5,12 +5,16 @@ import arc.syntax.lexer;
 import arc.syntax.syntax_reporter;
 
 struct Parser {
+    import arc.stringtable;
+
     Token token;
     Lexer lexer;
+    StringTable *table;
 
-    void reset(const(char)[] source) {
-        lexer.reset(source);
-        advance();
+    void reset(const(char)[] source, StringTable* table) {
+        lexer.reset(source, table);
+        lexer.ready();
+        token = lexer.current;
     }
 
     void advance() {
@@ -22,6 +26,7 @@ struct Parser {
     bool consume(Token.Type type) {
         if (type != token.type)
             return false;
+        
         advance();
         return true;
     }
@@ -41,12 +46,13 @@ Expression expression(ref Parser p, ref SyntaxReporter error) {
 
 unittest {
     Parser parser;
+    StringTable table;
+    auto err = SyntaxReporter(0);
 
-    // token_cannot_start_expr_impl
     bool bad_token;
     err.user_data = &bad_token;
     err.token_cannot_start_expr_impl = report_bad_token_set_flag;
-    parser.reset("]");
+    parser.reset("]", &table);
     auto e = parser.expression(err);
     assert(bad_token);
 }
@@ -155,7 +161,7 @@ unittest {
     Parser parser;
     auto err = SyntaxReporter();
 
-    parser.reset("10294");
+    parser.reset("10294", null);
     auto e = parser.expression(err);
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Integer);
@@ -212,17 +218,18 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
 
 unittest {
     Parser parser;
+    StringTable table;
     auto err = SyntaxReporter();
 
     {
-        parser.reset("[]");
+        parser.reset("[]", null);
         auto e = parser.expression(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.List);
         assert(e.children.length == 0);
     }
     {
-        parser.reset("[a\n\n\n(b)]");
+        parser.reset("[a\n\n\n(b)]", &table);
         auto e = parser.expression(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.List);
@@ -240,7 +247,7 @@ unittest {
             (cast(bool[2]*) self.user_data)[1] = true;
         };
 
-        parser.reset("[a\n)");
+        parser.reset("[a\n)", &table);
         auto e = parser.expression(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
@@ -251,7 +258,7 @@ unittest {
         err.user_data = &not_closed;
         err.list_not_closed_impl = report_loc_err_set_flag;
 
-        parser.reset("[a, [b)]");
+        parser.reset("[a, [b)]", &table);
         auto e = parser.expression(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
@@ -285,7 +292,7 @@ unittest {
     Parser parser;
     auto err = SyntaxReporter();
 
-    parser.reset("() -> ()");
+    parser.reset("() -> ()", null);
     auto e = cast(Function) parser.expression(err);
     assert(parser.token.type == Token.Eof);
     assert(e.parameters.type == AstNode.List);
@@ -319,7 +326,7 @@ unittest {
     Parser parser;
     auto err = SyntaxReporter();
 
-    parser.reset("[][()]");
+    parser.reset("[][()]", null);
     auto e = cast(Call) parser.expression(err);
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Call);
@@ -380,10 +387,11 @@ Expression var_expr(ref Parser p, ref SyntaxReporter error) {
 
 unittest {
     Parser parser;
+    StringTable table;
     auto err = SyntaxReporter();
 
     {
-        parser.reset("a");
+        parser.reset("a", &table);
         auto e = cast(VarExpression) parser.var_expr(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
@@ -392,7 +400,7 @@ unittest {
         assert(e.value_expr.type == AstNode.Name);
     }
     {
-        parser.reset("a:b");
+        parser.reset("a:b", &table);
         auto e = cast(VarExpression) parser.var_expr(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
@@ -401,7 +409,7 @@ unittest {
         assert(e.value_expr is null);
     }
     {
-        parser.reset("a:b=c");
+        parser.reset("a:b=c", &table);
         auto e = cast(VarExpression) parser.var_expr(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
@@ -410,7 +418,7 @@ unittest {
         assert(e.value_expr.type == AstNode.Name);
     }
     {
-        parser.reset("a=c");
+        parser.reset("a=c", &table);
         auto e = cast(VarExpression) parser.var_expr(err);
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
@@ -423,7 +431,7 @@ unittest {
         err.user_data = &var_error;
         err.token_cannot_start_expr_impl = report_bad_token_set_flag;
         
-        parser.reset("a:=c");
+        parser.reset("a:=c", &table);
         auto e = parser.var_expr(err);
         assert(parser.token.type == Token.Eof);
         assert(var_error);
@@ -431,6 +439,8 @@ unittest {
 }
 
 version(unittest) {
+    import arc.stringtable: StringTable;
+
     SyntaxReporter.ReportingFunction_loc_err report_loc_err_set_flag = (r, l1, l2) {
         *(cast(bool*) r.user_data) = true;
     };
