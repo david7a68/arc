@@ -10,11 +10,13 @@ struct Parser {
     Token token;
     Lexer lexer;
     StringTable *table;
+    SyntaxReporter *error;
 
-    void reset(const(char)[] source, StringTable* table) {
+    void reset(const(char)[] source, StringTable* table, SyntaxReporter* error) {
         lexer.reset(source, table);
         lexer.ready();
         token = lexer.current;
+        this.error = error;
     }
 
     void advance() {
@@ -40,26 +42,20 @@ struct Parser {
     }
 }
 
-Expression expression(ref Parser p, ref SyntaxReporter error) {
-    return expression(p, error, Infix.Precedence.Assignment);
+Expression expression(ref Parser p) {
+    return expression(p, Infix.Precedence.Assignment);
 }
 
 unittest {
-    Parser parser;
-    StringTable table;
-    auto err = SyntaxReporter(0);
-
+    mixin(parser_init!"]");
     bool bad_token;
-    err.user_data = &bad_token;
-    err.token_cannot_start_expr_impl = report_bad_token_set_flag;
-    parser.reset("]", &table);
-    auto e = parser.expression(err);
+    parser.error.user_data = &bad_token;
+    parser.error.token_cannot_start_expr_impl = report_bad_token_set_flag;
+    auto e = parser.expression();
     assert(bad_token);
 }
 
-private:
-
-alias Prefix = Expression function(ref Parser, ref SyntaxReporter);
+alias Prefix = Expression function(ref Parser);
 
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p;
@@ -90,7 +86,7 @@ struct Infix {
 
     Precedence precedence;
 
-    alias InfixParselet = Expression function(ref Parser, ref SyntaxReporter, Expression);
+    alias InfixParselet = Expression function(ref Parser, Expression);
     InfixParselet parselet;
     
     alias Precedence this;
@@ -111,28 +107,28 @@ immutable Infix[256] infix_parslets = () {
     return p;
 } ();
 
-Expression expression(ref Parser p, ref SyntaxReporter error, Infix.Precedence prec) {
+Expression expression(ref Parser p, Infix.Precedence prec) {
     auto parselet = prefix_parslets[p.token.type];
 
     if (parselet is null) {
-        error.token_cannot_start_expr(p.token);
+        p.error.token_cannot_start_expr(p.token);
         return new Invalid(p.token.start, p.token.span);
     }
     
     auto subexpression_error = false;
-    auto expr = parselet(p, error);
+    auto expr = parselet(p);
     while (prec <= infix_parslets[p.token.type].precedence) {
         auto infix = infix_parslets[p.token.type].parselet;
 
         if (infix !is null) {
-            expr = infix(p, error, expr);
+            expr = infix(p, expr);
         }
         else {
-            error.token_is_not_an_operator(expr.start, p.token);
+            p.error.token_is_not_an_operator(expr.start, p.token);
             
             // skip the token, and then the rest of the expression
             p.advance();
-            auto _rhs = p.expression(error);
+            auto _rhs = p.expression();
 
             expr = new Invalid(expr.start, (_rhs.start + _rhs.span) - expr.start);
             subexpression_error = true;
@@ -145,12 +141,12 @@ Expression expression(ref Parser p, ref SyntaxReporter error, Infix.Precedence p
     return new Invalid(expr.start, expr.span);
 }
 
-Name name(ref Parser p, ref SyntaxReporter error) {
+Name name(ref Parser p) {
     scope(exit) p.advance();
     return new Name(p.token.start, p.token.span);
 }
 
-Integer integer(ref Parser p, ref SyntaxReporter error) {
+Integer integer(ref Parser p) {
     import std.conv: to;
 
     scope(exit) p.advance();
@@ -158,17 +154,14 @@ Integer integer(ref Parser p, ref SyntaxReporter error) {
 }
 
 unittest {
-    Parser parser;
-    auto err = SyntaxReporter();
-
-    parser.reset("10294", null);
-    auto e = parser.expression(err);
+    mixin(parser_init!("10294"));
+    auto e = parser.expression();
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Integer);
     assert((cast(Integer) e).value == 10_294);
 }
 
-Expression list(ref Parser p, ref SyntaxReporter error) {
+Expression list(ref Parser p) {
     const start = p.token.start;
     const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
     p.push_eol_type(Token.Comma);
@@ -182,7 +175,7 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
     VarExpression[] members;
     bool subexpression_error = false;
     while (p.token.type != closing_tok) {
-        auto e = p.var_expr(error);
+        auto e = p.var_expr();
 
         assert(e.type == AstNode.Invalid || e.type == AstNode.VarExpression);
         if (e.type == AstNode.Invalid)
@@ -196,7 +189,7 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
             } while (p.token.type == Token.Comma);
         }
         else if (p.token.type != closing_tok) {
-            error.list_not_closed(start, p.token.start);
+            p.error.list_not_closed(start, p.token.start);
             auto err = new Invalid(start, (p.token.start + p.token.span) - start);
             p.advance();
             return err;
@@ -217,20 +210,16 @@ Expression list(ref Parser p, ref SyntaxReporter error) {
 }
 
 unittest {
-    Parser parser;
-    StringTable table;
-    auto err = SyntaxReporter();
-
     {
-        parser.reset("[]", null);
-        auto e = parser.expression(err);
+        mixin(parser_init!("[]"));
+        auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.List);
         assert(e.children.length == 0);
     }
     {
-        parser.reset("[a\n\n\n(b)]", &table);
-        auto e = parser.expression(err);
+        mixin(parser_init!("[a\n\n\n(b)]"));
+        auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.List);
         assert(e.children.length == 2);
@@ -238,49 +227,49 @@ unittest {
         assert(e.children[1].type == AstNode.VarExpression);
     }
     {
+        mixin(parser_init!("[a\n)"));
         bool[2] errors; // [0]: cannot start expr, [1]: list not closed
-        err.user_data = &errors;
-        err.token_cannot_start_expr_impl = (self, tok) {
+        parser.error.user_data = &errors;
+        parser.error.token_cannot_start_expr_impl = (self, tok) {
             (cast(bool[2]*) self.user_data)[0] = true;
         };
-        err.list_not_closed_impl = (self, loc, erloc) {
+        parser.error.list_not_closed_impl = (self, loc, erloc) {
             (cast(bool[2]*) self.user_data)[1] = true;
         };
 
-        parser.reset("[a\n)", &table);
-        auto e = parser.expression(err);
+        auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
         assert(errors[0] && errors[1]);
     }
     {
+        mixin(parser_init!("[a, [b)]"));
         bool not_closed;
-        err.user_data = &not_closed;
-        err.list_not_closed_impl = report_loc_err_set_flag;
+        parser.error.user_data = &not_closed;
+        parser.error.list_not_closed_impl = report_loc_err_set_flag;
 
-        parser.reset("[a, [b)]", &table);
-        auto e = parser.expression(err);
+        auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
         assert(not_closed);
     }
 }
 
-Expression negate(ref Parser p, ref SyntaxReporter error) {
+Expression negate(ref Parser p) {
     const start = p.token.start;
     p.consume(Token.Minus);
 
-    auto expr = prefix_parslets[p.token.type](p, error);
+    auto expr = prefix_parslets[p.token.type](p);
     if (expr.type != AstNode.Invalid)
         return new Negate(expr);
 
     return new Invalid(start, (expr.start + expr.span) - start);
 }
 
-Expression function_(ref Parser p, ref SyntaxReporter error, Expression params) {
+Expression function_(ref Parser p, Expression params) {
     p.consume(Token.Rarrow);
 
-    auto body = p.expression(error);
+    auto body = p.expression();
 
     if (params.type != AstNode.Invalid && body.type != AstNode.Invalid)
         return new Function(params, body);
@@ -289,20 +278,17 @@ Expression function_(ref Parser p, ref SyntaxReporter error, Expression params) 
 }
 
 unittest {
-    Parser parser;
-    auto err = SyntaxReporter();
-
-    parser.reset("() -> ()", null);
-    auto e = cast(Function) parser.expression(err);
+    mixin(parser_init!("() -> ()"));
+    auto e = cast(Function) parser.expression();
     assert(parser.token.type == Token.Eof);
     assert(e.parameters.type == AstNode.List);
     assert(e.body.type == AstNode.List);
 }
 
-Expression binary(T, int prec, Token.Type ttype)(ref Parser p, ref SyntaxReporter error, Expression lhs) {
+Expression binary(T, int prec, Token.Type ttype)(ref Parser p, Expression lhs) {
     p.consume(ttype);
 
-    auto rhs = p.expression(error, cast(Infix.Precedence) prec);
+    auto rhs = p.expression(cast(Infix.Precedence) prec);
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
         return new T(lhs, rhs);
     return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
@@ -314,8 +300,8 @@ alias multiply = binary!(Multiply, Infix.Product + 1, Token.Star);
 alias divide = binary!(Divide, Infix.Product + 1, Token.Slash);
 alias power = binary!(Power, Infix.Power, Token.Caret);
 
-Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
-    auto rhs = p.list(error);
+Expression call(ref Parser p, Expression lhs) {
+    auto rhs = p.list();
 
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
         return new Call(lhs, rhs);
@@ -323,11 +309,8 @@ Expression call(ref Parser p, ref SyntaxReporter error, Expression lhs) {
 }
 
 unittest {
-    Parser parser;
-    auto err = SyntaxReporter();
-
-    parser.reset("[][()]", null);
-    auto e = cast(Call) parser.expression(err);
+    mixin(parser_init!"[][()]");
+    auto e = cast(Call) parser.expression();
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Call);
     assert(e.children.length == 2);
@@ -340,27 +323,27 @@ unittest {
  * var_expr : Expression ((":" Expression ("=" Expression)?) |
                           ("=" Expression))?
  */
-Expression var_expr(ref Parser p, ref SyntaxReporter error) {
+Expression var_expr(ref Parser p) {
     Expression first, type_expr, value_expr;
     const start = p.token.start;
     const(char)* end = start;
     bool subexpression_error;
 
-    first = p.expression(error);
+    first = p.expression();
     end = first.start + first.span;
     if (first.type == AstNode.Invalid)
         subexpression_error = true;
 
     if (p.consume(Token.Colon)) {
         // var_expr : Expression (":" Expression)?
-        type_expr = p.expression(error);
+        type_expr = p.expression();
         end = type_expr.start + type_expr.span;
         if (type_expr.type == AstNode.Invalid)
             subexpression_error = true;
 
         if (p.consume(Token.Equals)) {
             // var_expr : Expression (":" Expression ("=" Expression)?)?
-            value_expr = p.expression(error);
+            value_expr = p.expression();
             end = value_expr.start + value_expr.span;
             if (value_expr.type == AstNode.Invalid)
                 subexpression_error = true;
@@ -368,7 +351,7 @@ Expression var_expr(ref Parser p, ref SyntaxReporter error) {
     }
     else if (p.consume(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
-        value_expr = p.expression(error);
+        value_expr = p.expression();
         end = value_expr.start + value_expr.span;
         if (value_expr.type == AstNode.Invalid)
                 subexpression_error = true;
@@ -386,13 +369,9 @@ Expression var_expr(ref Parser p, ref SyntaxReporter error) {
 }
 
 unittest {
-    Parser parser;
-    StringTable table;
-    auto err = SyntaxReporter();
-
     {
-        parser.reset("a", &table);
-        auto e = cast(VarExpression) parser.var_expr(err);
+        mixin(parser_init!"a");
+        auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern is null);
@@ -400,8 +379,8 @@ unittest {
         assert(e.value_expr.type == AstNode.Name);
     }
     {
-        parser.reset("a:b", &table);
-        auto e = cast(VarExpression) parser.var_expr(err);
+        mixin(parser_init!"a:b");
+        auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
@@ -409,8 +388,8 @@ unittest {
         assert(e.value_expr is null);
     }
     {
-        parser.reset("a:b=c", &table);
-        auto e = cast(VarExpression) parser.var_expr(err);
+        mixin(parser_init!"a:b=c");
+        auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
@@ -418,8 +397,8 @@ unittest {
         assert(e.value_expr.type == AstNode.Name);
     }
     {
-        parser.reset("a=c", &table);
-        auto e = cast(VarExpression) parser.var_expr(err);
+        mixin(parser_init!"a=c");
+        auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
@@ -427,12 +406,12 @@ unittest {
         assert(e.value_expr.type == AstNode.Name);
     }
     {
+        mixin(parser_init!"a:=c");
         bool var_error;
-        err.user_data = &var_error;
-        err.token_cannot_start_expr_impl = report_bad_token_set_flag;
+        parser.error.user_data = &var_error;
+        parser.error.token_cannot_start_expr_impl = report_bad_token_set_flag;
         
-        parser.reset("a:=c", &table);
-        auto e = parser.var_expr(err);
+        auto e = parser.var_expr();
         assert(parser.token.type == Token.Eof);
         assert(var_error);
     }
@@ -452,4 +431,8 @@ version(unittest) {
     SyntaxReporter.ReportingFunction_token report_bad_token_set_flag = (r, t) {
         *(cast(bool*) r.user_data) = true;
     };
+
+    template parser_init(string s) {
+        enum parser_init = "Parser parser; StringTable table; SyntaxReporter error = SyntaxReporter(); parser.reset(\"" ~ s ~ "\", &table, &error);";
+    }
 }
