@@ -25,6 +25,9 @@ struct Token {
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=',
         Rarrow,
+
+        If, Else, Loop, Break, Return,
+        Let, Def,
     }
 
     alias Type this;
@@ -39,6 +42,24 @@ struct Token {
     /// token is not an name
     Key key;
 }
+
+
+import arc.hash: Key;
+/// Hashmap of reserved keywords and their corresponding token types
+immutable Token.Type[Key] keywords;
+
+shared static this() {
+    import arc.hash: digest;
+
+    keywords["if".digest] = Token.If;
+    keywords["else".digest] = Token.Else;
+    keywords["loop".digest] = Token.Loop;
+    keywords["break".digest] = Token.Break;
+    keywords["return".digest] = Token.Return;
+    keywords["let".digest] = Token.Let;
+    keywords["def".digest] = Token.Def;
+}
+
 
 /**
  * Input: Contiguous memory region containing arbitrary data.
@@ -63,12 +84,10 @@ struct Lexer {
      */
     Array!(Token.Type) eol_type_stack;
 
+    ///
     StringTable* table;
 
-    /**
-     * Sets up the lexer to analyze a new source document
-     */
-    void reset(const(char)[] source, StringTable* table) {
+    this(const(char)[] source, StringTable* table) {
         source_text = source.ptr;
         end_of_text = source.ptr + source.length;
         eol_type_stack.clear();
@@ -198,8 +217,8 @@ struct Lexer {
                     default:
                 }
 
-                auto slice = start[0 .. source_text - start];
-                return Token(Token.Name, start, source_text - start, table.insert(slice));
+                auto id = table.insert(start[0 .. source_text - start]);
+                return Token(keywords.get(id, Token.Name), start, source_text - start, id);
             case '0': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
@@ -223,26 +242,21 @@ struct Lexer {
 version(unittest) {
     import arc.stringtable: StringTable;
     Lexer lex(const(char)[] src, StringTable *table) {
-        Lexer lexer;
-        lexer.reset(src, table);
-        return lexer;
+        return Lexer(src, table);
     }
 }
 
-// Test empty lexer
-unittest {
+unittest { // Test empty lexer
     auto lexer = lex("", null);
     assert(lexer.current.type == Token.Invalid);
     assert(lexer.scan_token.type == Token.Eof);
 }
 
-// Test empty lexer with whitespace
-unittest {
+unittest { // Test empty lexer with whitespace
     assert(lex("  \r\t\t\t\t    ", null).scan_token.type == Token.Eof);
 }
 
-// Test isolated tokens
-unittest {
+unittest { // Test isolated tokens
     import std.range: zip;
     import arc.stringtable: StringTable;
 
@@ -257,11 +271,26 @@ unittest {
     }
 }
 
-// Test adjescent tokens
-unittest {
+unittest { // Test keyword detection
+    import arc.stringtable: StringTable;
+    import std.range: zip;
+
+    const keys = [
+        "if", "else", "loop", "break", "return", "let", "def"
+    ];
+    const types = [
+        Token.If, Token.Else, Token.Loop, Token.Break, Token.Return, Token.Let, Token.Def
+    ];
+
+    StringTable table;
+    foreach (pair; zip(keys, types))
+        assert(lex(pair[0], &table).scan_token.type == pair[1]);
+}
+
+unittest { // Test adjescent tokens
     import arc.stringtable: StringTable;
 
-    const str = "[[]]],19281_2918 (_aiw19)_";
+    const str = "[[]]],19281_2918 (_aiw19)_if";
     const types = [
         Token.Lbracket, Token.Lbracket,Token.Rbracket, Token.Rbracket, Token.Rbracket, Token.Comma,
         Token.Integer, Token.Lparen, Token.Name, Token.Rparen, Token.Name

@@ -2,29 +2,36 @@ module arc.syntax.parser;
 
 import arc.syntax.ast;
 import arc.syntax.lexer;
-import arc.syntax.syntax_reporter;
 
 struct Parser {
-    import arc.stringtable;
+    import arc.syntax.syntax_reporter: SyntaxReporter;
+    import arc.stringtable: StringTable;
 
+    ///
     Token token;
+    ///
     Lexer lexer;
+    ///
     StringTable *table;
+    ///
     SyntaxReporter *error;
 
-    void reset(const(char)[] source, StringTable* table, SyntaxReporter* error) {
-        lexer.reset(source, table);
+    ///
+    this(const(char)[] source, StringTable* table, SyntaxReporter* error) {
+        lexer = Lexer(source, table);
         lexer.ready();
         token = lexer.current;
         this.error = error;
     }
 
+    ///
     void advance() {
         lexer.advance();
         token = lexer.current;
         // import std.stdio; writeln(token);
     }
 
+    ///
     bool consume(Token.Type type) {
         if (type != token.type)
             return false;
@@ -33,15 +40,24 @@ struct Parser {
         return true;
     }
 
+    /**
+     * Push a new token type to the top of the automatic end-of-line token
+     * insertion stack
+     */
     void push_eol_type(Token.Type type) {
         lexer.push_eol_type(type);
     }
 
+    /**
+     * Pop a token type from the top of the automatic end-of-line token
+     * insertion stack
+     */
     void pop_eol_type() {
         lexer.pop_eol_type();
     }
 }
 
+///
 Expression expression(ref Parser p) {
     return expression(p, Infix.Precedence.Assignment);
 }
@@ -57,6 +73,7 @@ unittest {
 
 alias Prefix = Expression function(ref Parser);
 
+/// List of functions for parsing tokens that can start expressions
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p;
 
@@ -70,6 +87,7 @@ immutable Prefix[256] prefix_parslets = () {
 } ();
 
 
+/// Convenience struct to hold the precedence and parser for an infix expression
 struct Infix {
     enum Precedence {
         None,
@@ -92,6 +110,7 @@ struct Infix {
     alias Precedence this;
 }
 
+/// List of functions for parsing infix expressions (binary operators, calls, etc)
 immutable Infix[256] infix_parslets = () {
     Infix[256] p;
 
@@ -141,11 +160,13 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
     return new Invalid(expr.start, expr.span);
 }
 
+/// Name := ('_' | $a-zA-Z)* ;
 Name name(ref Parser p) {
     scope(exit) p.advance();
     return new Name(p.token.start, p.token.span);
 }
 
+/// Integer := NonZeroDigit ('_' | Digit)* ;
 Integer integer(ref Parser p) {
     import std.conv: to;
 
@@ -161,6 +182,7 @@ unittest {
     assert((cast(Integer) e).value == 10_294);
 }
 
+/// List := ListOpen  (','* VarExpression)? ','* ListClose ;
 Expression list(ref Parser p) {
     const start = p.token.start;
     const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
@@ -255,6 +277,7 @@ unittest {
     }
 }
 
+/// Negate := '-' Expression
 Expression negate(ref Parser p) {
     const start = p.token.start;
     p.consume(Token.Minus);
@@ -266,6 +289,7 @@ Expression negate(ref Parser p) {
     return new Invalid(start, (expr.start + expr.span) - start);
 }
 
+/// Function := Expression '->' Expression ;
 Expression function_(ref Parser p, Expression params) {
     p.consume(Token.Rarrow);
 
@@ -285,6 +309,7 @@ unittest {
     assert(e.body.type == AstNode.List);
 }
 
+/// Binary := Expression <op> Expression ;
 Expression binary(T, int prec, Token.Type ttype)(ref Parser p, Expression lhs) {
     p.consume(ttype);
 
@@ -300,6 +325,7 @@ alias multiply = binary!(Multiply, Infix.Product + 1, Token.Star);
 alias divide = binary!(Divide, Infix.Product + 1, Token.Slash);
 alias power = binary!(Power, Infix.Power, Token.Caret);
 
+/// Call := Expression List
 Expression call(ref Parser p, Expression lhs) {
     auto rhs = p.list();
 
@@ -321,7 +347,7 @@ unittest {
 
 /**
  * var_expr : Expression ((":" Expression ("=" Expression)?) |
-                          ("=" Expression))?
+ *                        ("=" Expression))?
  */
 Expression var_expr(ref Parser p) {
     Expression first, type_expr, value_expr;
@@ -419,6 +445,7 @@ unittest {
 
 version(unittest) {
     import arc.stringtable: StringTable;
+    import arc.syntax.syntax_reporter: SyntaxReporter;
 
     SyntaxReporter.ReportingFunction_loc_err report_loc_err_set_flag = (r, l1, l2) {
         *(cast(bool*) r.user_data) = true;
@@ -433,6 +460,6 @@ version(unittest) {
     };
 
     template parser_init(string s) {
-        enum parser_init = "Parser parser; StringTable table; SyntaxReporter error = SyntaxReporter(); parser.reset(\"" ~ s ~ "\", &table, &error);";
+        enum parser_init = "StringTable table; SyntaxReporter error = SyntaxReporter(); auto parser = Parser(\"" ~ s ~ "\", &table, &error);";
     }
 }

@@ -1,10 +1,10 @@
 module arc.syntax.syntax_reporter;
 
 struct SyntaxReporter {
-    import arc.source: StringID;
+    import arc.hash: Key;
     import arc.syntax.lexer: Token;
 
-    StringID source_id;
+    Key name, source;
     void* user_data;
 
     alias ExprLoc = const(char)*;

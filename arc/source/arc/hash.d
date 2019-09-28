@@ -1,6 +1,6 @@
 module arc.hash;
 
-alias Key = ubyte[8];
+alias Key = ulong;
 
 /**
  * Hashes text and returns (key: ubyte[8], text: const(char)[])
@@ -10,5 +10,5 @@ Key digest(const(char)[] text) {
 
     ubyte[16] key = hash!(MurmurHash3!(128))(text);
 
-    return key[0 .. 8];
+    return (cast(ulong*) key.ptr)[0];
 }
