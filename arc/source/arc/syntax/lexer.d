@@ -59,6 +59,10 @@ struct Lexer {
         source_text = source.ptr;
         end_of_text = source.ptr + source.length;
         eol_type_stack.clear();
+    }
+
+    void ready() {
+        advance();
         advance();
     }
 
@@ -81,30 +85,23 @@ struct Lexer {
                 break;
             default:
                 do {
-                    lex();
+                    current = next;
+                    next = scan_token();
                 } while (current.type == Token.Eol);
             }
         }
         else {
-            lex();
+            current = next;
+            next = scan_token();
         }
     }
 
-    /**
-     * Lexically analyze the source text and stop after the first token in
-     * found.
-     *
-     * This is the function that actually does all the work. It is fairly simple,
-     * using a simple switch statement to determine the type of each character.
-     */
-    void lex() {
-        current = next;
+    Token scan_token() {
         auto start = source_text;
 
         switch_start:
         if (source_text >= end_of_text) {
-            next = Token(Token.Eof, source_text, 0);
-            return;
+            return Token(Token.Eof, source_text, 0);
         }
 
         // A switch statement with label/goto was the simplest way to start.
@@ -118,70 +115,55 @@ struct Lexer {
                 goto switch_start;
             case '\n':
                 source_text++;
-                next = Token(Token.Eol, start, 1);
-                break;
+                return Token(Token.Eol, start, 1);
             case '(':
                 source_text++;
-                next = Token(Token.Lparen, start, 1);
-                break;
+                return Token(Token.Lparen, start, 1);
             case ')':
                 source_text++;
-                next = Token(Token.Rparen, start, 1);
-                break;
+                return Token(Token.Rparen, start, 1);
             case '[':
                 source_text++;
-                next = Token(Token.Lbracket, start, 1);
-                break;
+                return Token(Token.Lbracket, start, 1);
             case ']':
                 source_text++;
-                next = Token(Token.Rbracket, start, 1);
-                break;
+                return Token(Token.Rbracket, start, 1);
             case ',':
                 source_text++;
-                next = Token(Token.Comma, start, 1);
-                break;
+                return Token(Token.Comma, start, 1);
             case '.':
                 source_text++;
-                next = Token(Token.Dot, start, 1);
-                break;
+                return Token(Token.Dot, start, 1);
             case ';':
                 source_text++;
-                next = Token(Token.Semicolon, start, 1);
-                break;
+                return Token(Token.Semicolon, start, 1);
             case ':':
                 source_text++;
-                next = Token(Token.Colon, start, 1);
-                break;
+                return Token(Token.Colon, start, 1);
             case '+':
                 source_text++;
-                next = Token(Token.Plus, start, 1);
-                break;
+                return Token(Token.Plus, start, 1);
             case '-':
                 source_text++;
                 if (*source_text == '>') {
                     source_text++;
-                    next = Token(Token.Rarrow, start, 2);
+                    return Token(Token.Rarrow, start, 2);
                 }
                 else {
-                    next = Token(Token.Minus, start, 1);
+                    return Token(Token.Minus, start, 1);
                 }
-                break;
             case '*':
                 source_text++;
-                next = Token(Token.Star, start, 1);
-                break;
+                return Token(Token.Star, start, 1);
             case '/':
                 source_text++;
-                next = Token(Token.Slash, start, 1);
-                break;
+                return Token(Token.Slash, start, 1);
             case '^':
                 source_text++;
-                next = Token(Token.Caret, start, 1);
-                break;
+                return Token(Token.Caret, start, 1);
             case '=':
                 source_text++;
-                next = Token(Token.Equals, start, 1);
-                break;
+                return Token(Token.Equals, start, 1);
             case 'a': .. case 'z':
             case 'A': .. case 'Z':
             case '_':
@@ -197,8 +179,7 @@ struct Lexer {
                     default:
                 }
 
-                next = Token(Token.Name, start, source_text - start);
-                break;
+                return Token(Token.Name, start, source_text - start);
             case '0': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
@@ -206,32 +187,37 @@ struct Lexer {
                 // We have to traverse the integer again in the parser
                 // Yes, this is not exactly efficient. No, it doesn't really
                 // matter right now
-                next = Token(Token.Integer, start, source_text - start);
-                break;
+                return Token(Token.Integer, start, source_text - start);
             default:
                 source_text++;
-                next = Token(Token.Invalid, start, source_text - start);
+                current = Token(Token.Invalid, start, source_text - start);
         }
 
+        // This part is to handle invalid tokens that fall through to switch::default
         if (next.type == Token.Invalid) goto switch_start;
+        return current;
+    }
+}
+
+
+version(unittest) {
+    Lexer lex(const(char)[] src) {
+        Lexer lexer;
+        lexer.reset(src);
+        return lexer;
     }
 }
 
 // Test empty lexer
 unittest {
-    Lexer lexer;
-    lexer.reset("");
+    auto lexer = lex("");
     assert(lexer.current.type == Token.Invalid);
-    lexer.lex();
-    assert(lexer.current.type == Token.Eof);
+    assert(lexer.scan_token.type == Token.Eof);
 }
 
 // Test empty lexer with whitespace
 unittest {
-    Lexer lexer;
-    lexer.reset("  \r\t\t\t\t    ");
-    lexer.lex();
-    assert(lexer.current.type == Token.Eof);
+    assert(lex("  \r\t\t\t\t    ").scan_token.type == Token.Eof);
 }
 
 // Test isolated tokens
@@ -242,41 +228,10 @@ unittest {
     const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon, Token.Rarrow, Token.Integer, Token.Name];
     assert(strings.length == types.length);
 
-    Lexer lexer;
     foreach (pair; zip(strings, types)) {
-        lexer.reset(pair[0]);
-        lexer.lex();
-        assert(lexer.current.type == pair[1]);
-        assert(lexer.current.start[0 .. lexer.current.span] == pair[0]);
+        auto t = lex(pair[0]).scan_token;
+        assert(t.type == pair[1] && t.start[0 .. t.span] == pair[0]);
     }
-
-    lexer.lex();
-    assert(lexer.current.type == Token.Eof);
-}
-
-// Test isolated tokens surrounded by whitespace
-unittest {
-    import std.range: zip;
-	import std.string: strip;
-
-    const strings = ["  ( ", "  ) ", "   [", " ]   ", " , ", "   129400_81", " anb_wo283"];
-    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Integer, Token.Name];
-    assert(strings.length == types.length);
-
-    Lexer lexer;
-    foreach (pair; zip(strings, types)) {
-        lexer.reset(pair[0]);
-        lexer.lex();
-
-		const token = lexer.current;
-        assert(token.type == pair[1]);
-
-		const text = token.start[0 .. token.span];
-        assert(text == pair[0].strip);
-    }
-
-    lexer.lex();
-    assert(lexer.current.type == Token.Eof);
 }
 
 // Test adjescent tokens
@@ -287,15 +242,10 @@ unittest {
         Token.Integer, Token.Lparen, Token.Name, Token.Rparen, Token.Name
     ];
 
-    Lexer lexer;
-    lexer.reset(str);
+    auto lexer = lex(str);
     foreach (i; 0 .. types.length) {
-        lexer.lex();
-
-		const token = lexer.current;
-        assert(token.type == types[i]);
+        assert(lexer.scan_token.type == types[i]);
     }
 
-    lexer.lex();
-    assert(lexer.current.type == Token.Eof);
+    assert(lexer.scan_token.type == Token.Eof);
 }
