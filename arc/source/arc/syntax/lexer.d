@@ -136,13 +136,28 @@ struct Lexer {
     /// Scans a token and nothing else.
     Token scan_token() {
         auto start = source_text;
-
-        switch_start:
-        if (source_text >= end_of_text) {
-            return Token(Token.Eof, source_text, 0);
+        auto type = scan_type(start);
+        Key key;
+        const length = source_text - start;
+        
+        if (type == Token.Name) {
+            key = table.insert(start[0 .. length]);
+            type = keywords.get(key, Token.Name);
         }
 
-        // A switch statement with label/goto was the simplest way to start.
+        return Token(type, start, length, key);
+    }
+
+    Token.Type scan_type(const(char)* start) {
+        Token.Type char_token(Token.Type t, int advance_n = 1) {
+            source_text += advance_n;
+            return t;
+        }
+
+        switch_start:
+        if (source_text >= end_of_text)
+            return Token.Eof; 
+
         // @Optimize A character-table driven approach may be more performant.
         switch (*source_text) {
             case ' ':
@@ -152,56 +167,39 @@ struct Lexer {
                 start++;
                 goto switch_start;
             case '\n':
-                source_text++;
-                return Token(Token.Eol, start, 1);
+                return char_token(Token.Eol);
             case '(':
-                source_text++;
-                return Token(Token.Lparen, start, 1);
+                return char_token(Token.Lparen);
             case ')':
-                source_text++;
-                return Token(Token.Rparen, start, 1);
+                return char_token(Token.Rparen);
             case '[':
-                source_text++;
-                return Token(Token.Lbracket, start, 1);
+                return char_token(Token.Lbracket);
             case ']':
-                source_text++;
-                return Token(Token.Rbracket, start, 1);
+                return char_token(Token.Rbracket);
             case ',':
-                source_text++;
-                return Token(Token.Comma, start, 1);
+                return char_token(Token.Comma);
             case '.':
-                source_text++;
-                return Token(Token.Dot, start, 1);
+                return char_token(Token.Dot);
             case ';':
-                source_text++;
-                return Token(Token.Semicolon, start, 1);
+                return char_token(Token.Semicolon);
             case ':':
-                source_text++;
-                return Token(Token.Colon, start, 1);
+                return char_token(Token.Colon);
             case '+':
-                source_text++;
-                return Token(Token.Plus, start, 1);
+                return char_token(Token.Plus);
             case '-':
                 source_text++;
-                if (*source_text == '>') {
-                    source_text++;
-                    return Token(Token.Rarrow, start, 2);
-                }
-                else {
-                    return Token(Token.Minus, start, 1);
-                }
+                if (*source_text == '>') // advance only by one
+                    return char_token(Token.Rarrow, 1);
+                else // skip advancing here because we've already done it
+                    return char_token(Token.Minus, 0);
             case '*':
-                source_text++;
-                return Token(Token.Star, start, 1);
+                return char_token(Token.Star);
             case '/':
-                source_text++;
-                return Token(Token.Slash, start, 1);
+                return char_token(Token.Slash);
             case '^':
-                source_text++;
-                return Token(Token.Caret, start, 1);
+                return char_token(Token.Caret);
             case '=':
-                source_text++;
-                return Token(Token.Equals, start, 1);
+                return char_token(Token.Equals);
             case 'a': .. case 'z':
             case 'A': .. case 'Z':
             case '_':
@@ -216,25 +214,15 @@ struct Lexer {
                         goto name_start;
                     default:
                 }
-
-                auto id = table.insert(start[0 .. source_text - start]);
-                return Token(keywords.get(id, Token.Name), start, source_text - start, id);
+                return Token.Name;
             case '0': .. case '9':
                 source_text++;
                 while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
                     source_text++;
-                // We have to traverse the integer again in the parser
-                // Yes, this is not exactly efficient. No, it doesn't really
-                // matter right now
-                return Token(Token.Integer, start, source_text - start);
+                return Token.Integer;
             default:
-                source_text++;
-                current = Token(Token.Invalid, start, source_text - start);
+                return char_token(Token.Invalid);
         }
-
-        // This part is to handle invalid tokens that fall through to switch::default
-        if (next.type == Token.Invalid) goto switch_start;
-        return current;
     }
 }
 

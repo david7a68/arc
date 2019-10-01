@@ -67,7 +67,7 @@ unittest {
     bool bad_token;
     parser.error.user_data = &bad_token;
     parser.error.token_cannot_start_expr_impl = report_bad_token_set_flag;
-    auto e = parser.expression();
+    parser.expression();
     assert(bad_token);
 }
 
@@ -176,7 +176,7 @@ Integer integer(ref Parser p) {
 
 unittest {
     mixin(parser_init!("10294"));
-    auto e = parser.expression();
+    const e = parser.expression();
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Integer);
     assert((cast(Integer) e).value == 10_294);
@@ -259,7 +259,7 @@ unittest {
             (cast(bool[2]*) self.user_data)[1] = true;
         };
 
-        auto e = parser.expression();
+        const e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
         assert(errors[0] && errors[1]);
@@ -270,7 +270,7 @@ unittest {
         parser.error.user_data = &not_closed;
         parser.error.list_not_closed_impl = report_loc_err_set_flag;
 
-        auto e = parser.expression();
+        const e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
         assert(not_closed);
