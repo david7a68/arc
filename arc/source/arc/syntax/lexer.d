@@ -148,7 +148,7 @@ struct Lexer {
         return Token(type, start, length, key);
     }
 
-    Token.Type scan_type(const(char)* start) {
+    Token.Type scan_type(ref const(char)* start) {
         Token.Type char_token(Token.Type t, int advance_n = 1) {
             source_text += advance_n;
             return t;
