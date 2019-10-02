@@ -49,15 +49,15 @@ import arc.hash: Key;
 immutable Token.Type[Key] keywords;
 
 shared static this() {
-    import arc.hash: digest;
+    import arc.stringtable: StringTable;
 
-    keywords["if".digest] = Token.If;
-    keywords["else".digest] = Token.Else;
-    keywords["loop".digest] = Token.Loop;
-    keywords["break".digest] = Token.Break;
-    keywords["return".digest] = Token.Return;
-    keywords["let".digest] = Token.Let;
-    keywords["def".digest] = Token.Def;
+    keywords[StringTable.digest("if")] = Token.If;
+    keywords[StringTable.digest("else")] = Token.Else;
+    keywords[StringTable.digest("loop")] = Token.Loop;
+    keywords[StringTable.digest("break")] = Token.Break;
+    keywords[StringTable.digest("return")] = Token.Return;
+    keywords[StringTable.digest("let")] = Token.Let;
+    keywords[StringTable.digest("def")] = Token.Def;
 }
 
 
@@ -136,7 +136,7 @@ struct Lexer {
     /// Scans a token and nothing else.
     Token scan_token() {
         auto start = source_text;
-        auto type = scan_type(start);
+        auto type = scan_type(start, source_text, end_of_text);
         Key key;
         const length = source_text - start;
         
@@ -146,116 +146,6 @@ struct Lexer {
         }
 
         return Token(type, start, length, key);
-    }
-
-    Token.Type scan_type(ref const(char)* start) {
-        Token.Type char_token(Token.Type t, int advance_n = 1) {
-            source_text += advance_n;
-            return t;
-        }
-
-        switch_start:
-        if (source_text >= end_of_text)
-            return Token.Eof; 
-
-        // @Optimize A character-table driven approach may be more performant.
-        switch (*source_text) {
-            case ' ':
-            case '\t':
-            case '\r':
-                source_text++;
-                start++;
-                goto switch_start;
-            case '\n':
-                return char_token(Token.Eol);
-            case '(':
-                return char_token(Token.Lparen);
-            case ')':
-                return char_token(Token.Rparen);
-            case '[':
-                return char_token(Token.Lbracket);
-            case ']':
-                return char_token(Token.Rbracket);
-            case ',':
-                return char_token(Token.Comma);
-            case '.':
-                return char_token(Token.Dot);
-            case ';':
-                return char_token(Token.Semicolon);
-            case ':':
-                return char_token(Token.Colon);
-            case '+':
-                return char_token(Token.Plus);
-            case '-':
-                source_text++;
-                if (*source_text == '>') // advance only by one
-                    return char_token(Token.Rarrow, 1);
-                else // skip advancing here because we've already done it
-                    return char_token(Token.Minus, 0);
-            case '*':
-                return char_token(Token.Star);
-            case '/':
-                return char_token(Token.Slash);
-            case '^':
-                return char_token(Token.Caret);
-            case '=':
-                return char_token(Token.Equals);
-            case 'a': .. case 'z':
-            case 'A': .. case 'Z':
-            case '_':
-                source_text++;
-                name_start:
-                switch (*source_text) {
-                    case 'a': .. case 'z':
-                    case 'A': .. case 'Z':
-                    case '0': .. case '9':
-                    case '_':
-                        source_text++;
-                        goto name_start;
-                    default:
-                }
-                return Token.Name;
-            case '0': .. case '9':
-                source_text++;
-                while (('0' <= *source_text && *source_text <= '9') || *source_text == '_')
-                    source_text++;
-                return Token.Integer;
-            default:
-                return char_token(Token.Invalid);
-        }
-    }
-}
-
-
-version(unittest) {
-    import arc.stringtable: StringTable;
-    Lexer lex(const(char)[] src, StringTable *table) {
-        return Lexer(src, table);
-    }
-}
-
-unittest { // Test empty lexer
-    auto lexer = lex("", null);
-    assert(lexer.current.type == Token.Invalid);
-    assert(lexer.scan_token.type == Token.Eof);
-}
-
-unittest { // Test empty lexer with whitespace
-    assert(lex("  \r\t\t\t\t    ", null).scan_token.type == Token.Eof);
-}
-
-unittest { // Test isolated tokens
-    import std.range: zip;
-    import arc.stringtable: StringTable;
-
-    const strings = ["(", ")", "[", "]", ",", ".", ";", "->", "129400_81", "anb_wo283"];
-    const types = [Token.Lparen, Token.Rparen, Token.Lbracket, Token.Rbracket, Token.Comma, Token.Dot, Token.Semicolon, Token.Rarrow, Token.Integer, Token.Name];
-    assert(strings.length == types.length);
-
-    StringTable table;
-    foreach (pair; zip(strings, types)) {
-        auto t = lex(pair[0], &table).scan_token;
-        assert(t.type == pair[1] && t.start[0 .. t.span] == pair[0]);
     }
 }
 
@@ -275,20 +165,137 @@ unittest { // Test keyword detection
         assert(lex(pair[0], &table).scan_token.type == pair[1]);
 }
 
-unittest { // Test adjescent tokens
-    import arc.stringtable: StringTable;
 
-    const str = "[[]]],19281_2918 (_aiw19)_if";
-    const types = [
-        Token.Lbracket, Token.Lbracket,Token.Rbracket, Token.Rbracket, Token.Rbracket, Token.Comma,
-        Token.Integer, Token.Lparen, Token.Name, Token.Rparen, Token.Name
-    ];
-
-    StringTable table;
-    auto lexer = lex(str, &table);
-    foreach (i; 0 .. types.length) {
-        assert(lexer.scan_token.type == types[i]);
+Token.Type scan_type(ref const(char)* start, ref const(char)* cursor, const char* end_of_text) {
+    Token.Type char_token(Token.Type t, int advance_n = 1) {
+        cursor += advance_n;
+        return t;
     }
 
-    assert(lexer.scan_token.type == Token.Eof);
+    switch_start:
+    if (cursor >= end_of_text)
+        return Token.Eof; 
+
+    // @Optimize A character-table driven approach may be more performant.
+    switch (*cursor) {
+        case ' ':
+        case '\t':
+        case '\r':
+            cursor++;
+            start++;
+            goto switch_start;
+        case '\n':
+            return char_token(Token.Eol);
+        case '(':
+            return char_token(Token.Lparen);
+        case ')':
+            return char_token(Token.Rparen);
+        case '[':
+            return char_token(Token.Lbracket);
+        case ']':
+            return char_token(Token.Rbracket);
+        case ',':
+            return char_token(Token.Comma);
+        case '.':
+            return char_token(Token.Dot);
+        case ';':
+            return char_token(Token.Semicolon);
+        case ':':
+            return char_token(Token.Colon);
+        case '+':
+            return char_token(Token.Plus);
+        case '-':
+            cursor++;
+            if (*cursor == '>') // advance only by one
+                return char_token(Token.Rarrow, 1);
+            else // skip advancing here because we've already done it
+                return char_token(Token.Minus, 0);
+        case '*':
+            return char_token(Token.Star);
+        case '/':
+            return char_token(Token.Slash);
+        case '^':
+            return char_token(Token.Caret);
+        case '=':
+            return char_token(Token.Equals);
+        case 'a': .. case 'z':
+        case 'A': .. case 'Z':
+        case '_':
+            cursor++;
+            name_start:
+            switch (*cursor) {
+                case 'a': .. case 'z':
+                case 'A': .. case 'Z':
+                case '0': .. case '9':
+                case '_':
+                    cursor++;
+                    goto name_start;
+                default:
+            }
+            return Token.Name;
+        case '0': .. case '9':
+            cursor++;
+            while (('0' <= *cursor && *cursor <= '9') || *cursor == '_')
+                cursor++;
+            return Token.Integer;
+        default:
+            return char_token(Token.Invalid);
+    }
+}
+
+unittest { // Test empty lexer
+    mixin(init_scan(""));
+    assert(scan_type(start, cursor, end) == Token.Eof);
+}
+
+unittest { // Test empty lexer with whitespace
+    mixin(init_scan("  \t\t\t\t    "));
+    assert(scan_type(start, cursor, end) == Token.Eof);
+}
+
+unittest {
+    mixin(init_scan("()[],.;->129400_81anb_wo283 if else loop break return let def"));
+
+    bool test_scan(Token.Type t, size_t cursor_pos) {
+        auto tok_start = cursor;
+        return scan_type(tok_start, cursor, end) == t && cursor == start + cursor_pos;
+    }
+
+    assert(test_scan(Token.Lparen, 1));
+    assert(test_scan(Token.Rparen, 2));
+    assert(test_scan(Token.Lbracket, 3));
+    assert(test_scan(Token.Rbracket, 4));
+    assert(test_scan(Token.Comma, 5));
+    assert(test_scan(Token.Dot, 6));
+    assert(test_scan(Token.Semicolon, 7));
+    assert(test_scan(Token.Rarrow, 9));
+    assert(test_scan(Token.Integer, 18));
+    assert(test_scan(Token.Name, 27));
+
+    // Keywords are not preocessed at scan_type level
+    assert(test_scan(Token.Name, 30)); // if
+    assert(test_scan(Token.Name, 35)); // else
+    assert(test_scan(Token.Name, 40)); // loop
+    assert(test_scan(Token.Name, 46)); // break
+    assert(test_scan(Token.Name, 53)); // return
+    assert(test_scan(Token.Name, 57)); // let
+    assert(test_scan(Token.Name, 61)); // def
+}
+
+version(unittest) {
+    import arc.stringtable: StringTable;
+    Lexer lex(const(char)[] src, StringTable *table) {
+        return Lexer(src, table);
+    }
+
+    string init_scan(string test_string) {
+        import std.format: format;
+
+        return "
+            const test_string = \"%s\";
+            const(char)* start = test_string.ptr;
+            const(char)* cursor = start;
+            const char* end = cursor + %s;
+        ".format(test_string, test_string.length);
+    }
 }

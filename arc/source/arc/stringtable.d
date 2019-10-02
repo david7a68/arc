@@ -1,6 +1,6 @@
 module arc.stringtable;
 
-import arc.hash;
+import arc.hash: Key;
 
 struct StringTable {
     bool opBinary(string op = "in")(String s) {
@@ -8,9 +8,15 @@ struct StringTable {
     }
 
     Key insert(const(char)[] text) {
-        auto key = text.digest();
+        auto key = StringTable.digest(text);
         table[key] = text;
         return key;
+    }
+
+    static Key digest(const(char)[] text) {
+        import arc.hash: digest;
+        
+        return text.digest();
     }
 
 private:
