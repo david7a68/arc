@@ -284,7 +284,7 @@ Expression negate(ref Parser p) {
 
     auto expr = prefix_parslets[p.token.type](p);
     if (expr.type != AstNode.Invalid)
-        return new Negate(expr);
+        return new Negate(expr, start, (expr.start + expr.span) - start);
 
     return new Invalid(start, (expr.start + expr.span) - start);
 }

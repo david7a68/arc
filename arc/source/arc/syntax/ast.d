@@ -63,7 +63,11 @@ abstract class AstNode {
     ///
     Type type;
 
-    this(Type type) { this.type = type; }
+    this(Type type, const(char)* start, size_t span) {
+        this.type = type;
+        this.start = start;
+        this.span = span;
+    }
 
     /// Accept function of the Visitor Pattern's visit/accept pair
     abstract void accept(AstVisitor v);
@@ -75,16 +79,12 @@ abstract class AstNode {
 }
 
 abstract class Expression: AstNode {
-    this(Type type) { super(type); }
+    this(Type type, const(char)* start, size_t span) { super(type, start, span); }
 }
 
 final class Invalid: Expression {
-    this() { super(Type.Invalid); }
-
     this(const(char)* start, size_t span) {
-        this();
-        this.start = start;
-        this.span = span;
+        super(Type.Invalid, start, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -92,9 +92,7 @@ final class Invalid: Expression {
 
 final class Name: Expression {
     this(const(char)* start, size_t span) {
-        super(Type.Name);
-        this.start = start;
-        this.span = span;
+        super(Type.Name, start, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -104,9 +102,7 @@ final class Integer: Expression {
     private ulong _value;
 
     this(const(char)* start, size_t span, ulong value) {
-        super(Type.Integer);
-        this.start = start;
-        this.span = span;
+        super(Type.Integer, start, span);
         _value = value;
     }
 
@@ -123,9 +119,7 @@ final class List: Expression {
     private VarExpression[] _members;
 
     this(const(char)* start, size_t span) {
-        super(Type.List);
-        this.start = start;
-        this.span = span;
+        super(Type.List, start, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -143,10 +137,8 @@ final class Function: Expression {
     private Expression[2] _members;
 
     this(Expression params, Expression body) {
-        super(Type.Function);
+        super(Type.Function, params.start, (body.start + body.span) - params.start);
         _members = [params, body];
-        start = params.start;
-        span = (body.start + body.span) - params.start;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -161,8 +153,8 @@ final class Function: Expression {
 final class Negate: Expression {
     private AstNode _expression;
 
-    this(AstNode expr) {
-        super(Type.Negate);
+    this(AstNode expr, const(char)* start, size_t span) {
+        super(Type.Negate, start, span);
         _expression = expr;
     }
 
@@ -175,10 +167,8 @@ abstract class Binary: Expression {
     private Expression[2] _members;
 
     this(Type type, Expression left, Expression right) {
-        super(type);
+        super(type, left.start, (right.start + right.span) - left.start);
         _members = [left, right];
-        start = left.start;
-        span = (right.start + right.span) - left.start;
     }
 
     Expression left() { return _members[0]; }
@@ -264,10 +254,8 @@ final class VarExpression: Expression {
      * easily calculated by the parser and it saves us some effort here
      */
     this(Expression pattern, Expression type_expr, Expression value_expr, const(char)* start, size_t span) {
-        super(Type.VarExpression);
+        super(Type.VarExpression, start, span);
         _members = [pattern, type_expr, value_expr];
-        this.start = start;
-        this.span = span;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -276,24 +264,4 @@ final class VarExpression: Expression {
     Expression pattern() { return _members[0]; }
     Expression type_expr() { return _members[1]; }
     Expression value_expr() { return _members[2]; }
-}
-
-abstract class Statement: AstNode {
-    this(Type type) { super(type); }
-}
-
-abstract class Declaration: AstNode {
-    Name name;
-    Expression value_type_expr;
-    Expression value_expr;
-
-    this(Type type, Name name, Expression value_type_expr, Expression value_expr) {
-        super(type);
-        start = name.start;
-        span = (value_expr.start + value_expr.span) - name.start;
-        
-        this.name = name;
-        this.value_type_expr = value_type_expr;
-        this.value_expr = value_expr;
-    }
 }
