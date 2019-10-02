@@ -1,5 +1,7 @@
 module arc.syntax.ast;
 
+import arc.syntax.location: Span;
+
 /// Base class for the visitor platform
 abstract class AstVisitor {
 
@@ -57,15 +59,16 @@ abstract class AstNode {
     alias Type this;
 
     /// The location of the start of the node's text
-    const(char)* start;
+    // const(char)* start;
     /// The length of the text represented by this node
-    size_t span;
+    // size_t span;
+    Span span;
+
     ///
     Type type;
 
-    this(Type type, const(char)* start, size_t span) {
+    this(Type type, Span span) {
         this.type = type;
-        this.start = start;
         this.span = span;
     }
 
@@ -74,25 +77,23 @@ abstract class AstNode {
 
     /// Retrieves the children of this node as a slice.
     AstNode[] children() { return []; }
-
-    const(char)[] text() { return start[0 .. span]; }
 }
 
 abstract class Expression: AstNode {
-    this(Type type, const(char)* start, size_t span) { super(type, start, span); }
+    this(Type type, Span span) { super(type, span); }
 }
 
 final class Invalid: Expression {
-    this(const(char)* start, size_t span) {
-        super(Type.Invalid, start, span);
+    this(Span span) {
+        super(Type.Invalid, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
 }
 
 final class Name: Expression {
-    this(const(char)* start, size_t span) {
-        super(Type.Name, start, span);
+    this(Span span) {
+        super(Type.Name, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -101,8 +102,8 @@ final class Name: Expression {
 final class Integer: Expression {
     private ulong _value;
 
-    this(const(char)* start, size_t span, ulong value) {
-        super(Type.Integer, start, span);
+    this(Span span, ulong value) {
+        super(Type.Integer, span);
         _value = value;
     }
 
@@ -118,8 +119,8 @@ final class Integer: Expression {
 final class List: Expression {
     private VarExpression[] _members;
 
-    this(const(char)* start, size_t span) {
-        super(Type.List, start, span);
+    this(Span span) {
+        super(Type.List, span);
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -137,7 +138,7 @@ final class Function: Expression {
     private Expression[2] _members;
 
     this(Expression params, Expression body) {
-        super(Type.Function, params.start, (body.start + body.span) - params.start);
+        super(Type.Function, params.span.merge(body.span));
         _members = [params, body];
     }
 
@@ -153,8 +154,8 @@ final class Function: Expression {
 final class Negate: Expression {
     private AstNode _expression;
 
-    this(AstNode expr, const(char)* start, size_t span) {
-        super(Type.Negate, start, span);
+    this(AstNode expr, Span span) {
+        super(Type.Negate, span);
         _expression = expr;
     }
 
@@ -167,7 +168,7 @@ abstract class Binary: Expression {
     private Expression[2] _members;
 
     this(Type type, Expression left, Expression right) {
-        super(type, left.start, (right.start + right.span) - left.start);
+        super(type, left.span.merge(right.span));
         _members = [left, right];
     }
 
@@ -253,8 +254,8 @@ final class VarExpression: Expression {
      * We include `const(char)* start` and `size_t span` because that is more
      * easily calculated by the parser and it saves us some effort here
      */
-    this(Expression pattern, Expression type_expr, Expression value_expr, const(char)* start, size_t span) {
-        super(Type.VarExpression, start, span);
+    this(Expression pattern, Expression type_expr, Expression value_expr, Span span) {
+        super(Type.VarExpression, span);
         _members = [pattern, type_expr, value_expr];
     }
 

@@ -2,10 +2,12 @@ module arc.syntax.parser;
 
 import arc.syntax.ast;
 import arc.syntax.lexer;
+import arc.syntax.location: SpannedText;
 
 struct Parser {
     import arc.syntax.syntax_reporter: SyntaxReporter;
     import arc.stringtable: StringTable;
+    import arc.syntax.location: SpannedText;
 
     ///
     Token token;
@@ -17,7 +19,7 @@ struct Parser {
     SyntaxReporter *error;
 
     ///
-    this(const(char)[] source, StringTable* table, SyntaxReporter* error) {
+    this(SpannedText source, StringTable* table, SyntaxReporter* error) {
         lexer = Lexer(source, table);
         lexer.ready();
         token = lexer.current;
@@ -131,7 +133,7 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
 
     if (parselet is null) {
         p.error.token_cannot_start_expr(p.token);
-        return new Invalid(p.token.start, p.token.span);
+        return new Invalid(p.token.span);
     }
     
     auto subexpression_error = false;
@@ -143,13 +145,13 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
             expr = infix(p, expr);
         }
         else {
-            p.error.token_is_not_an_operator(expr.start, p.token);
-            
+            const token = p.token;
             // skip the token, and then the rest of the expression
             p.advance();
             auto _rhs = p.expression();
 
-            expr = new Invalid(expr.start, (_rhs.start + _rhs.span) - expr.start);
+            expr = new Invalid(expr.span.merge(_rhs.span));
+            p.error.token_is_not_an_operator(expr.span, p.token);
             subexpression_error = true;
         }
     }
@@ -157,13 +159,13 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
     if (!subexpression_error)
         return expr;
     
-    return new Invalid(expr.start, expr.span);
+    return new Invalid(expr.span);
 }
 
 /// Name := ('_' | $a-zA-Z)* ;
 Name name(ref Parser p) {
     scope(exit) p.advance();
-    return new Name(p.token.start, p.token.span);
+    return new Name(p.token.span);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -171,7 +173,7 @@ Integer integer(ref Parser p) {
     import std.conv: to;
 
     scope(exit) p.advance();
-    return new Integer(p.token.start, p.token.span, p.token.start[0..p.token.span].to!ulong);
+    return new Integer(p.token.span, p.token.span.text.to!ulong);
 }
 
 unittest {
@@ -184,7 +186,7 @@ unittest {
 
 /// List := ListOpen  (','* VarExpression)? ','* ListClose ;
 Expression list(ref Parser p) {
-    const start = p.token.start;
+    const start = p.token;
     const closing_tok = p.token.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
     p.push_eol_type(Token.Comma);
     scope(exit) p.pop_eol_type();
@@ -211,8 +213,8 @@ Expression list(ref Parser p) {
             } while (p.token.type == Token.Comma);
         }
         else if (p.token.type != closing_tok) {
-            p.error.list_not_closed(start, p.token.start);
-            auto err = new Invalid(start, (p.token.start + p.token.span) - start);
+            auto err = new Invalid(start.span.merge(p.token.span));
+            p.error.list_not_closed(err.span, p.token.span);
             p.advance();
             return err;
         }
@@ -221,12 +223,12 @@ Expression list(ref Parser p) {
     const close = p.token;
     p.consume(closing_tok);
     if (!subexpression_error) {
-        auto list = new List(start, (close.start + close.span) - start);
+        auto list = new List(start.span.merge(close.span));
         list.children = members;
         return list;
     }
     else {
-        auto inv = new Invalid(start, (close.start + close.span) - start);
+        auto inv = new Invalid(start.span.merge(close.span));
         return inv;
     }
 }
@@ -279,14 +281,14 @@ unittest {
 
 /// Negate := '-' Expression
 Expression negate(ref Parser p) {
-    const start = p.token.start;
+    const start = p.token;
     p.consume(Token.Minus);
 
     auto expr = prefix_parslets[p.token.type](p);
     if (expr.type != AstNode.Invalid)
-        return new Negate(expr, start, (expr.start + expr.span) - start);
+        return new Negate(expr, start.span.merge(expr.span));
 
-    return new Invalid(start, (expr.start + expr.span) - start);
+    return new Invalid(start.span.merge(expr.span));
 }
 
 /// Function := Expression '->' Expression ;
@@ -298,7 +300,7 @@ Expression function_(ref Parser p, Expression params) {
     if (params.type != AstNode.Invalid && body.type != AstNode.Invalid)
         return new Function(params, body);
 
-    return new Invalid(params.start, (body.start + body.span) - params.start);
+    return new Invalid(params.span.merge(body.span));
 }
 
 unittest {
@@ -316,7 +318,7 @@ Expression binary(T, int prec, Token.Type ttype)(ref Parser p, Expression lhs) {
     auto rhs = p.expression(cast(Infix.Precedence) prec);
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
         return new T(lhs, rhs);
-    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
+    return new Invalid(lhs.span.merge(rhs.span));
 }
 
 alias add = binary!(Add, Infix.Sum + 1, Token.Plus);
@@ -331,7 +333,7 @@ Expression call(ref Parser p, Expression lhs) {
 
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
         return new Call(lhs, rhs);
-    return new Invalid(lhs.start, (rhs.start + rhs.span) - lhs.start);
+    return new Invalid(lhs.span.merge(rhs.span));
 }
 
 unittest {
@@ -351,26 +353,24 @@ unittest {
  */
 Expression var_expr(ref Parser p) {
     Expression first, type_expr, value_expr;
-    const start = p.token.start;
-    const(char)* end = start;
     bool subexpression_error;
 
     first = p.expression();
-    end = first.start + first.span;
+    auto span = first.span;
     if (first.type == AstNode.Invalid)
         subexpression_error = true;
 
     if (p.consume(Token.Colon)) {
         // var_expr : Expression (":" Expression)?
         type_expr = p.expression();
-        end = type_expr.start + type_expr.span;
+        span = span.merge(type_expr.span);
         if (type_expr.type == AstNode.Invalid)
             subexpression_error = true;
 
         if (p.consume(Token.Equals)) {
             // var_expr : Expression (":" Expression ("=" Expression)?)?
             value_expr = p.expression();
-            end = value_expr.start + value_expr.span;
+            span = span.merge(value_expr.span);
             if (value_expr.type == AstNode.Invalid)
                 subexpression_error = true;
         }
@@ -378,7 +378,7 @@ Expression var_expr(ref Parser p) {
     else if (p.consume(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
         value_expr = p.expression();
-        end = value_expr.start + value_expr.span;
+        span = span.merge(value_expr.span);
         if (value_expr.type == AstNode.Invalid)
                 subexpression_error = true;
     }
@@ -389,9 +389,9 @@ Expression var_expr(ref Parser p) {
     }
 
     if (subexpression_error)
-        return new Invalid(start, end - start);
+        return new Invalid(span);
     else
-        return new VarExpression(first, type_expr, value_expr, start, end - start);
+        return new VarExpression(first, type_expr, value_expr, span);
 }
 
 unittest {
@@ -460,6 +460,12 @@ version(unittest) {
     };
 
     template parser_init(string s) {
-        enum parser_init = "StringTable table; SyntaxReporter error = SyntaxReporter(); auto parser = Parser(\"" ~ s ~ "\", &table, &error);";
+        import std.format: format;
+        enum parser_init = "
+            StringTable table;
+            auto error = SyntaxReporter();
+            auto text = SpannedText(0, %s, \"%s\");
+            auto parser = Parser(text, &table, &error);
+        ".format(s.length, s);
     }
 }

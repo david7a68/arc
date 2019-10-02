@@ -1,6 +1,10 @@
 module arc.syntax.lexer;
 
+import std.typecons: Tuple;
 import arc.stringtable: StringTable;
+import arc.syntax.location: SpannedText;
+import arc.hash: Key;
+
 
 /**
  * A Token is the smallest discrete unit that represents useful information in
@@ -36,17 +40,20 @@ struct Token {
 
     /// The type classification of the token
     Type type;
+
     /// A permanent pointer to the first character in this token
-    const(char)* start;
+    // const(char)* start;
     /// The length of the token in bytes
-    size_t span;
+    // size_t span;
+    
+    SpannedText span;
+    
     /// The unique key that identifies a string. This member is unused if the
     /// token is not an name
     Key key;
 }
 
 
-import arc.hash: Key;
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;
 
@@ -69,6 +76,8 @@ shared static this() {
  */
 struct Lexer {
     import std.container.array: Array;
+    
+    import arc.syntax.location: SpannedText;
 
     /// A pointer to the current character in the source text
     const(char)* source_text;
@@ -87,11 +96,14 @@ struct Lexer {
     ///
     StringTable* table;
 
-    this(const(char)[] source, StringTable* table) {
-        source_text = source.ptr;
-        end_of_text = source.ptr + source.length;
+    SpannedText source;
+
+    this(SpannedText source, StringTable* table) {
+        source_text = source.text.ptr;
+        end_of_text = source.text.ptr + source.length;
         eol_type_stack.clear();
         this.table = table;
+        this.source = source;
     }
 
     /// Advances the lexer so that `current` is the first-read token.
@@ -118,24 +130,24 @@ struct Lexer {
             case Rbracket:
             case Name:
             case Integer:
-                current = Token(eol_type_stack.back, next.start, 0);
+                current = Token(eol_type_stack.back);
                 break;
             default:
                 do {
                     current = next;
-                    next = scan_type(source_text, end_of_text).refine(table).locate();
+                    next = scan_type(source_text, end_of_text).refine(table).locate(source);
                 } while (current.type == Token.Eol);
             }
         }
         else {
             current = next;
-            next = scan_type(source_text, end_of_text).refine(table).locate();
+            next = scan_type(source_text, end_of_text).refine(table).locate(source);
         }
     }
 }
 
-import std.typecons: Tuple;
 alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key");
+
 
 /**
 * Converts the result given from `refine` into a token.
@@ -143,8 +155,10 @@ alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key
 * Once spans with absolute positioning are implemented, this will find the
 * absolute position of the token.
 */
-Token locate(RefinedToken result) {
-    return Token(result.type, result.text.ptr, result.text.length, result.key);
+Token locate(RefinedToken result, SpannedText source) {
+    import arc.syntax.location: Span;
+
+    return Token(result.type, source.get_span(result.text), result.key);
 }
 
 /**

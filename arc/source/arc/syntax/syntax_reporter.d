@@ -3,12 +3,13 @@ module arc.syntax.syntax_reporter;
 struct SyntaxReporter {
     import arc.hash: Key;
     import arc.syntax.lexer: Token;
+    import arc.syntax.location: Span;
 
     Key name, source;
     void* user_data;
 
-    alias ExprLoc = const(char)*;
-    alias ErrorLoc = const(char)*;
+    alias ExprLoc = Span;
+    alias ErrorLoc = Span;
 
     /// Function type that reports the location of the error, and the location of its enclosing expression
     alias ReportingFunction_loc_err = void function(SyntaxReporter*, ExprLoc, ErrorLoc);
@@ -54,13 +55,15 @@ struct SyntaxReporter {
      * Reports that the described token cannot start an expression
      */
     ReportingFunction_token token_cannot_start_expr_impl = (reporter, token) {
-        assert(false, "Error: The token (" ~ token.start[0 .. token.span] ~ ") cannot start an expression");
+        assert(false);
+        // assert(false, "Error: The token (" ~ token.start[0 .. token.span] ~ ") cannot start an expression");
     };
 
     /**
      * Reports that the token is not an operator (cannot be in infix position).
      */
     ReportingFunction_loc_token token_is_not_an_operator_impl = (reporter, loc, token) {
-        assert(false, "Error: The token (" ~ token.start[0 .. token.span] ~ ") is not an operator");
+        assert(false);
+        // assert(false, "Error: The token (" ~ token.start[0 .. token.span] ~ ") is not an operator");
     };
 }

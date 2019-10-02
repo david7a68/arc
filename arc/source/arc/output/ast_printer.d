@@ -31,10 +31,12 @@ final class AstPrinter: AstVisitor {
     import std.array: appender, Appender;
     import std.container.array: Array;
     import std.conv: to;
+    import arc.syntax.location: SpannedText;
 
     /// Initialize the printer
-    this() {
+    this(SpannedText text) {
         str = appender!(char[]);
+        this.text = text;
     }
 
     /**
@@ -47,7 +49,7 @@ final class AstPrinter: AstVisitor {
     override void visit(Invalid n)  {
         str.put(repr(n));
         str.put(" \"");
-        str.put(n.start[0 .. n.span]);
+        str.put(text.get_text(n.span));
         str.put("\"\n");
         write_children(n);
     }
@@ -184,6 +186,7 @@ private:
 
     Array!IndentType stack;
     Appender!(char[]) str;
+    SpannedText text;
     const(char)[] name_override;
 
     void write_children(AstNode n) {
@@ -224,7 +227,7 @@ private:
         switch (node.type) with (AstNode.Type) {
             case Name:
             case Integer:
-                return name_override ~ node.start[0 .. node.span];
+                return name_override ~ text.get_text(node.span);
             default:
                 return name_override ~ node.type.to!string;
         }
