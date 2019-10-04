@@ -121,7 +121,7 @@ struct Lexer {
             case Rbracket:
             case Name:
             case Integer:
-                current = Token(eol_type_stack.back);
+                current = Token(eol_type_stack.back, next.span);
                 break;
             default:
                 do {
@@ -135,6 +135,18 @@ struct Lexer {
             next = scan_type(source_text, end_of_text).refine(table).locate(source);
         }
     }
+}
+
+unittest {
+    StringTable t;
+    auto l = Lexer(SpannedText(0, 4, "a\r\n\n"), &t);
+    l.push_eol_type(Token.Comma);
+    l.ready();
+    assert(l.current.type == Token.Name);
+    l.advance();
+    assert(l.current.type == Token.Comma);
+    l.advance();
+    assert(l.current.type == Token.Eof);
 }
 
 alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key");
