@@ -42,16 +42,11 @@ struct SpannedText {
     this(CharPos start, CharPos length, const(char)[] text) {
         this(Span(start, length), text);
     }
-
-    SpannedText opSlice(const(char)* start, CharPos length) {
-        assert(text.ptr <= start);
-        assert(start + length <= text.ptr + text.length);
-        const local_start = cast(uint) (start - text.ptr);
-        return SpannedText(local_start, length, text[local_start .. local_start + length]);
-    }
     
-    SpannedText get_span(const(char)[] text) {
-        return opSlice(text.ptr, text.length);
+    SpannedText get_span(const(char)[] slice) {
+        assert(text.ptr <= slice.ptr && (slice.ptr + slice.length) <= (text.ptr + text.length));
+        const abs_start = cast(uint) (start + (slice.ptr - text.ptr));
+        return SpannedText(abs_start, cast(uint) text.length, text);
     }
 
     const(char)[] get_text(Span text_span) {
@@ -90,13 +85,6 @@ struct Source {
 
     bool opBinaryRight(string op = "in")(CharPos pos) {
         return start <= pos && pos < end;
-    }
-
-    const(char)[] get_text(Span text_span) {
-        const start = text_span.start - span.start;
-        assert(start + text_span.length <= raw_text.length);
-
-        return raw_text[start .. text_span.length];
     }
 }
 
@@ -155,6 +143,7 @@ struct SourceMap {
     }
 
     const(char)[] get_text(Span span) {
-        return get_source(span.start).get_text(span);
+        auto src = get_source(span.start);
+        return src.raw_text[span.start - src.start .. span.length];
     }
 }

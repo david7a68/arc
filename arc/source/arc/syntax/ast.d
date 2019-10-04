@@ -84,11 +84,16 @@ abstract class Expression: AstNode {
 }
 
 final class Invalid: Expression {
-    this(Span span) {
+    AstNode[] _children;
+
+    this(Span span, AstNode[] children = []) {
         super(Type.Invalid, span);
+        _children = children;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
+
+    override AstNode[] children() { return _children; }
 }
 
 final class Name: Expression {
@@ -117,21 +122,17 @@ final class Integer: Expression {
  * may be referred to by numerical index or name.
  */
 final class List: Expression {
-    private VarExpression[] _members;
+    private Expression[] _members;
 
-    this(Span span) {
+    this(Span span, Expression[] members) {
         super(Type.List, span);
+        _members = members;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
 
     override AstNode[] children() { return cast(AstNode[]) _members; }
     alias members = children;
-
-    void children(VarExpression[] n) { _members = n; }
-
-    /// Add a member to the list
-    List add_member(VarExpression n) { _members ~= n; return this; }
 }
 
 final class Function: Expression {

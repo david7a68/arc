@@ -6,7 +6,6 @@
   - [ ] Implement checking and reporting of UTF8 characters as names
   - [ ] Parse invalid tokens into invalid nodes
 - [ ] Elaborate syntax reporter error messages
-- [ ] Refactoring/Refining pass on parser and lexer (2 hour limit!!!)
 
 ## List
 

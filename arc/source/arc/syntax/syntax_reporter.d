@@ -3,10 +3,10 @@ module arc.syntax.syntax_reporter;
 struct SyntaxReporter {
     import arc.hash: Key;
     import arc.syntax.lexer: Token;
-    import arc.syntax.location: Span;
+    import arc.syntax.location: Span, Source;
 
-    Key name, source;
     void* user_data;
+    Source source;
 
     alias ExprLoc = Span;
     alias ErrorLoc = Span;
@@ -39,7 +39,7 @@ struct SyntaxReporter {
      * artifact starting at 'loc'
      */
     ReportingFunction_loc unexpected_end_of_file_impl = (reporter, loc) {
-        assert(false, "Error: Unexpected end of file!");
+        // assert(false, "Error: Unexpected end of file!");
     };
 
     /**
@@ -48,9 +48,14 @@ struct SyntaxReporter {
      * comma or closing token.
      */
     ReportingFunction_loc_err list_not_closed_impl = (reporter, expr_loc, err_loc) {
-        assert(false, "Error: The list is not properly closed");
+        assert(false, "Error: The list is not properly closed: ");
     }; 
     
+    ///
+    ReportingFunction_loc_err list_missing_comma_impl = (reporter, expr_loc, err_loc) {
+        assert(false, "Error: The list is missing a comma here...");
+    };
+
     /**
      * Reports that the described token cannot start an expression
      */

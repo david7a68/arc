@@ -196,7 +196,7 @@ Expression list(ref Parser p) {
     while(p.token.type == Token.Comma)
         p.advance();
 
-    VarExpression[] members;
+    Expression[] members;
     bool subexpression_error = false;
     while (p.token.type != closing_tok) {
         auto e = p.var_expr();
@@ -205,7 +205,7 @@ Expression list(ref Parser p) {
         if (e.type == AstNode.Invalid)
             subexpression_error = true;
         else
-            members ~= cast(VarExpression) e;
+            members ~= e;
 
         if (p.token.type == Token.Comma) {
             do {
@@ -223,8 +223,7 @@ Expression list(ref Parser p) {
     const close = p.token;
     p.consume(closing_tok);
     if (!subexpression_error) {
-        auto list = new List(start.span.merge(close.span));
-        list.children = members;
+        auto list = new List(start.span.merge(close.span), members);
         return list;
     }
     else {

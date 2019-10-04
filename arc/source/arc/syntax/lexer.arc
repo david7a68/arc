@@ -1,8 +1,8 @@
 
 def Token = [
     type: TokenType
-    start: Char*
-    span: Uint
+    span: SpannedText
+    text: Key
 ]
 
 TokenType = enum [
@@ -14,13 +14,18 @@ TokenType = enum [
     Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
     Equals = '=',
     Rarrow,
+    If, Else, Loop, Break, Return,
+    Let, Def
 ]
 
 def Lexer = [
-    source_text: const(char)*
-    end_of_text: const(char)*
-    next, current: Token
+    source_text:    const(char)*
+    end_of_text:    const(char)*
+    next:           Token
+    current:        Token
     eol_type_stack: Array(Type)
+    table:          StringTable
+    source:         SpannedText
 ]
 
 /*

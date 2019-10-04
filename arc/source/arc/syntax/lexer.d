@@ -14,8 +14,6 @@ import arc.hash: Key;
  * the responsibility of higher-level modules to keep track of.
  */
 struct Token {
-    import arc.hash: Key;
-
     /**
      * Every token has a type, which informs the parser how it needs to process
      * the token into a useful representation of an analyzed piece of code
@@ -40,12 +38,8 @@ struct Token {
 
     /// The type classification of the token
     Type type;
-
-    /// A permanent pointer to the first character in this token
-    // const(char)* start;
-    /// The length of the token in bytes
-    // size_t span;
     
+    ///
     SpannedText span;
     
     /// The unique key that identifies a string. This member is unused if the
@@ -58,8 +52,6 @@ struct Token {
 immutable Token.Type[Key] keywords;
 
 shared static this() {
-    import arc.stringtable: StringTable;
-
     keywords[StringTable.digest("if")] = Token.If;
     keywords[StringTable.digest("else")] = Token.Else;
     keywords[StringTable.digest("loop")] = Token.Loop;
@@ -76,8 +68,6 @@ shared static this() {
  */
 struct Lexer {
     import std.container.array: Array;
-    
-    import arc.syntax.location: SpannedText;
 
     /// A pointer to the current character in the source text
     const(char)* source_text;
@@ -96,6 +86,7 @@ struct Lexer {
     ///
     StringTable* table;
 
+    ///
     SpannedText source;
 
     this(SpannedText source, StringTable* table) {
@@ -147,7 +138,7 @@ struct Lexer {
 }
 
 alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key");
-
+alias ScanResult = Tuple!(Token.Type, "type", const(char)[], "text");
 
 /**
 * Converts the result given from `refine` into a token.
@@ -156,8 +147,6 @@ alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key
 * absolute position of the token.
 */
 Token locate(RefinedToken result, SpannedText source) {
-    import arc.syntax.location: Span;
-
     return Token(result.type, source.get_span(result.text), result.key);
 }
 
@@ -167,8 +156,8 @@ Token locate(RefinedToken result, SpannedText source) {
  */
 RefinedToken refine(ScanResult result, StringTable* table) {
     import std.typecons: tuple;
-    Key key;
 
+    Key key;
     if (result.type == Token.Name) {
         key = table.insert(result.text);
         result.type = keywords.get(key, Token.Name);
@@ -177,21 +166,17 @@ RefinedToken refine(ScanResult result, StringTable* table) {
 }
 
 unittest { // Test keyword detection
-    import arc.stringtable: StringTable;
-    import std.range: zip;
-
     const keys = "if else loop break return let def";
     const types = [
         Token.If, Token.Else, Token.Loop, Token.Break, Token.Return, Token.Let, Token.Def
     ];
 
-    mixin(init_scan(keys));
     StringTable table;
+    mixin(init_scan(keys));
     foreach (type; types)
         assert(scan_type(cursor, end).refine(&table).type == type);
+    assert(scan_type(cursor, end).type == Token.Eof);
 }
-
-alias ScanResult = Tuple!(Token.Type, "type", const(char)[], "text");
 
 /**
  * Scans a character buffer from `cursor` to `end`, producing a tuple of the 
@@ -202,7 +187,7 @@ alias ScanResult = Tuple!(Token.Type, "type", const(char)[], "text");
  * Returns: (type: Token.Type, text: const(char)[])
  */
 auto scan_type(ref const(char)* cursor, const char* end) {
-    import std.typecons: Tuple, tuple;
+    import std.typecons: tuple;
 
     auto start = cursor;
 
@@ -224,39 +209,26 @@ auto scan_type(ref const(char)* cursor, const char* end) {
             start++;
             goto switch_start;
         case '\n':
-            return make_token(Token.Eol);
         case '(':
-            return make_token(Token.Lparen);
         case ')':
-            return make_token(Token.Rparen);
         case '[':
-            return make_token(Token.Lbracket);
         case ']':
-            return make_token(Token.Rbracket);
         case ',':
-            return make_token(Token.Comma);
         case '.':
-            return make_token(Token.Dot);
         case ';':
-            return make_token(Token.Semicolon);
         case ':':
-            return make_token(Token.Colon);
         case '+':
-            return make_token(Token.Plus);
+        case '*':
+        case '/':
+        case '^':
+        case '=':
+            return make_token(cast(Token.Type) *cursor);
         case '-':
             cursor++;
             if (*cursor == '>') // advance only by one
                 return make_token(Token.Rarrow, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Minus, 0);
-        case '*':
-            return make_token(Token.Star);
-        case '/':
-            return make_token(Token.Slash);
-        case '^':
-            return make_token(Token.Caret);
-        case '=':
-            return make_token(Token.Equals);
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
@@ -293,11 +265,11 @@ unittest { // Test empty lexer with whitespace
 }
 
 unittest {
-    mixin(init_scan("()[],.;->129400_81anb_wo283 if else loop break return let def"));
+    mixin(init_scan("()[],.;->129400_81anb_wo283"));
 
     bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
         auto tok = scan_type(cursor, end);
-        return tok.type == t && tok.text == text && cursor == start + cursor_pos;
+        return (tok.type == t) && (tok.text == text) && (cursor == start + cursor_pos);
     }
 
     assert(test_scan(Token.Lparen,      "(", 1));
@@ -312,13 +284,7 @@ unittest {
     assert(test_scan(Token.Name,        "anb_wo283", 27));
 
     // Keywords are not preocessed at scan_type level
-    assert(test_scan(Token.Name,        "if", 30));
-    assert(test_scan(Token.Name,        "else", 35));
-    assert(test_scan(Token.Name,        "loop", 40));
-    assert(test_scan(Token.Name,        "break", 46));
-    assert(test_scan(Token.Name,        "return", 53));
-    assert(test_scan(Token.Name,        "let", 57));
-    assert(test_scan(Token.Name,        "def", 61));
+    assert(scan_type(cursor, end).type == Token.Eof);
 }
 
 version(unittest) {
