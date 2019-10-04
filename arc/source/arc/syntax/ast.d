@@ -97,8 +97,13 @@ final class Invalid: Expression {
 }
 
 final class Name: Expression {
-    this(Span span) {
+    import arc.hash: Key;
+
+    Key key;
+
+    this(Span span, Key key) {
         super(Type.Name, span);
+        this.key = key;
     }
 
     override void accept(AstVisitor v) { v.visit(this); }
@@ -122,9 +127,9 @@ final class Integer: Expression {
  * may be referred to by numerical index or name.
  */
 final class List: Expression {
-    private Expression[] _members;
+    private VarExpression[] _members;
 
-    this(Span span, Expression[] members) {
+    this(Span span, VarExpression[] members) {
         super(Type.List, span);
         _members = members;
     }

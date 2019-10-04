@@ -20,10 +20,10 @@ struct Span {
     Span merge(Span other) const {
         import std.algorithm: min, max;
 
-        auto start = min(this.start, other.start);
-        auto end = max(this.start + length, other.start + other.length);
+        auto lo = min(start, other.start);
+        auto hi = max(start + length, other.start + other.length);
 
-        return Span(start, end);
+        return Span(lo, hi);
     }
 }
 
@@ -45,8 +45,9 @@ struct SpannedText {
     
     SpannedText get_span(const(char)[] slice) {
         assert(text.ptr <= slice.ptr && (slice.ptr + slice.length) <= (text.ptr + text.length));
-        const abs_start = cast(uint) (start + (slice.ptr - text.ptr));
-        return SpannedText(abs_start, cast(uint) text.length, text);
+        const loc_start_idx = slice.ptr - text.ptr;
+        const abs_start_idx = cast(uint) (start + loc_start_idx);
+        return SpannedText(abs_start_idx, cast(uint) slice.length, slice);
     }
 
     const(char)[] get_text(Span text_span) {
@@ -57,12 +58,10 @@ struct SpannedText {
     }
 
     SpannedText merge(SpannedText other) const {
-        import std.algorithm: min, max;
-        
-        auto span = this.span.merge(other.span);
-        auto slice = (cast(const(char)*) min(start, other.start))[0 .. max(start + length, other.start + other.length)];
-
-        return SpannedText(span, slice);
+        SpannedText result;
+        result.span = span.merge(other.span);
+        result.text = text[(result.span.start - span.start) .. span.length];
+        return result;
     }
 
     Span merge(Span other) const {

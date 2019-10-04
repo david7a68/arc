@@ -64,15 +64,6 @@ Expression expression(ref Parser p) {
     return expression(p, Infix.Precedence.Assignment);
 }
 
-unittest {
-    mixin(parser_init!"]");
-    bool bad_token;
-    parser.error.user_data = &bad_token;
-    parser.error.token_cannot_start_expr_impl = report_bad_token_set_flag;
-    parser.expression();
-    assert(bad_token);
-}
-
 alias Prefix = Expression function(ref Parser);
 
 /// List of functions for parsing tokens that can start expressions
@@ -136,36 +127,19 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
         return new Invalid(p.token.span);
     }
     
-    auto subexpression_error = false;
     auto expr = parselet(p);
-    while (prec <= infix_parslets[p.token.type].precedence) {
-        auto infix = infix_parslets[p.token.type].parselet;
-
-        if (infix !is null) {
-            expr = infix(p, expr);
-        }
-        else {
-            const token = p.token;
-            // skip the token, and then the rest of the expression
-            p.advance();
-            auto _rhs = p.expression();
-
-            expr = new Invalid(expr.span.merge(_rhs.span));
-            p.error.token_is_not_an_operator(expr.span, p.token);
-            subexpression_error = true;
-        }
+    if (expr.type != AstNode.Invalid) {
+        while (prec <= infix_parslets[p.token.type].precedence)
+            expr = infix_parslets[p.token.type].parselet(p, expr);
     }
 
-    if (!subexpression_error)
-        return expr;
-    
-    return new Invalid(expr.span);
+    return expr;
 }
 
 /// Name := ('_' | $a-zA-Z)* ;
 Name name(ref Parser p) {
     scope(exit) p.advance();
-    return new Name(p.token.span);
+    return new Name(p.token.span, p.token.key);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -176,11 +150,12 @@ Integer integer(ref Parser p) {
     return new Integer(p.token.span, p.token.span.text.to!ulong);
 }
 
-unittest {
+@("parser:int") unittest {
     mixin(parser_init!("10294"));
     const e = parser.expression();
     assert(parser.token.type == Token.Eof);
     assert(e.type == AstNode.Integer);
+    assert(e.span == text.span);
     assert((cast(Integer) e).value == 10_294);
 }
 
@@ -196,55 +171,36 @@ Expression list(ref Parser p) {
     while(p.token.type == Token.Comma)
         p.advance();
 
-    Expression[] members;
-    bool subexpression_error = false;
+    VarExpression[] members;
     while (p.token.type != closing_tok) {
         auto e = p.var_expr();
-
-        assert(e.type == AstNode.Invalid || e.type == AstNode.VarExpression);
-        if (e.type == AstNode.Invalid)
-            subexpression_error = true;
-        else
-            members ~= e;
-
+        members ~= e;
+        
         if (p.token.type == Token.Comma) {
             do {
                 p.advance();
             } while (p.token.type == Token.Comma);
         }
         else if (p.token.type != closing_tok) {
-            auto err = new Invalid(start.span.merge(p.token.span));
-            p.error.list_not_closed(err.span, p.token.span);
+            auto span = start.span.merge(p.token.span);
             p.advance();
-            return err;
+            p.error.list_not_closed(span, p.token.span);
+            return new Invalid(span);
         }
     }
 
     const close = p.token;
     p.consume(closing_tok);
-    if (!subexpression_error) {
-        auto list = new List(start.span.merge(close.span), members);
-        return list;
-    }
-    else {
-        auto inv = new Invalid(start.span.merge(close.span));
-        return inv;
-    }
+    return new List(start.span.merge(close.span), members);
 }
 
-unittest {
-    {
-        mixin(parser_init!("[]"));
-        auto e = parser.expression();
-        assert(parser.token.type == Token.Eof);
-        assert(e.type == AstNode.List);
-        assert(e.children.length == 0);
-    }
+@("parser:list") unittest {
     {
         mixin(parser_init!("[a\n\n\n(b)]"));
         auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.List);
+        assert(e.span == text.span);
         assert(e.children.length == 2);
         assert(e.children[0].type == AstNode.VarExpression);
         assert(e.children[1].type == AstNode.VarExpression);
@@ -263,6 +219,7 @@ unittest {
         const e = parser.expression();
         assert(parser.token.type == Token.Eof);
         assert(e.type == AstNode.Invalid);
+        assert(e.span == text.span);
         assert(errors[0] && errors[1]);
     }
     {
@@ -271,9 +228,13 @@ unittest {
         parser.error.user_data = &not_closed;
         parser.error.list_not_closed_impl = report_loc_err_set_flag;
 
-        const e = parser.expression();
+        auto e = parser.expression();
         assert(parser.token.type == Token.Eof);
-        assert(e.type == AstNode.Invalid);
+        assert(e.type == AstNode.List);
+        assert(e.children[0].type == AstNode.VarExpression);
+        assert(e.children[1].type == AstNode.VarExpression);
+        assert(e.children[1].children[2].type == AstNode.Invalid);
+        assert(e.span == text.span);
         assert(not_closed);
     }
 }
@@ -302,7 +263,7 @@ Expression function_(ref Parser p, Expression params) {
     return new Invalid(params.span.merge(body.span));
 }
 
-unittest {
+@("parser:function") unittest {
     mixin(parser_init!("() -> ()"));
     auto e = cast(Function) parser.expression();
     assert(parser.token.type == Token.Eof);
@@ -335,7 +296,7 @@ Expression call(ref Parser p, Expression lhs) {
     return new Invalid(lhs.span.merge(rhs.span));
 }
 
-unittest {
+@("parser:call") unittest {
     mixin(parser_init!"[][()]");
     auto e = cast(Call) parser.expression();
     assert(parser.token.type == Token.Eof);
@@ -350,36 +311,27 @@ unittest {
  * var_expr : Expression ((":" Expression ("=" Expression)?) |
  *                        ("=" Expression))?
  */
-Expression var_expr(ref Parser p) {
+VarExpression var_expr(ref Parser p) {
     Expression first, type_expr, value_expr;
-    bool subexpression_error;
 
     first = p.expression();
     auto span = first.span;
-    if (first.type == AstNode.Invalid)
-        subexpression_error = true;
 
     if (p.consume(Token.Colon)) {
         // var_expr : Expression (":" Expression)?
         type_expr = p.expression();
         span = span.merge(type_expr.span);
-        if (type_expr.type == AstNode.Invalid)
-            subexpression_error = true;
 
         if (p.consume(Token.Equals)) {
             // var_expr : Expression (":" Expression ("=" Expression)?)?
             value_expr = p.expression();
             span = span.merge(value_expr.span);
-            if (value_expr.type == AstNode.Invalid)
-                subexpression_error = true;
         }
     }
     else if (p.consume(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
         value_expr = p.expression();
         span = span.merge(value_expr.span);
-        if (value_expr.type == AstNode.Invalid)
-                subexpression_error = true;
     }
     else {
         // var_expr : Expression
@@ -387,17 +339,15 @@ Expression var_expr(ref Parser p) {
         first = null;
     }
 
-    if (subexpression_error)
-        return new Invalid(span);
-    else
-        return new VarExpression(first, type_expr, value_expr, span);
+    return new VarExpression(first, type_expr, value_expr, span);
 }
 
-unittest {
+@("parser:var_expr") unittest {
     {
         mixin(parser_init!"a");
         auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
+        assert(e.span == text.span);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern is null);
         assert(e.type_expr is null);
@@ -407,6 +357,7 @@ unittest {
         mixin(parser_init!"a:b");
         auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
+        assert(e.span == text.span);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
         assert(e.type_expr.type == AstNode.Name);
@@ -416,6 +367,7 @@ unittest {
         mixin(parser_init!"a:b=c");
         auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
+        assert(e.span == text.span);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
         assert(e.type_expr.type == AstNode.Name);
@@ -425,6 +377,7 @@ unittest {
         mixin(parser_init!"a=c");
         auto e = cast(VarExpression) parser.var_expr();
         assert(parser.token.type == Token.Eof);
+        assert(e.span == text.span);
         assert(e.type == AstNode.VarExpression);
         assert(e.pattern.type == AstNode.Name);
         assert(e.type_expr is null);
@@ -438,11 +391,14 @@ unittest {
         
         auto e = parser.var_expr();
         assert(parser.token.type == Token.Eof);
+        assert(e.span == text.span);
         assert(var_error);
     }
 }
 
 version(unittest) {
+    import unit_threaded.should;
+
     import arc.stringtable: StringTable;
     import arc.syntax.syntax_reporter: SyntaxReporter;
 
