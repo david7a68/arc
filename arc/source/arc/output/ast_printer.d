@@ -54,6 +54,7 @@ final class AstPrinter: AstVisitor {
         write_children(n);
     }
 
+    override void visit(None n)     { write(n); }
     override void visit(Name n)     { write(n); }
     override void visit(Integer n)  { write(n); }
     

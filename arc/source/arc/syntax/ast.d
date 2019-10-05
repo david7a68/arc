@@ -8,6 +8,8 @@ abstract class AstVisitor {
     /// Functions for visiting ast nodes
     void visit(Invalid n)       { visit_children(n); }
     /// ditto
+    void visit(None n)          { visit_children(n); }
+    /// ditto
     void visit(Name n)          { visit_children(n); }
     /// ditto
     void visit(Integer n)       { visit_children(n); }
@@ -42,6 +44,7 @@ abstract class AstVisitor {
 abstract class AstNode {
     enum Type {
         Invalid,
+        None,
         Name,
         Integer,
         List,
@@ -96,6 +99,19 @@ final class Invalid: Expression {
     override AstNode[] children() { return _children; }
 }
 
+final class None: Expression {
+    private this() {
+        super(Type.None, Span(0, 0));
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+
+    static instance() {
+        static immutable instance = cast(immutable) new None();
+        return cast(None) instance;
+    }
+}
+
 final class Name: Expression {
     import arc.hash: Key;
 
@@ -119,7 +135,7 @@ final class Integer: Expression {
 
     override void accept(AstVisitor v) { v.visit(this); }
 
-    ulong value() { return _value; }
+    ulong value() const { return _value; }
 }
 
 /**

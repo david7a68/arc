@@ -5,6 +5,8 @@ copyright "Copyright © 2019, David"
 license "proprietary"
 
 configuration "executable" {
+    mainSourceFile "source/app.d"
+    targetType "executable"
 }
 
 configuration "unittest" {

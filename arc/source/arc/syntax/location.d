@@ -18,13 +18,22 @@ struct Span {
     CharPos end() const { return start + length; }
 
     Span merge(Span other) const {
-        import std.algorithm: min, max;
-
-        auto lo = min(start, other.start);
-        auto hi = max(start + length, other.start + other.length);
-
-        return Span(lo, hi);
+        auto lo = start < other.start ? start : other.start;
+        auto hi_end = end > other.end ? end : other.end;
+        return Span(lo, hi_end - lo);
     }
+}
+
+@("span:merge") unittest {
+    auto a = Span(10, 20);
+    auto b = Span(5, 15);
+    auto c = Span(15, 25);
+    auto d = Span(5, 25);
+    assert(a.merge(a) == Span(10, 20));
+    assert(a.merge(b) == Span(5, 25));
+    assert(a.merge(c) == Span(10, 30));
+    assert(a.merge(d) == Span(5, 25));
+    assert(b.merge(c) == Span(5, 35));
 }
 
 struct SpannedText {
@@ -33,39 +42,37 @@ struct SpannedText {
 
     alias span this;
 
-    this(Span span, const(char)[] text) {
-        assert(text.length == span.length);
-        this.span = span;
-        this.text = text;
-    }
-
     this(CharPos start, CharPos length, const(char)[] text) {
-        this(Span(start, length), text);
+        this.span = Span(start, length);
+        this.text = text;
     }
     
     SpannedText get_span(const(char)[] slice) {
-        assert(text.ptr <= slice.ptr && (slice.ptr + slice.length) <= (text.ptr + text.length));
-        const loc_start_idx = slice.ptr - text.ptr;
-        const abs_start_idx = cast(uint) (start + loc_start_idx);
-        return SpannedText(abs_start_idx, cast(uint) slice.length, slice);
+        const offset = cast(uint) (slice.ptr - text.ptr);
+        const length = cast(uint) slice.length;
+        return SpannedText(cast(uint) (span.start + offset), length, slice);
     }
 
     const(char)[] get_text(Span text_span) {
-        const start = text_span.start - span.start;
-        assert(start + text_span.length <= text.length);
-
-        return text[start .. text_span.length];
+        auto local = local_span(text_span);
+        return local.text;
     }
 
-    SpannedText merge(SpannedText other) const {
-        SpannedText result;
-        result.span = span.merge(other.span);
-        result.text = text[(result.span.start - span.start) .. span.length];
-        return result;
+    SpannedText merge(SpannedText other) {
+        auto global = span.merge(other.span);
+        auto local = local_span(global);
+        return SpannedText(global.start, global.length, local.text);
     }
 
     Span merge(Span other) const {
         return span.merge(other);
+    }
+
+    SpannedText local_span(Span s) {
+        const lo = s.start - span.start;
+        const hi = s.end - span.start;
+
+        return SpannedText(lo, hi, text[lo .. hi]);
     }
 }
 
