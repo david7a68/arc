@@ -274,31 +274,39 @@ Expression call(ref Parser p, Expression lhs) {
 }
 
 /**
- * var_expr : Expression ((":" Expression ("=" Expression)?) |
+ * var_expr : Expression ((":" (('=' Expression) | (Expression ("=" Expression)?)) |
  *                        ("=" Expression))?
  */
 VarExpression var_expr(ref Parser p) {
-    Expression first, type_expr, value_expr;
-
+    Expression first, name_expr, type_expr, value_expr;
     first = p.expression();
     auto span = first.span;
 
     if (p.consume(Token.Colon)) {
-        // var_expr : Expression (":" Expression)?
-        type_expr = p.expression();
-        span = span.merge(type_expr.span);
-
+        name_expr = first;
         if (p.consume(Token.Equals)) {
-            // var_expr : Expression (":" Expression ("=" Expression)?)?
             value_expr = p.expression();
+            type_expr = None.instance;
             span = span.merge(value_expr.span);
         }
         else {
-            value_expr = None.instance;
+            // var_expr : Expression (":" Expression)?
+            type_expr = p.expression();
+            span = span.merge(type_expr.span);
+
+            if (p.consume(Token.Equals)) {
+                // var_expr : Expression (":" Expression ("=" Expression)?)?
+                value_expr = p.expression();
+                span = span.merge(value_expr.span);
+            }
+            else {
+                value_expr = None.instance;
+            }
         }
     }
     else if (p.consume(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
+        name_expr = first;
         value_expr = p.expression();
         type_expr = None.instance;
         span = span.merge(value_expr.span);
@@ -306,11 +314,11 @@ VarExpression var_expr(ref Parser p) {
     else {
         // var_expr : Expression
         value_expr = first;
-        first = None.instance;
+        name_expr = None.instance;
         type_expr = None.instance;
     }
 
-    return new VarExpression(first, type_expr, value_expr, span);
+    return new VarExpression(name_expr, type_expr, value_expr, span);
 }
 
 @("parser:var_expr") unittest {
@@ -356,19 +364,34 @@ VarExpression var_expr(ref Parser p) {
     }
     {
         mixin(parser_init!"a:=1");
-        bool var_error;
-        parser.error.user_data = &var_error;
-        parser.error.token_cannot_start_expr_impl = report_bad_token_set_flag;
-        
         auto expr = parser.var_expr();
         mixin(parser_done!());
-        assert(var_error);
         assert(diff(expr, Match(AstNode.VarExpression, [
             Match(AstNode.Name),
-            Match(AstNode.Invalid),
+            Match(AstNode.None),
             Match(AstNode.Integer)
         ])).length == 0);
     }
+}
+
+Define def(ref Parser p) {
+    auto tok = p.current;
+    p.consume(Token.Def);
+    auto expr = p.var_expr();
+    return new Define(expr, tok.span.merge(expr.span));
+}
+
+@("parser:def") unittest {
+    mixin(parser_init!"def a: T = init");
+    auto expr = parser.def();
+    mixin(parser_done!());
+    assert(diff(expr, Match(AstNode.Define, [
+        Match(AstNode.VarExpression, [
+            Match(AstNode.Name),
+            Match(AstNode.Name),
+            Match(AstNode.Name)
+        ])
+    ])).length == 0);
 }
 
 version(unittest) {

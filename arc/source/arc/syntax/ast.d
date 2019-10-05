@@ -33,6 +33,8 @@ abstract class AstVisitor {
     void visit(Call n)          { visit_children(n); }
     /// ditto
     void visit(VarExpression n) { visit_children(n); }
+    /// ditto
+    void visit(Define n)        { visit_children(n); }
 
     void visit_children(AstNode n) {
         foreach (child; n.children)
@@ -57,6 +59,7 @@ abstract class AstNode {
         Power,
         Call,
         VarExpression,
+        Define
     }
 
     alias Type this;
@@ -82,7 +85,7 @@ abstract class AstNode {
     AstNode[] children() { return []; }
 }
 
-abstract class Expression: AstNode {
+abstract class Expression: Statement {
     this(Type type, Span span) { super(type, span); }
 }
 
@@ -272,10 +275,6 @@ final class Call: Binary {
 final class VarExpression: Expression {
     Expression[3] _members;
 
-    /**
-     * We include `const(char)* start` and `size_t span` because that is more
-     * easily calculated by the parser and it saves us some effort here
-     */
     this(Expression pattern, Expression type_expr, Expression value_expr, Span span) {
         super(Type.VarExpression, span);
         _members = [pattern, type_expr, value_expr];
@@ -287,4 +286,22 @@ final class VarExpression: Expression {
     Expression pattern() { return _members[0]; }
     Expression type_expr() { return _members[1]; }
     Expression value_expr() { return _members[2]; }
+}
+
+abstract class Statement: AstNode {
+    this(AstNode.Type type, Span span) {
+        super(type, span);
+    }
+}
+
+final class Define: Statement {
+    VarExpression var_expr;
+
+    this(VarExpression expr, Span span) {
+        super(Type.Define, span);
+        var_expr = expr;
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+    override AstNode[] children() { return [var_expr]; };
 }

@@ -158,6 +158,32 @@ final class AstPrinter: AstVisitor {
         stack.removeBack();
     }
 
+    override void visit(Define n) {
+        str.put(repr(n));
+        str.put("\n");
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Pattern: ";
+        write(n.children[0]);
+        stack.removeBack();
+
+        indent();
+        str.put(tbar);
+        stack.insertBack(IndentType.Bar);
+        name_override = "Type: ";
+        write(n.children[1]);
+        stack.removeBack();
+
+        indent();
+        str.put(lbar);
+        stack.insertBack(IndentType.Space);
+        name_override = "Value: ";
+        write(n.children[2]);
+        stack.removeBack();
+    }
+
     void write(AstNode n) {
         str.put(repr(n));
         str.put("\n");
