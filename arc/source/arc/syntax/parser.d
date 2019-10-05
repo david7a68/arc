@@ -175,15 +175,6 @@ Expression list(ref Parser p) {
 
 @("parser:list") unittest {
     {
-        mixin(parser_init!("[a\n\n\n(b)]"));
-        auto expr = parser.expression();
-        mixin(parser_done!());
-        assert(expr.type == AstNode.List);
-        assert(expr.children.length == 2);
-        assert(expr.children[0].type == AstNode.VarExpression);
-        assert(expr.children[1].type == AstNode.VarExpression);
-    }
-    {
         mixin(parser_init!("[a\n)"));
         bool[2] errors; // [0]: cannot start expr, [1]: list not closed
         parser.error.user_data = &errors;
@@ -194,9 +185,9 @@ Expression list(ref Parser p) {
             (cast(bool[2]*) self.user_data)[1] = true;
         };
 
-        const expr = parser.expression();
+        auto expr = parser.expression();
         mixin(parser_done!());
-        assert(expr.type == AstNode.Invalid);
+        assert(diff(expr, Match(AstNode.Invalid)).length == 0);
         assert(errors[0] && errors[1]);
     }
     {
@@ -207,10 +198,18 @@ Expression list(ref Parser p) {
 
         auto expr = parser.expression();
         mixin(parser_done!());
-        assert(expr.type == AstNode.List);
-        assert(expr.children[0].type == AstNode.VarExpression);
-        assert(expr.children[1].type == AstNode.VarExpression);
-        assert(expr.children[1].children[2].type == AstNode.Invalid);
+        assert(diff(expr, Match(AstNode.List, [
+            Match(AstNode.VarExpression, [
+                Match(AstNode.None),
+                Match(AstNode.None),
+                Match(AstNode.Name),
+            ]),
+            Match(AstNode.VarExpression, [
+                Match(AstNode.None),
+                Match(AstNode.None),
+                Match(AstNode.Invalid),
+            ])
+        ])).length == 0);
         assert(not_closed);
     }
 }
@@ -262,11 +261,16 @@ Expression call(ref Parser p, Expression lhs) {
     mixin(parser_init!"[][()]");
     auto expr = cast(Call) parser.expression();
     mixin(parser_done!());
-    assert(expr.type == AstNode.Call);
-    assert(expr.children.length == 2);
-    assert(expr.target.type == AstNode.List);
-    assert(expr.arguments.type == AstNode.List);
-    assert((cast(VarExpression) expr.arguments.children[0]).value_expr.type == AstNode.List);
+    assert(diff(expr, Match(AstNode.Call, [
+        Match(AstNode.List),
+        Match(AstNode.List, [
+            Match(AstNode.VarExpression, [
+                Match(AstNode.None),
+                Match(AstNode.None),
+                Match(AstNode.List),
+            ])
+        ])
+    ])).length == 0);
 }
 
 /**
@@ -405,9 +409,8 @@ version(unittest) {
         if (root.type != match.node_type || root.children.length != match.children.length)
             r ~= root;
         else {
-            foreach (i, child; root.children) {
+            foreach (i, child; root.children)
                 r ~= diff(child, match.children[i]);
-            }
         }
         return r;
     }
