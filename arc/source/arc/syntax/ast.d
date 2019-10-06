@@ -14,11 +14,19 @@ abstract class AstVisitor {
     /// ditto
     void visit(Integer n)       { visit_children(n); }
     /// ditto
+    void visit(Char n)          { visit_children(n); }
+    /// ditto
     void visit(List n)          { visit_children(n); }
     /// ditto
     void visit(Function n)      { visit_children(n); }
     /// ditto
+    void visit(Block n)         { visit_children(n); }
+    /// ditto
     void visit(Negate n)        { visit_children(n); }
+    /// ditto
+    void visit(SelfCall n)      { visit_children(n); }
+    /// ditto
+    void visit(Assign n)        { visit_children(n); }
     /// ditto
     void visit(Add n)           { visit_children(n); }
     /// ditto
@@ -49,9 +57,13 @@ abstract class AstNode {
         None,
         Name,
         Integer,
+        Char,
         List,
         Function,
+        Block,
         Negate,
+        SelfCall,
+        Assign,
         Add,
         Subtract,
         Multiply,
@@ -141,14 +153,22 @@ final class Integer: Expression {
     ulong value() const { return _value; }
 }
 
+final class Char: Expression {
+    this(Span span) {
+        super(Type.Char, span);
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
 /**
  * A List represents a possibly heterogenous sequence of ordered elements that 
  * may be referred to by numerical index or name.
  */
 final class List: Expression {
-    private VarExpression[] _members;
+    private Expression[] _members;
 
-    this(Span span, VarExpression[] members) {
+    this(Span span, Expression[] members) {
         super(Type.List, span);
         _members = members;
     }
@@ -176,11 +196,37 @@ final class Function: Expression {
     Expression body() { return _members[1]; }
 }
 
+final class Block: Expression {
+    private Statement[] _members;
+
+    this(Statement[] members, Span span) {
+        super(Type.Block, span);
+        _members = members;
+    }
+    
+    override void accept(AstVisitor v) { v.visit(this); }
+
+    override AstNode[] children() { return cast(AstNode[]) _members; }
+}
+
 final class Negate: Expression {
     private AstNode _expression;
 
     this(AstNode expr, Span span) {
         super(Type.Negate, span);
+        _expression = expr;
+    }
+
+    override AstNode[] children() { return [_expression]; }
+
+    override void accept(AstVisitor v) { v.visit(this); }
+}
+
+final class SelfCall: Expression {
+    private AstNode _expression;
+
+    this(AstNode expr, Span span) {
+        super(Type.SelfCall, span);
         _expression = expr;
     }
 
@@ -204,6 +250,14 @@ abstract class Binary: Expression {
     void right(Expression n) { _members[1] = n; }
 
     override AstNode[] children() { return cast(AstNode[]) _members; }
+}
+
+final class Assign: Binary {
+    this(Expression left, Expression right) {
+        super(Type.Assign, left, right);
+    }
+
+    override void accept(AstVisitor v) { v.visit(this); }
 }
 
 final class Add: Binary {
@@ -295,9 +349,9 @@ abstract class Statement: AstNode {
 }
 
 final class Define: Statement {
-    VarExpression var_expr;
+    Expression var_expr;
 
-    this(VarExpression expr, Span span) {
+    this(Expression expr, Span span) {
         super(Type.Define, span);
         var_expr = expr;
     }

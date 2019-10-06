@@ -6,14 +6,35 @@ import arc.syntax.syntax_reporter;
 import arc.output.ast_printer;
 import arc.syntax.location;
 
-void main() {
-    auto a = Span(10, 20);
-    auto b = Span(5, 15);
-    auto c = Span(15, 25);
-    auto d = Span(5, 25);
-    assert(a.merge(a) == Span(10, 20));
-    assert(a.merge(b) == Span(5, 25));
-    assert(a.merge(c) == Span(10, 30));
-    assert(a.merge(d) == Span(5, 25));
-    assert(b.merge(c) == Span(5, 35));
+void main(string[] args) {
+    if (args.length == 3 && args[1] == "-f")
+        print_ast(args[2]);
+}
+
+void print_ast(string filename) {
+    writeln("print ast");
+    import std.file: readText;
+    import arc.stringtable: StringTable;
+    import arc.syntax.parser: Parser;
+    import arc.syntax.syntax_reporter: SyntaxReporter;
+    import arc.output.ast_printer: AstPrinter;
+    import arc.syntax.location: SourceMap;
+    
+
+
+    StringTable table;
+    SourceMap sources;
+    auto source = sources.put(filename, readText(filename));
+    auto error = SyntaxReporter(null, source);
+    auto parser = Parser(source.span, &table, &error);
+
+
+    
+    auto printer = new AstPrinter(source.span);
+    while (!parser.empty) {
+        auto s = parser.statement();
+        s.accept(printer);
+    }
+    writeln(printer.data);
+    printer.reset();
 }

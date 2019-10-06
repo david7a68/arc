@@ -5,7 +5,7 @@ def Token = [
     text: Key
 ]
 
-TokenType = enum [
+def TokenType = enum [
     Invalid, Eof, Eol = '\n',
     Name, Integer,
     Lparen = '(', Rparen = ')',
@@ -19,8 +19,8 @@ TokenType = enum [
 ]
 
 def Lexer = [
-    source_text:    const(char)*
-    end_of_text:    const(char)*
+    source_text:    const(char)
+    end_of_text:    const(char)
     next:           Token
     current:        Token
     eol_type_stack: Array(Type)
@@ -28,28 +28,23 @@ def Lexer = [
     source:         SpannedText
 ]
 
-/*
- name searching is done in the following order:
+Lexer => {
+    new := (source: SpannedText, table: StringTable) => Lexer [
+        .source_text = source.text.ptr
+        .end_of_ext = source.text.ptr + source.length
+        .table = table
+        .source = source
+    ]
 
- 1. within function
- 2. within enclosing scopes (in order)
- 3. if function, attached to first parameter
- */
-def Lexer::attach = [
-    new = (&self, source: const(Char)[]) -> {
-        self.source_text = source.ptr
-        self.end_of_text = source.ptr + source.length
-        clear self.eol_type_stack
-        advance self
+    ready := (self) => {
+        self.advance()
+        self.advance()
     }
-    push_eol_type = (&self, t: TokenType) -> push_back (t, self.eol_type_stack)
-    pop_eol_type = (&self) -> pop_back self.eol_type_stack
-    advance = (&self) -> {
-        if next.type != TokenType.Eol {
-            lex()
-        }
-        else {
-            
-        }
+
+    push_eol_type := (self, t: TokenType) => eol_type_stack.insertBack(t)
+
+    pop_eol_type := (self) => eol_type_stack.removeBack()
+
+    advance := (self) => {
     }
 }

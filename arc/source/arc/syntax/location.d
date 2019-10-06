@@ -84,9 +84,7 @@ struct Source {
     /// The name of the source, or its path
     string name;
     ///
-    const(char)[] raw_text;
-    /// The absolute span that the source covers
-    Span span;
+    SpannedText span;
     alias span this;
 
     bool opBinaryRight(string op = "in")(CharPos pos) {
@@ -111,14 +109,18 @@ struct SourceMap {
     }
 
     Source put(string name, const(char)[] text) {
-        const last = sources[$-1];
-        if (last.end + text.length > uint.max)
+        CharPos start = sources.length > 0 ? sources[$-1].end : 0;
+
+        if (start + text.length > uint.max)
             assert(false);
 
         auto src = Source(
             name.dup,
-            text,
-            Span(last.end, cast(CharPos) (last.end + text.length))
+            SpannedText(
+                start,
+                cast(CharPos) (start + text.length),
+                text
+            )
         );
 
         sources ~= src;
@@ -150,6 +152,6 @@ struct SourceMap {
 
     const(char)[] get_text(Span span) {
         auto src = get_source(span.start);
-        return src.raw_text[span.start - src.start .. span.length];
+        return src.text[span.start - src.start .. span.length];
     }
 }

@@ -21,14 +21,15 @@ struct Token {
      */
     enum Type: ubyte {
         Invalid, Eof, Eol = '\n',
-        Name, Integer,
+        Name, Integer, Char,
 
         Lparen = '(', Rparen = ')',
         Lbracket = '[', Rbracket = ']',
+        Lbrace = '{', Rbrace = '}',
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=',
-        Rarrow,
+        FatRArrow,
 
         If, Else, Loop, Break, Return,
         Let, Def,
@@ -115,12 +116,14 @@ struct Lexer {
 
     /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
-        if (next.type == Token.Eol) {
+        if ((next.type == Token.Eol || next.type == Token.Eof) && eol_type_stack.length > 0) {
             switch (current.type) with (Token.Type) {
             case Rparen:
             case Rbracket:
+            case Rbrace:
             case Name:
             case Integer:
+            case Char:
                 current = Token(eol_type_stack.back, next.span);
                 break;
             default:
@@ -131,8 +134,10 @@ struct Lexer {
             }
         }
         else {
-            current = next;
-            next = scan_type(source_text, end_of_text).refine(table).locate(source);
+            do {
+                current = next;
+                next = scan_type(source_text, end_of_text).refine(table).locate(source);
+            } while (current.type == Token.Eol);
         }
     }
 }
@@ -225,22 +230,39 @@ auto scan_type(ref const(char)* cursor, const char* end) {
         case ')':
         case '[':
         case ']':
+        case '{':
+        case '}':
         case ',':
         case '.':
         case ';':
         case ':':
         case '+':
         case '*':
-        case '/':
+            
         case '^':
-        case '=':
-            return make_token(cast(Token.Type) *cursor);
         case '-':
+            return make_token(cast(Token.Type) *cursor);
+        case '/':
+            cursor++;
+            if (*cursor == '/') {
+                while (*cursor != '\n') cursor++;
+                goto switch_start;
+            }
+            else return make_token(cast(Token.Type) *cursor, 0);
+        case '=':
             cursor++;
             if (*cursor == '>') // advance only by one
-                return make_token(Token.Rarrow, 1);
+                return make_token(Token.FatRArrow, 1);
             else // skip advancing here because we've already done it
-                return make_token(Token.Minus, 0);
+                return make_token(Token.Equals, 0);
+        case '\'':
+            cursor++;
+            if (*cursor == '\\')
+                cursor += 2;
+            else
+                cursor++;
+            cursor++;
+            return make_token(Token.Char, 0);
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
@@ -277,7 +299,7 @@ unittest { // Test empty lexer with whitespace
 }
 
 unittest {
-    mixin(init_scan("()[],.;->129400_81anb_wo283"));
+    mixin(init_scan("()[],.;=>129400_81anb_wo283"));
 
     bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
         auto tok = scan_type(cursor, end);
@@ -291,7 +313,7 @@ unittest {
     assert(test_scan(Token.Comma,       ",", 5));
     assert(test_scan(Token.Dot,         ".", 6));
     assert(test_scan(Token.Semicolon,   ";", 7));
-    assert(test_scan(Token.Rarrow,      "->", 9));
+    assert(test_scan(Token.FatRArrow,   "=>", 9));
     assert(test_scan(Token.Integer,     "129400_81", 18));
     assert(test_scan(Token.Name,        "anb_wo283", 27));
 

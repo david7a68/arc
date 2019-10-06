@@ -22,7 +22,6 @@ struct Parser {
     this(SpannedText source, StringTable* table, SyntaxReporter* error) {
         lexer = Lexer(source, table);
         lexer.ready();
-        // current = lexer.current;
         this.error = error;
     }
 
@@ -43,6 +42,24 @@ Expression expression(ref Parser p) {
     return expression(p, Infix.Precedence.Assignment);
 }
 
+Statement statement(ref Parser p) {
+    Statement s;
+    p.push_eol_type(Token.Semicolon);
+    switch (p.current.type) with (Token.Type) {
+        case Def:
+            s = def(p);
+            break;
+        default:
+            s = expression(p);
+            break;
+    }
+    if (!p.consume(Token.Semicolon)) {
+        assert(false, "automatic semicolon insertion failed...");
+    }
+    p.pop_eol_type();
+    return s;
+}
+
 alias Prefix = Expression function(ref Parser);
 
 /// List of functions for parsing tokens that can start expressions
@@ -51,9 +68,12 @@ immutable Prefix[256] prefix_parslets = () {
 
     p[Token.Lparen] = &list;
     p[Token.Lbracket] = &list;
+    p[Token.Lbrace] = &block;
     p[Token.Name] = &name;
     p[Token.Integer] = &integer;
+    p[Token.Char] = &char_;
     p[Token.Minus] = &negate;
+    p[Token.Dot] = &unary_dot;
 
     return p;
 } ();
@@ -63,6 +83,7 @@ immutable Prefix[256] prefix_parslets = () {
 struct Infix {
     enum Precedence {
         None,
+        Literal,
         Assignment,
         Equality,
         Comparison,
@@ -86,19 +107,22 @@ struct Infix {
 immutable Infix[256] infix_parslets = () {
     Infix[256] p;
 
-    p[Token.Rarrow]     = Infix(Infix.FunctionLiteral, &function_);
+    p[Token.FatRArrow]  = Infix(Infix.FunctionLiteral, &function_);
     p[Token.Plus]       = Infix(Infix.Sum, &add);
     p[Token.Minus]      = Infix(Infix.Sum, &subtract);
     p[Token.Star]       = Infix(Infix.Product, &multiply);
     p[Token.Slash]      = Infix(Infix.Product, &divide);
     p[Token.Caret]      = Infix(Infix.Power, &power);
+    p[Token.Equals]     = Infix(Infix.Assignment, &assign);
     p[Token.Lparen]     = Infix(Infix.Call, &call);
     p[Token.Lbracket]   = Infix(Infix.Call, &call);
+    p[Token.Dot]        = Infix(Infix.Call, &dot);
+    p[Token.Colon]      = Infix(Infix.Assignment, &var_expr2);
 
     return p;
 } ();
 
-Expression expression(ref Parser p, Infix.Precedence prec) {
+Expression prefix(ref Parser p) {
     auto parselet = prefix_parslets[p.current.type];
 
     if (parselet is null) {
@@ -106,7 +130,11 @@ Expression expression(ref Parser p, Infix.Precedence prec) {
         return new Invalid(p.current.span);
     }
     
-    auto expr = parselet(p);
+    return parselet(p);
+}
+
+Expression expression(ref Parser p, Infix.Precedence prec) {
+    auto expr = p.prefix();
     if (expr.type != AstNode.Invalid) {
         while (prec <= infix_parslets[p.current.type].precedence)
             expr = infix_parslets[p.current.type].parselet(p, expr);
@@ -138,19 +166,23 @@ Integer integer(ref Parser p) {
     assert(expr.value == 10_294);
 }
 
+Char char_(ref Parser p) {
+    scope(exit) p.advance();
+    return new Char(p.current.span);
+}
+
 /// List := ListOpen  (','* VarExpression)? ','* ListClose ;
 Expression list(ref Parser p) {
     const start = p.current;
     const closing_tok = p.current.type == Token.Lbracket ? Token.Rbracket : Token.Rparen;
     p.push_eol_type(Token.Comma);
-    scope(exit) p.pop_eol_type();
     p.advance();
 
     // skip leading commas
     while(p.current.type == Token.Comma)
         p.advance();
 
-    VarExpression[] members;
+    Expression[] members;
     while (p.current.type != closing_tok) {
         auto e = p.var_expr();
         members ~= e;
@@ -161,6 +193,7 @@ Expression list(ref Parser p) {
             } while (p.current.type == Token.Comma);
         }
         else if (p.current.type != closing_tok) {
+            p.pop_eol_type();
             auto span = start.span.merge(p.current.span);
             p.advance();
             p.error.list_not_closed(span, p.current.span);
@@ -168,6 +201,7 @@ Expression list(ref Parser p) {
         }
     }
 
+    p.pop_eol_type();
     const close = p.current;
     p.consume(closing_tok);
     return new List(start.span.merge(close.span), members);
@@ -214,29 +248,56 @@ Expression list(ref Parser p) {
     }
 }
 
-/// Negate := '-' Expression
-Expression negate(ref Parser p) {
-    const start = p.current;
-    p.consume(Token.Minus);
-    auto expr = prefix_parslets[p.current.type](p);
-    return new Negate(expr, start.span.merge(expr.span));
-}
-
-/// Function := Expression '->' Expression ;
+/// Function := Expression '=>' Expression ;
 Expression function_(ref Parser p, Expression params) {
-    p.consume(Token.Rarrow);
+    p.consume(Token.FatRArrow);
     auto body = p.expression();
     return new Function(params, body);
 }
 
 @("parser:function") unittest {
-    mixin(parser_init!("() -> ()"));
+    mixin(parser_init!("() => ()"));
     auto expr = parser.expression();
     mixin(parser_done!());
     assert(diff(expr, Match(AstNode.Function, [
         Match(AstNode.List),
         Match(AstNode.List)
     ])).length == 0);
+}
+
+Block block(ref Parser p) {
+    auto span = p.current.span.span;
+    p.consume(Token.Lbrace);
+
+    Statement[] members;
+    while (p.current.type != Token.Rbrace) {
+        if (p.current.type == Token.Eof) {
+            p.error.unexpected_end_of_file(span);
+        }
+
+        auto s = p.statement();
+        span = span.merge(s.span);
+        members ~= s;
+    }
+
+    span = span.merge(p.current.span);
+    p.consume(Token.Rbrace);
+    return new Block(members, span);
+}
+
+/// Negate := '-' Expression
+Expression negate(ref Parser p) {
+    const start = p.current;
+    p.consume(Token.Minus);
+    auto expr = p.expression();
+    return new Negate(expr, start.span.merge(expr.span));
+}
+
+Expression unary_dot(ref Parser p) {
+    const start = p.current;
+    p.consume(Token.Dot);
+    auto expr = p.expression(Infix.Call);
+    return new SelfCall(expr, start.span.merge(expr.span));
 }
 
 /// Binary := Expression <op> Expression ;
@@ -246,6 +307,7 @@ Expression binary(T, int prec, Token.Type ttype)(ref Parser p, Expression lhs) {
     return new T(lhs, rhs);
 }
 
+alias assign = binary!(Assign, Infix.Assignment + 1, Token.Equals);
 alias add = binary!(Add, Infix.Sum + 1, Token.Plus);
 alias subtract = binary!(Subtract, Infix.Sum + 1, Token.Minus);
 alias multiply = binary!(Multiply, Infix.Product + 1, Token.Star);
@@ -273,13 +335,21 @@ Expression call(ref Parser p, Expression lhs) {
     ])).length == 0);
 }
 
+Expression dot(ref Parser p, Expression lhs) {
+    p.consume(Token.Dot);
+    return new Call(lhs, p.name());
+}
+
 /**
  * var_expr : Expression ((":" (('=' Expression) | (Expression ("=" Expression)?)) |
  *                        ("=" Expression))?
  */
-VarExpression var_expr(ref Parser p) {
-    Expression first, name_expr, type_expr, value_expr;
-    first = p.expression();
+Expression var_expr(ref Parser p) {
+    return var_expr2(p, p.prefix());
+}
+
+VarExpression var_expr2(ref Parser p, Expression first) {
+    Expression name_expr, type_expr, value_expr;
     auto span = first.span;
 
     if (p.consume(Token.Colon)) {
@@ -396,6 +466,7 @@ Define def(ref Parser p) {
 
 version(unittest) {
     import unit_threaded.should;
+    import unit_threaded.io;
 
     import arc.stringtable: StringTable;
     import arc.syntax.syntax_reporter: SyntaxReporter;

@@ -57,6 +57,7 @@ final class AstPrinter: AstVisitor {
     override void visit(None n)     { write(n); }
     override void visit(Name n)     { write(n); }
     override void visit(Integer n)  { write(n); }
+    override void visit(Char n)     { write(n); }
     
     override void visit(List n) {
         str.put(repr(n));
@@ -104,7 +105,10 @@ final class AstPrinter: AstVisitor {
         stack.removeBack();
     }
 
+    override void visit(Block n)    { write(n); }
     override void visit(Negate n)   { write(n); }
+    override void visit(SelfCall n) { write(n); }
+    override void visit(Assign n)   { write(n); }
     override void visit(Add n)      { write(n); }
     override void visit(Subtract n) { write(n); }
     override void visit(Multiply n) { write(n); }
@@ -121,14 +125,14 @@ final class AstPrinter: AstVisitor {
         str.put(tbar);
         stack.insertBack(IndentType.Bar);
         name_override = "Target: ";
-        write(n.children[0]);
+        n.children[0].accept(this);
         stack.removeBack();
 
         indent();
         str.put(lbar);
         stack.insertBack(IndentType.Space);
         name_override = "Members: ";
-        write(n.children[1]);
+        n.children[1].accept(this);
         stack.removeBack();
     }
 
@@ -140,49 +144,25 @@ final class AstPrinter: AstVisitor {
         str.put(tbar);
         stack.insertBack(IndentType.Bar);
         name_override = "Pattern: ";
-        write(n.pattern);
+        n.pattern.accept(this);
         stack.removeBack();
 
         indent();
         str.put(tbar);
         stack.insertBack(IndentType.Bar);
         name_override = "Type: ";
-        write(n.type_expr);
+        n.type_expr.accept(this);
         stack.removeBack();
 
         indent();
         str.put(lbar);
         stack.insertBack(IndentType.Space);
         name_override = "Value: ";
-        write(n.value_expr);
+        n.value_expr.accept(this);
         stack.removeBack();
     }
 
-    override void visit(Define n) {
-        str.put(repr(n));
-        str.put("\n");
-
-        indent();
-        str.put(tbar);
-        stack.insertBack(IndentType.Bar);
-        name_override = "Pattern: ";
-        write(n.children[0]);
-        stack.removeBack();
-
-        indent();
-        str.put(tbar);
-        stack.insertBack(IndentType.Bar);
-        name_override = "Type: ";
-        write(n.children[1]);
-        stack.removeBack();
-
-        indent();
-        str.put(lbar);
-        stack.insertBack(IndentType.Space);
-        name_override = "Value: ";
-        write(n.children[2]);
-        stack.removeBack();
-    }
+    override void visit(Define n)   { write(n); }
 
     void write(AstNode n) {
         str.put(repr(n));
@@ -253,7 +233,9 @@ private:
 
         switch (node.type) with (AstNode.Type) {
             case Name:
+                return name_override ~ "\"" ~ text.get_text(node.span) ~ "\"";
             case Integer:
+            case Char:
                 return name_override ~ text.get_text(node.span);
             default:
                 return name_override ~ node.type.to!string;
