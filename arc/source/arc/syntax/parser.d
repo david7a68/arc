@@ -205,7 +205,7 @@ AstNode list(ref Parser p) {
     p.pop_eol_type();
     const close = p.current;
     p.consume(closing_tok);
-    return make_list(AstNode.List, start.span.merge(close.span), members);
+    return make_n_ary(AstNode.List, start.span.merge(close.span), members);
 }
 
 @("parser:list") unittest {
@@ -283,7 +283,7 @@ AstNode block(ref Parser p) {
 
     span = span.merge(p.current.span);
     p.consume(Token.Rbrace);
-    return make_list(AstNode.Block, span, members);
+    return make_n_ary(AstNode.Block, span, members);
 }
 
 /// Negate := '-' Expression

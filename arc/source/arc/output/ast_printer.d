@@ -45,7 +45,6 @@ struct AstPrinter {
     Array!IndentType stack;
     Appender!(char[]) str;
     SpannedText text;
-    const(char)[] name_override;
 
     this(SpannedText text) {
         str = appender!(char[]);
@@ -58,10 +57,16 @@ struct AstPrinter {
 
     void reset() {
         str.clear();
-        name_override = "";
     }
 
-    void print(AstNode n) {
+    void print(AstNode n, string prefix = "") {
+        void put_length() {
+            str.put(" (");
+            str.put(n.num_children.to!string);
+            str.put(")\n");
+        }
+
+        str.put(prefix);
         str.put(repr(n));
         switch (n.type) with (AstNode.Type) {
         case Invalid:
@@ -71,21 +76,15 @@ struct AstPrinter {
             write_children(n);
             break;
         case List:
-            str.put(" (");
-            str.put(n.num_children.to!string);
-            str.put(")\n");
+            put_length();
             write_children(n, true);
             break;
         case Function:
-            str.put(" (");
-            str.put(n.num_children.to!string);
-            str.put(")\n");
+            put_length();
             write_named_children(n, "Params: ", "Body: ");
             break;
         case Call:
-            str.put(" (");
-            str.put(n.num_children.to!string);
-            str.put(")\n");
+            put_length();
             write_named_children(n, "Target: ", "Members: ");
             break;
         case VarExpression:
@@ -99,75 +98,52 @@ struct AstPrinter {
     }
 
     void write_children(AstNode n, bool numbered = false) {
-        if (n.num_children == 0)
-            return;
-        
-        foreach (i, child; n.children) {
-            indent();
-
-            if (i + 1 == n.num_children) {
-                // this is the last child
-                str.put(lbar);
-                stack.insertBack(IndentType.Space);
+        if (n.num_children > 0) {
+            foreach (i, child; n.children) {
+                write_child(child, i + 1 == n.num_children, numbered ? ("#" ~ i.to!string ~ " ") : "");
             }
-            else {
-                str.put(tbar);
-                stack.insertBack(IndentType.Bar);
-            }
-
-            if (numbered)
-                name_override = "#" ~ i.to!string ~ " ";
-            print(child);
-            stack.removeBack();
         }
     }
 
     void write_named_children(AstNode n, string[] names...) {
         assert(n.num_children == names.length);
 
-        if (n.num_children == 0)
-            return;
-        
-        foreach (i, child; n.children) {
-            indent();
-
-            if (i + 1 == n.num_children) {
-                // this is the last child
-                str.put(lbar);
-                stack.insertBack(IndentType.Space);
+        if (n.num_children > 0) {
+            foreach (i, child; n.children) {
+                write_child(child, i + 1 == n.num_children, names[i]);
             }
-            else {
-                str.put(tbar);
-                stack.insertBack(IndentType.Bar);
-            }
-
-            name_override = names[i];
-            print(child);
-            stack.removeBack();
         }
     }
 
-    void indent() {
+    void write_child(AstNode n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
+
+        if (is_last_child) {
+            str.put(lbar);
+            stack.insertBack(IndentType.Space);
+        }
+        else {
+            str.put(tbar);
+            stack.insertBack(IndentType.Bar);
+        }
+
+        print(n, prefix);
+        stack.removeBack();
     }
 
-    const(char)[] repr(AstNode node) {
-        import std.conv: to;
+}
 
-        scope(exit) name_override = "";
-
-        if (node is null)
-            return name_override ~ "Null";
-
-        switch (node.type) with (AstNode.Type) {
-            case Name:
-                return name_override ~ "Name(\"" ~ text.get_text(node.span) ~ "\")";
-            case Integer:
-            case Char:
-                return name_override ~ text.get_text(node.span);
-            default:
-                return name_override ~ node.type.to!string;
-        }
+const(char)[] repr(AstNode node) {
+    import std.conv: to;
+    
+    switch (node.type) with (AstNode.Type) {
+        case Name:
+            return "Name(\"" ~ text.get_text(node.span) ~ "\")";
+        case Integer:
+        case Char:
+            return text.get_text(node.span);
+        default:
+            return node.type.to!string;
     }
 }

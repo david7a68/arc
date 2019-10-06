@@ -63,33 +63,24 @@ static AstNode make_invalid(Span span) {
     return new AstNode(AstNode.Invalid, span);
 }
 
-static AstNode make_name(Span span, Key key) {
-    auto node = new AstNode(AstNode.Name, span);
-    node.key = key;
-    return node;
-}
-
-static AstNode make_int(Span span, ulong value) {
-    auto node = new AstNode(AstNode.Integer, span);
-    node.value = value;
-    return node;
-}
-
 static AstNode make_char(Span span) {
     return new AstNode(AstNode.Char, span);
 }
 
-static AstNode make_binary(AstNode.Type t, AstNode left, AstNode right) {
-    auto node = new AstNode(t, left.span.merge(right.span));
-    node.children = [left, right];
+alias make_name = make_value!("key", Key, AstNode.Name);
+alias make_int = make_value!("value", ulong, AstNode.Integer);
+
+static AstNode make_value(string name, T, AstNode.Type t)(Span span, T value) {
+    auto node = new AstNode(t, span);
+    mixin("node." ~ name ~ " = value;");
     return node;
 }
 
-static AstNode make_n_ary(AstNode.Type t, Span span, AstNode[] nodes...) {
-    return make_list(t, span, nodes.dup);
+static AstNode make_binary(AstNode.Type t, AstNode left, AstNode right) {
+    return make_n_ary(t, left.span.merge(right.span), left, right);
 }
 
-static AstNode make_list(AstNode.Type t, Span span, AstNode[] nodes) {
+static AstNode make_n_ary(AstNode.Type t, Span span, AstNode[] nodes...) {
     auto node = new AstNode(t, span);
     node.children = nodes.dup;
     return node;
