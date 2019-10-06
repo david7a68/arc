@@ -233,7 +233,7 @@ private:
 
         switch (node.type) with (AstNode.Type) {
             case Name:
-                return name_override ~ "\"" ~ text.get_text(node.span) ~ "\"";
+                return name_override ~ "Name(\"" ~ text.get_text(node.span) ~ "\")";
             case Integer:
             case Char:
                 return name_override ~ text.get_text(node.span);

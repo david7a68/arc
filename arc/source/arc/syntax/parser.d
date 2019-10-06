@@ -84,6 +84,7 @@ struct Infix {
     enum Precedence {
         None,
         Literal,
+        VarExpression,
         Assignment,
         Equality,
         Comparison,
@@ -117,7 +118,7 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Lparen]     = Infix(Infix.Call, &call);
     p[Token.Lbracket]   = Infix(Infix.Call, &call);
     p[Token.Dot]        = Infix(Infix.Call, &dot);
-    p[Token.Colon]      = Infix(Infix.Assignment, &var_expr2);
+    p[Token.Colon]      = Infix(Infix.VarExpression, &var_expr2);
 
     return p;
 } ();
@@ -345,7 +346,7 @@ Expression dot(ref Parser p, Expression lhs) {
  *                        ("=" Expression))?
  */
 Expression var_expr(ref Parser p) {
-    return var_expr2(p, p.prefix());
+    return var_expr2(p, p.expression(cast(Infix.Precedence) (Infix.VarExpression + 1)));
 }
 
 VarExpression var_expr2(ref Parser p, Expression first) {
@@ -361,7 +362,7 @@ VarExpression var_expr2(ref Parser p, Expression first) {
         }
         else {
             // var_expr : Expression (":" Expression)?
-            type_expr = p.expression();
+            type_expr = p.prefix();
             span = span.merge(type_expr.span);
 
             if (p.consume(Token.Equals)) {

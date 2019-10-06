@@ -107,7 +107,7 @@ SourceLoc get_loc(SpannedText source, CharPos position) {
     const slice = source.text[0 .. position - source.start];
     foreach (i, c; slice) {
         if (c == '\n') {
-            column = 1;
+            column = 0;
             line_num++;
             line_pos = cast(uint) i;
         }

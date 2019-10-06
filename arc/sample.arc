@@ -1,2 +1,3 @@
 
-def a: T() = init;
+//(b())
+def a: (T()) = init
