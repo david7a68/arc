@@ -48,14 +48,14 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:name") unittest {
     mixin(parser_init("bks_1029"));
-    const expr = parser.expression();
+    const expr = parser.primary();
     mixin(parser_done);
     assert(expr.type == AstNode.Name);
 }
 
 @("parser:int") unittest {
     mixin(parser_init("10294"));
-    const expr = parser.expression();
+    const expr = parser.primary();
     mixin(parser_done);
     assert(expr.type == AstNode.Integer);
     assert(expr.value == 10_294);
@@ -63,33 +63,36 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:char") unittest {
     mixin(parser_init("'\n'"));
-    const expr = parser.expression();
+    const expr = parser.primary();
     mixin(parser_done);
     assert(expr.type == AstNode.Char);
 }
 
 @("parser:list") unittest {
-    mixin(parser_init("[3, [b), c]"));
+    mixin(parser_init("[3:T, b=[4), c:k()=j]"));
     bool not_closed;
     parser.error.user_data = &not_closed;
     parser.error.list_not_closed_impl = report_loc_err_set_flag;
 
-    auto expr = parser.expression();
+    auto expr = parser.primary();
     mixin(parser_done);
     assert(diff(expr, Match(AstNode.List, [
         Match(AstNode.VarExpression, [
-            Match(AstNode.None),
-            Match(AstNode.None),
             Match(AstNode.Integer),
+            Match(AstNode.Name),
+            Match(AstNode.None),
         ]),
         Match(AstNode.VarExpression, [
+            Match(AstNode.Name),
             Match(AstNode.None),
-            Match(AstNode.None),
-            Match(AstNode.Invalid),
+            Match(AstNode.Invalid)
         ]),
         Match(AstNode.VarExpression, [
-            Match(AstNode.None),
-            Match(AstNode.None),
+            Match(AstNode.Name),
+            Match(AstNode.Call, [
+                Match(AstNode.Name),
+                Match(AstNode.List)
+            ]),
             Match(AstNode.Name),
         ])
     ])).length == 0);
@@ -97,18 +100,21 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:function") unittest {
-    mixin(parser_init("() => ()"));
-    auto expr = parser.expression();
+    mixin(parser_init("() => blah * bleh"));
+    auto expr = parser.primary();
     mixin(parser_done);
     assert(diff(expr, Match(AstNode.Function, [
         Match(AstNode.List),
-        Match(AstNode.List)
+        Match(AstNode.Multiply, [
+            Match(AstNode.Name),
+            Match(AstNode.Name),
+        ])
     ])).length == 0);
 }
 
 @("parser:call") unittest {
     mixin(parser_init("[][()]"));
-    auto expr = parser.expression();
+    auto expr = parser.primary();
     mixin(parser_done);
     assert(diff(expr, Match(AstNode.Call, [
         Match(AstNode.List),
@@ -124,7 +130,7 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:dot") unittest {
     mixin(parser_init("a().c"));
-    auto expr = parser.expression();
+    auto expr = parser.primary();
     mixin(parser_done);
     assert(diff(expr, Match(AstNode.Call, [
         Match(AstNode.Call, [
@@ -135,57 +141,52 @@ AstNode[] diff(AstNode root, Match match) {
     ])).length == 0);
 }
 
-@("parser:var_expr") unittest {
-    {
-        mixin(parser_init("a"));
-        auto expr = parser.var_expr();
-        mixin(parser_done);
-        assert(diff(expr, Match(AstNode.VarExpression, [
-            Match(AstNode.None),
-            Match(AstNode.None),
+@("parser:negate") unittest {
+    mixin(parser_init("-3"));
+    auto expr = parser.primary();
+    mixin(parser_done);
+    assert(diff(expr, Match(AstNode.Negate, [Match(AstNode.Integer)])).length == 0);
+}
+
+@("parser:self_call") unittest {
+    mixin(parser_init(".b.c"));
+    auto expr = parser.primary();
+    mixin(parser_done);
+    assert(diff(expr, Match(AstNode.Call, [
+        Match(AstNode.SelfCall, [
             Match(AstNode.Name)
-        ])).length == 0);
-    }
-    {
-        mixin(parser_init("a:b"));
-        auto expr = parser.var_expr();
-        mixin(parser_done);
-        assert(diff(expr, Match(AstNode.VarExpression, [
-            Match(AstNode.Name),
-            Match(AstNode.Name),
-            Match(AstNode.None)
-        ])).length == 0);
-    }
-    {
-        mixin(parser_init("a:b()=c"));
-        auto expr = parser.var_expr();
-        mixin(parser_done);
-        assert(diff(expr, Match(AstNode.VarExpression, [
-            Match(AstNode.Name),
-            Match(AstNode.Name),
-            Match(AstNode.Name),
-        ])));
-    }
-    {
-        mixin(parser_init("a=c"));
-        auto expr = parser.var_expr();
-        mixin(parser_done);
-        assert(diff(expr, Match(AstNode.VarExpression, [
-            Match(AstNode.Name),
-            Match(AstNode.None),
-            Match(AstNode.Name),
-        ])));
-    }
-    {
-        mixin(parser_init("a:=1"));
-        auto expr = parser.var_expr();
-        mixin(parser_done);
-        assert(diff(expr, Match(AstNode.VarExpression, [
-            Match(AstNode.Name),
-            Match(AstNode.None),
-            Match(AstNode.Integer)
-        ])).length == 0);
-    }
+        ]),
+        Match(AstNode.Name)
+    ])).length == 0);
+}
+
+@("parser:binary") unittest {
+    //a = (b - c) + (d * ((e ^ f )^ g)) / h
+    mixin(parser_init("a = b - c + d * e ^ f ^ g / h"));
+    auto expr = parser.expression();
+    mixin(parser_done);
+    assert(diff(expr, Match(AstNode.Assign, [
+        Match(AstNode.Name),
+        Match(AstNode.Add, [
+            Match(AstNode.Subtract, [
+                Match(AstNode.Name),
+                Match(AstNode.Name),
+            ]),
+            Match(AstNode.Divide, [
+                Match(AstNode.Multiply, [
+                    Match(AstNode.Name),
+                    Match(AstNode.Power, [
+                        Match(AstNode.Name),
+                        Match(AstNode.Power, [
+                            Match(AstNode.Name),
+                            Match(AstNode.Name),
+                        ])
+                    ])
+                ]),
+                Match(AstNode.Name)
+            ])
+        ])
+    ])).length == 0);
 }
 
 @("parser:def") unittest {
@@ -193,10 +194,8 @@ AstNode[] diff(AstNode root, Match match) {
     auto expr = parser.def();
     mixin(parser_done);
     assert(diff(expr, Match(AstNode.Define, [
-        Match(AstNode.VarExpression, [
-            Match(AstNode.Name),
-            Match(AstNode.Name),
-            Match(AstNode.Name)
-        ])
+        Match(AstNode.Name),
+        Match(AstNode.Name),
+        Match(AstNode.Name),
     ])).length == 0);
 }

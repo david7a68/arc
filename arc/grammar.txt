@@ -1,7 +1,3 @@
-
-stmt = (def | expr) ';'
-    def = 'def' expr ':' primary? '=' expr ;
-
 expr = primary | unary | binary ;
 
 primary = name
@@ -9,6 +5,7 @@ primary = name
         | char
         | list
         | block
+        | function
         | call
         ;
 
@@ -21,6 +18,8 @@ primary = name
          | call call
          ;
 
+    function = primary '=>' expr ;
+
 unary = negate
       | self_call
       ;
@@ -30,3 +29,18 @@ unary = negate
     self_call = '.' primary ;
 
 binary = expr <op> expr
+    op = '+'
+       | '-'
+       | '*'
+       | '/'
+       | '^'
+       | '%'
+       | '='
+       | '>'
+       | '<'
+       | '<='
+       | '>='
+       ;
+
+stmt = (def | expr) ';'
+    def = 'def' name ':' primary? '=' expr ;

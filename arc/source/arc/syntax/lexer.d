@@ -203,13 +203,14 @@ unittest { // Test keyword detection
  * 
  * Returns: (type: Token.Type, text: const(char)[])
  */
-auto scan_type(ref const(char)* cursor, const char* end) {
+ScanResult scan_type(ref const(char)* cursor, const char* end) {
     import std.typecons: tuple;
 
     auto start = cursor;
 
-    Tuple!(Token.Type, "type", const(char)[], "text") make_token(Token.Type t, int advance_n = 1) {
+    ScanResult make_token(Token.Type t, int advance_n = 1) {
         cursor += advance_n;
+        assert(cursor <= end);
         return tuple!("type", "text")(t, start[0 .. cursor - start]);
     }
 
@@ -238,7 +239,6 @@ auto scan_type(ref const(char)* cursor, const char* end) {
         case ':':
         case '+':
         case '*':
-            
         case '^':
         case '-':
             return make_token(cast(Token.Type) *cursor);
@@ -248,7 +248,7 @@ auto scan_type(ref const(char)* cursor, const char* end) {
                 while (*cursor != '\n') cursor++;
                 goto switch_start;
             }
-            else return make_token(cast(Token.Type) *cursor, 0);
+            else return make_token(Token.Slash, 0);
         case '=':
             cursor++;
             if (*cursor == '>') // advance only by one
@@ -267,14 +267,13 @@ auto scan_type(ref const(char)* cursor, const char* end) {
         case 'A': .. case 'Z':
         case '_':
             cursor++;
-            name_start:
-            switch (*cursor) {
+            loop_start: if (cursor < end) switch (*cursor) {
                 case 'a': .. case 'z':
                 case 'A': .. case 'Z':
                 case '0': .. case '9':
                 case '_':
                     cursor++;
-                    goto name_start;
+                    goto loop_start;
                 default:
             }
             return make_token(Token.Name, 0);

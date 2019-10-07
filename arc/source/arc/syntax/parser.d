@@ -72,9 +72,9 @@ bool is_expr_token(Token.Type t) {
     return (prefix_parslets[t] !is &null_prefix) || (infix_parslets[t].parselet !is null);
 }
 
-AstNode primary(ref Parser p, Infix.Precedence prec) {
+AstNode primary(ref Parser p) {
     auto node = p.prefix();
-    while (is_primary_token(p.current.type) && prec <= infix_parslets[p.current.type].precedence) {
+    while (is_primary_token(p.current.type)) {
         node = infix_parslets[p.current.type].parselet(p, node);
     }
     return node;
@@ -86,27 +86,27 @@ alias Prefix = AstNode function(ref Parser);
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p = &null_prefix;
 
-    p[Token.Lparen] = &paren_list;
-    p[Token.Lbracket] = &bracket_list;
-    p[Token.Lbrace] = &block;
     p[Token.Name] = &name;
     p[Token.Integer] = &integer;
     p[Token.Char] = &char_;
+    p[Token.Lparen] = &paren_list;
+    p[Token.Lbracket] = &bracket_list;
+    p[Token.Lbrace] = &block;
     p[Token.Minus] = &negate;
-    p[Token.Dot] = &unary_dot;
+    p[Token.Dot] = &self_call;
 
     return p;
 } ();
+
+AstNode prefix(ref Parser p) {
+    auto parselet = prefix_parslets[p.current.type];
+    return parselet(p);
+}
 
 AstNode null_prefix(ref Parser p) {
     p.error.token_cannot_start_expr(p.current);
     scope(exit) p.advance();
     return make_invalid(p.current.span);
-}
-
-AstNode prefix(ref Parser p) {
-    auto parselet = prefix_parslets[p.current.type];
-    return parselet(p);
 }
 
 /// Name := ('_' | $a-zA-Z)* ;
@@ -189,16 +189,36 @@ AstNode function_(ref Parser p, AstNode params) {
     return make_binary(AstNode.Function, params, body);
 }
 
+AstNode dot(ref Parser p, AstNode lhs) {
+    assert(lhs.type == AstNode.Name || lhs.type == AstNode.List || lhs.type == AstNode.Call || lhs.type == AstNode.SelfCall);
+    p.consume(Token.Dot);
+
+    return make_binary(AstNode.Call, lhs, prefix_parslets[p.current.type](p));
+}
+
+/// Call := Expression List
+AstNode call(ref Parser p, AstNode lhs) {
+    assert(p.current.type == Token.Lparen || p.current.type == Token.Lbracket);
+    return make_binary(AstNode.Call, lhs, prefix_parslets[p.current.type](p));
+}
+
+alias negate = unary!(AstNode.Negate, Token.Minus);
+// alias unary_dot = unary!(AstNode.SelfCall, Token.Dot);
+
 /// Unary := <op> Expression
 AstNode unary(AstNode.Type t, Token.Type ttype)(ref Parser p) {
     const start = p.current;
     p.consume(ttype);
-    auto expr = p.expression();
+    auto expr = p.primary();
     return make_n_ary(t, start.span.merge(expr.span), expr);
 }
 
-alias negate = unary!(AstNode.Negate, Token.Minus);
-alias unary_dot = unary!(AstNode.SelfCall, Token.Dot);
+AstNode self_call(ref Parser p) {
+    const span = p.current.span;
+    p.consume(Token.Dot);
+    auto expr = p.name();
+    return make_n_ary(AstNode.SelfCall, span.merge(expr.span), expr);
+}
 
 /// Convenience struct to hold the precedence and parser for an infix expression
 struct Infix {
@@ -232,7 +252,7 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Star]       = Infix(Infix.Product, &multiply);
     p[Token.Slash]      = Infix(Infix.Product, &divide);
     p[Token.Caret]      = Infix(Infix.Power, &power);
-    // p[Token.Equals]     = Infix(Infix.Assignment, &assign);
+    p[Token.Equals]     = Infix(Infix.Assignment, &assign);
     p[Token.Lparen]     = Infix(Infix.Call, &call);
     p[Token.Lbracket]   = Infix(Infix.Call, &call);
     p[Token.Dot]        = Infix(Infix.Call, &dot);
@@ -240,7 +260,6 @@ immutable Infix[256] infix_parslets = () {
 
     return p;
 } ();
-
 
 AstNode expression(ref Parser p, Infix.Precedence prec = Infix.Precedence.Assignment) {
     auto expr = p.prefix();
@@ -252,6 +271,16 @@ AstNode expression(ref Parser p, Infix.Precedence prec = Infix.Precedence.Assign
     return expr;
 }
 
+alias assign = binary!(AstNode.Assign, Infix.Assignment + 1, Token.Equals);
+
+alias add = binary!(AstNode.Add, Infix.Sum + 1, Token.Plus);
+alias subtract = binary!(AstNode.Subtract, Infix.Sum + 1, Token.Minus);
+alias multiply = binary!(AstNode.Multiply, Infix.Product + 1, Token.Star);
+alias divide = binary!(AstNode.Divide, Infix.Product + 1, Token.Slash);
+
+// not Infix.Power + 1 because we want this to be right-associative
+alias power = binary!(AstNode.Power, Infix.Power, Token.Caret);
+
 /// Binary := Expression <op> Expression ;
 AstNode binary(AstNode.Type t, int prec, Token.Type ttype)(ref Parser p, AstNode lhs) {
     p.consume(ttype);
@@ -259,40 +288,12 @@ AstNode binary(AstNode.Type t, int prec, Token.Type ttype)(ref Parser p, AstNode
     return make_binary(t, lhs, rhs);
 }
 
-alias add = binary!(AstNode.Add, Infix.Sum + 1, Token.Plus);
-alias subtract = binary!(AstNode.Subtract, Infix.Sum + 1, Token.Minus);
-alias multiply = binary!(AstNode.Multiply, Infix.Product + 1, Token.Star);
-alias divide = binary!(AstNode.Divide, Infix.Product + 1, Token.Slash);
-// not Infix.Power + 1 because we want this to be right-associative
-alias power = binary!(AstNode.Power, Infix.Power, Token.Caret);
-alias dot = binary!(AstNode.Call, Infix.Call + 1, Token.Dot);
-
-AstNode dot(ref Parser p, AstNode lhs) {
-    assert(lhs.type == AstNode.Name || lhs.type == AstNode.List || lhs.type == AstNode.Call);
-    p.consume(Token.Dot);
-
-    auto node = lhs;
-    while (p.current.type == Token.Name)
-        node = make_binary(AstNode.Call, node, prefix_parslets[p.current.type](p));
-
-    return node;
-}
-
-/// Call := Expression List
-AstNode call(ref Parser p, AstNode lhs) {
-    auto node = lhs;
-    while (p.current.type == Token.Lparen || p.current.type == Token.Lbracket) {
-        node = make_binary(AstNode.Call, node, prefix_parslets[p.current.type](p));
-    }
-    return node;
-}
-
 /**
  * var_expr : Expression ((":" (('=' Expression) | (Expression ("=" Expression)?)) |
  *                        ("=" Expression))?
  */
 AstNode var_expr(ref Parser p) {
-    return var_expr2(p, p.primary(Infix.Call));
+    return var_expr2(p, p.primary());
 }
 
 AstNode var_expr2(ref Parser p, AstNode first) {
@@ -302,13 +303,13 @@ AstNode var_expr2(ref Parser p, AstNode first) {
     if (p.consume(Token.Colon)) {
         name_expr = first;
         if (p.consume(Token.Equals)) {
-            value_expr = p.primary(Infix.Call);
+            value_expr = p.primary();
             type_expr = AstNode.none;
             span = span.merge(value_expr.span);
         }
         else {
             // var_expr : Expression (":" Expression)?
-            type_expr = p.primary(Infix.Call);
+            type_expr = p.primary();
             span = span.merge(type_expr.span);
 
             if (p.consume(Token.Equals)) {
@@ -338,9 +339,20 @@ AstNode var_expr2(ref Parser p, AstNode first) {
     return make_n_ary(AstNode.VarExpression, span, name_expr, type_expr, value_expr);
 }
 
+/// def = 'def' name ':' primary? '=' expr ;
 AstNode def(ref Parser p) {
     auto tok = p.current;
     p.consume(Token.Def);
-    auto expr = p.var_expr();
-    return make_n_ary(AstNode.Define, tok.span.merge(expr.span), expr);
+    
+    auto name = p.name();
+    
+    p.consume(Token.Colon);
+    auto type = AstNode.none;
+    if (!p.current.type != Token.Equals)
+        type = p.primary();
+    
+    p.consume(Token.Equals);
+    auto value = p.expression();
+    
+    return make_n_ary(AstNode.Define, tok.span.merge(value.span), name, type, value);
 }

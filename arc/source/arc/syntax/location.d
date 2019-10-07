@@ -48,31 +48,29 @@ struct SpannedText {
     }
     
     SpannedText get_span(const(char)[] slice) {
+        assert(text.ptr <= slice.ptr && slice.ptr + slice.length <= text.ptr + text.length);
+        
         const offset = cast(uint) (slice.ptr - text.ptr);
+        assert(slice.length == 0 || text[offset] == slice[0]);
+        
         const length = cast(uint) slice.length;
+        assert(offset + length <= text.length);
+        
         return SpannedText(cast(uint) (span.start + offset), length, slice);
     }
 
     const(char)[] get_text(Span text_span) {
-        auto local = local_span(text_span);
-        return local.text;
-    }
-
-    SpannedText merge(SpannedText other) {
-        auto global = span.merge(other.span);
-        auto local = local_span(global);
-        return SpannedText(global.start, global.length, local.text);
+        const start_index = text_span.start - span.start;
+        const end_index = start_index + text_span.length;
+        
+        assert(start_index + text_span.length <= text.length);
+        assert(start_index <= end_index);
+        
+        return text[start_index .. start_index + text_span.length];
     }
 
     Span merge(Span other) const {
         return span.merge(other);
-    }
-
-    SpannedText local_span(Span s) {
-        const lo = s.start - span.start;
-        const hi = s.end - span.start;
-
-        return SpannedText(lo, hi, text[lo .. hi]);
     }
 }
 
