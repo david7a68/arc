@@ -6,13 +6,16 @@ import std.stdio;
 // import arc.syntax.location;
 
 void main(string[] args) {
+    import std.file: readText;
+
     if (args.length == 3 && args[1] == "-f")
-        print_ast(args[2]);
+        print_ast(args[2], readText(args[2]));
+    else if (args.length == 3 && args[1] == "-i")
+        print_ast("console", args[2]);
 }
 
-void print_ast(string filename) {
+void print_ast(string filename, string text) {
     writeln("print ast");
-    import std.file: readText;
     import arc.stringtable: StringTable;
     import arc.syntax.parser: Parser, statement;
     import arc.syntax.syntax_reporter: SyntaxReporter;
@@ -20,10 +23,9 @@ void print_ast(string filename) {
     import arc.syntax.location: SourceMap;
     
 
-
     StringTable table;
     SourceMap sources;
-    auto source = sources.put(filename, readText(filename));
+    auto source = sources.put(filename, text);
     auto error = SyntaxReporter(null, source);
     auto parser = Parser(source.span, &table, &error);
 

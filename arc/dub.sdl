@@ -4,15 +4,15 @@ authors "David"
 copyright "Copyright © 2019, David"
 license "proprietary"
 
-configuration "executable" {
-    mainSourceFile "source/app.d"
-    targetType "executable"
-}
+// configuration "executable" {
+//     mainSourceFile "source/app.d"
+//     targetType "executable"
+// }
 
-configuration "unittest" {
-    dependency "unit-threaded" version="*"
-    mainSourceFile "ut.d"
-    excludedSourceFiles "source/app.d"
-    targetType "executable"
-    preBuildCommands "$DUB run --compiler=dmd unit-threaded -c gen_ut_main -- -f ut.d"
-}
+// configuration "unittest" {
+//     dependency "unit-threaded" version="*"
+//     mainSourceFile "ut.d"
+//     excludedSourceFiles "source/app.d"
+//     targetType "executable"
+//     preBuildCommands "$DUB run --compiler=dmd unit-threaded -c gen_ut_main -- -f ut.d"
+// }

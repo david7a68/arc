@@ -1,6 +1,7 @@
 module arc.output.ast_printer;
 
 import arc.syntax.ast;
+import arc.syntax.location: SpannedText;
 
 /**
  * AstVisitor that generates a string representation of the syntax tree.
@@ -31,8 +32,6 @@ struct AstPrinter {
     import std.array: appender, Appender;
     import std.container.array: Array;
     import std.conv: to;
-    import arc.syntax.ast: AstNode;
-    import arc.syntax.location: SpannedText;
 
     enum IndentType: ubyte {
         None, Space, Bar
@@ -67,7 +66,7 @@ struct AstPrinter {
         }
 
         str.put(prefix);
-        str.put(repr(n));
+        str.put(repr(text, n));
         switch (n.type) with (AstNode.Type) {
         case Invalid:
             str.put(" \"");
@@ -131,12 +130,11 @@ struct AstPrinter {
         print(n, prefix);
         stack.removeBack();
     }
-
 }
 
-const(char)[] repr(AstNode node) {
+const(char)[] repr(SpannedText text, AstNode node) {
     import std.conv: to;
-    
+
     switch (node.type) with (AstNode.Type) {
         case Name:
             return "Name(\"" ~ text.get_text(node.span) ~ "\")";

@@ -1,0 +1,32 @@
+
+stmt = (def | expr) ';'
+    def = 'def' expr ':' primary? '=' expr ;
+
+expr = primary | unary | binary ;
+
+primary = name
+        | integer
+        | char
+        | list
+        | block
+        | call
+        ;
+
+    list = list_open ','* (var_expr ',')* list_close ;
+        var_expr = expr (':' primary? ('=' expr)?)? ;
+
+    block = '{' smt* '}' ;
+
+    call = (list | name) '.' (list | name)
+         | call call
+         ;
+
+unary = negate
+      | self_call
+      ;
+    
+    negate = '-' primary ;
+
+    self_call = '.' primary ;
+
+binary = expr <op> expr
