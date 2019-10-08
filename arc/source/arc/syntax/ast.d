@@ -22,6 +22,7 @@ class AstNode {
         Divide,
         Power,
         Call,
+        Path,
         VarExpression,
         Define
     }

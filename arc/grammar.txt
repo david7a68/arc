@@ -7,6 +7,7 @@ primary = name
         | block
         | function
         | call
+        | path
         ;
 
     list = list_open ','* (var_expr ',')* list_close ;
@@ -14,8 +15,12 @@ primary = name
 
     block = '{' smt* '}' ;
 
-    call = (list | name) '.' (list | name)
-         | call call
+    call = (list | name | path | self_call) '.'? (list | name | path)
+         | call '.'? call
+         ;
+
+    path = (name | list | call | self_call) '::' (name | list | call)
+         | path '::' path
          ;
 
     function = primary '=>' expr ;

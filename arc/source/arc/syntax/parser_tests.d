@@ -8,10 +8,6 @@ import arc.syntax.parser;
 import arc.syntax.location;
 import arc.syntax.syntax_reporter;
 
-SyntaxReporter.ReportingFunction_loc_err report_loc_err_set_flag = (r, l1, l2) {
-    *(cast(bool*) r.user_data) = true;
-};
-
 SyntaxReporter.ReportingFunction_token report_bad_token_set_flag = (r, t) {
     *(cast(bool*) r.user_data) = true;
 };
@@ -72,7 +68,9 @@ AstNode[] diff(AstNode root, Match match) {
     mixin(parser_init("[3:T, b=[4), c:k()=j]"));
     bool not_closed;
     parser.error.user_data = &not_closed;
-    parser.error.list_not_closed_impl = report_loc_err_set_flag;
+    parser.error.seq_not_closed_impl = (reporter, expr_loc, err_loc, type) {
+        *(cast(bool*) reporter.user_data) = true;
+    };
 
     auto expr = parser.primary();
     mixin(parser_done);

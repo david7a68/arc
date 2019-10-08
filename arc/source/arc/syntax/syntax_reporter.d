@@ -8,6 +8,7 @@ struct SyntaxReporter {
 
     import arc.hash: Key;
     import arc.syntax.lexer: Token;
+    import arc.syntax.ast: AstNode;
 
     void* user_data;
     Source source;
@@ -17,6 +18,7 @@ struct SyntaxReporter {
 
     /// Function type that reports the location of the error, and the location of its enclosing expression
     alias ReportingFunction_loc_err = void function(SyntaxReporter*, ExprLoc, ErrorLoc);
+    alias ReportingFunction_loc_err_type = void function(SyntaxReporter*, ExprLoc, ErrorLoc, AstNode.Type);
     /// Function type that reports the location of the error
     alias ReportingFunction_loc = void function(SyntaxReporter*, ErrorLoc);
     /// Function type that reports a particular token
@@ -63,7 +65,22 @@ struct SyntaxReporter {
         );
         writeln(s);
     }; 
-    
+
+    ReportingFunction_loc_err_type seq_not_closed_impl = (reporter, expr_loc, err_loc, type) {
+        auto exp_loc = reporter.source.get_loc(expr_loc.start);
+        auto err_pos = reporter.source.get_loc(err_loc.start);
+        const s = "Error: The %s at (line: %s, column: %s) is not closed:\n%s (line: %s, column: %s)".format(
+            type,
+            exp_loc.line,
+            exp_loc.column,
+            reporter.source.name,
+            err_pos.line,
+            err_pos.column
+        );
+        writeln(s);
+    }; 
+
+
     ///
     ReportingFunction_loc_err list_missing_comma_impl = (reporter, expr_loc, err_loc) {
         assert(false, "Error: The list is missing a comma here...");

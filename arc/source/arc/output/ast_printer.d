@@ -84,11 +84,15 @@ struct AstPrinter {
             break;
         case Call:
             put_length();
-            write_named_children(n, "Target: ", "Members: ");
+            write_named_children(n, "Target: ", "Arguments: ");
             break;
         case VarExpression:
             str.put("\n");
             write_named_children(n, "Pattern: ", "Type: ", "Value: ");
+            break;
+        case Define:
+            str.put("\n");
+            write_named_children(n, "Name: ", "Type ", "Value: ");
             break;
         default:
             str.put("\n");

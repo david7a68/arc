@@ -53,6 +53,25 @@ AstNode statement(ref Parser p) {
     return s;
 }
 
+bool is_stat_token(Token.Type t) {
+    switch (t) with (Token.Type) {
+    case Name:
+    case Lparen:
+    case Lbracket:
+    case Rbrace:
+    case Dot:
+    case If:
+    case Loop:
+    case Break:
+    case Return:
+    case Def:
+    case Let:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool is_primary_token(Token.Type t) {
     switch (t) with (Token.Type) {
     case Name:
@@ -62,10 +81,18 @@ bool is_primary_token(Token.Type t) {
     case Lbracket:  // ditto
     case Dot:
     case FatRArrow:
+    case ColonColon:
         return true;
     default:
         return false;
     }
+}
+
+debug bool matches(T)(T t, T[] types...) {
+    foreach (type; types) {
+        if (t == type) return true;
+    }
+    return false;
 }
 
 bool is_expr_token(Token.Type t) {
@@ -128,58 +155,37 @@ AstNode char_(ref Parser p) {
     return make_char(p.current.span);
 }
 
-alias paren_list = list!(AstNode.List, Token.Lparen, Token.Rparen);
-alias bracket_list = list!(AstNode.List, Token.Lbracket, Token.Rbracket);
+alias paren_list = seq!(AstNode.List, Token.Lparen, Token.Rparen, Token.Comma, var_expr, is_expr_token);
+alias bracket_list = seq!(AstNode.List, Token.Lbracket, Token.Rbracket, Token.Comma, var_expr, is_expr_token);
+alias block = seq!(AstNode.Block, Token.Lbrace, Token.Rbrace, Token.Semicolon, statement, is_stat_token);
 
-AstNode list(AstNode.Type t, Token.Type open, Token.Type close)(ref Parser p) {
+AstNode seq(AstNode.Type t, Token.Type open, Token.Type close, Token.Type separator, alias parse_element, alias type_fn)(ref Parser p) {
     auto span = p.current.span.span;
-    p.push_eol_type(Token.Comma);
+    p.push_eol_type(separator);
     p.consume(open);
 
-    while(p.consume(Token.Comma)) continue;
+    while (p.consume(separator)) continue;
+    
     AstNode[] members;
     if (p.current.type != close) do {
-        auto e = p.var_expr();
-        span = span.merge(e.span); // for error reporting
+        auto e = parse_element(p);
+        span = span.merge(e.span);
         members ~= e;
 
-        while(p.consume(Token.Comma))
-            continue;
+        while (p.consume(separator)) continue;
 
-        if (!is_expr_token(p.current.type) && (p.current.type != close)) {
+        if (!type_fn(p.current.type) && (p.current.type != close)) {
             scope(exit) p.advance();
             p.pop_eol_type();
-            p.error.list_not_closed(span, p.current.span);
+            p.error.seq_not_closed(span, p.current.span, t);
             return make_invalid(span.merge(p.current.span));
-        }
+        } 
     } while (p.current.type != close);
 
     span = span.merge(p.current.span);
     p.pop_eol_type();
     p.advance();
     return make_n_ary(t, span, members);
-}
-
-AstNode block(ref Parser p) {
-    auto span = p.current.span.span;
-    p.consume(Token.Lbrace);
-    p.push_eol_type(Token.Semicolon);
-
-    AstNode[] members;
-    while (p.current.type != Token.Rbrace) {
-        if (p.current.type == Token.Eof) {
-            p.error.unexpected_end_of_file(span);
-        }
-
-        auto s = p.statement();
-        span = span.merge(s.span);
-        members ~= s;
-    }
-
-    p.pop_eol_type();
-    span = span.merge(p.current.span);
-    p.consume(Token.Rbrace);
-    return make_n_ary(AstNode.Block, span, members);
 }
 
 /// Function := Expression '=>' Expression ;
@@ -190,7 +196,7 @@ AstNode function_(ref Parser p, AstNode params) {
 }
 
 AstNode dot(ref Parser p, AstNode lhs) {
-    assert(lhs.type == AstNode.Name || lhs.type == AstNode.List || lhs.type == AstNode.Call || lhs.type == AstNode.SelfCall);
+    assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall));
     p.consume(Token.Dot);
 
     return make_binary(AstNode.Call, lhs, prefix_parslets[p.current.type](p));
@@ -200,6 +206,12 @@ AstNode dot(ref Parser p, AstNode lhs) {
 AstNode call(ref Parser p, AstNode lhs) {
     assert(p.current.type == Token.Lparen || p.current.type == Token.Lbracket);
     return make_binary(AstNode.Call, lhs, prefix_parslets[p.current.type](p));
+}
+
+AstNode path(ref Parser p, AstNode lhs) {
+    assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall, AstNode.Path));
+    p.consume(Token.ColonColon);
+    return make_binary(AstNode.Path, lhs, prefix_parslets[p.current.type](p));
 }
 
 alias negate = unary!(AstNode.Negate, Token.Minus);
@@ -257,6 +269,7 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Lbracket]   = Infix(Infix.Call, &call);
     p[Token.Dot]        = Infix(Infix.Call, &dot);
     p[Token.Colon]      = Infix(Infix.Primary, &var_expr2);
+    p[Token.ColonColon] = Infix(Infix.Primary, &path);
 
     return p;
 } ();
@@ -345,10 +358,12 @@ AstNode def(ref Parser p) {
     p.consume(Token.Def);
     
     auto name = p.name();
+    while (p.current.type == Token.ColonColon)
+        name = p.path(name);
     
     p.consume(Token.Colon);
     auto type = AstNode.none;
-    if (!p.current.type != Token.Equals)
+    if (p.current.type != Token.Equals)
         type = p.primary();
     
     p.consume(Token.Equals);

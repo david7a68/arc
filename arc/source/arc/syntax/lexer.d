@@ -29,7 +29,7 @@ struct Token {
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=',
-        FatRArrow,
+        FatRArrow, ColonColon,
 
         If, Else, Loop, Break, Return,
         Let, Def,
@@ -208,7 +208,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
 
     auto start = cursor;
 
-    ScanResult make_token(Token.Type t, int advance_n = 1) {
+    ScanResult make_token(Token.Type t, int advance_n) {
         cursor += advance_n;
         assert(cursor <= end);
         return tuple!("type", "text")(t, start[0 .. cursor - start]);
@@ -236,12 +236,17 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case ',':
         case '.':
         case ';':
-        case ':':
         case '+':
         case '*':
         case '^':
         case '-':
-            return make_token(cast(Token.Type) *cursor);
+            return make_token(cast(Token.Type) *cursor, 1);
+        case ':':
+            cursor++;
+            if (*cursor == ':')
+                return make_token(Token.ColonColon, 1);
+            else
+                return make_token(Token.Colon, 0);
         case '/':
             cursor++;
             if (*cursor == '/') {
@@ -283,7 +288,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
                 cursor++;
             return make_token(Token.Integer, 0);
         default:
-            return make_token(Token.Invalid);
+            return make_token(Token.Invalid, 1);
     }
 }
 
