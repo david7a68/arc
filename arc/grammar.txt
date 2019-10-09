@@ -1,51 +1,67 @@
-expr = primary | unary | binary ;
-
-primary = name
-        | integer
-        | char
-        | list
-        | block
-        | function
-        | call
-        | path
-        ;
-
-    list = list_open ','* (var_expr ',')* list_close ;
-        var_expr = expr (':' primary? ('=' expr)?)? ;
-
-    block = '{' smt* '}' ;
-
-    call = (list | name | path | self_call) '.'? (list | name | path)
-         | call '.'? call
-         ;
-
-    path = (name | list | call | self_call) '::' (name | list | call)
-         | path '::' path
-         ;
-
-    function = primary '=>' expr ;
-
-unary = negate
-      | self_call
-      ;
-    
-    negate = '-' primary ;
-
-    self_call = '.' primary ;
-
-binary = expr <op> expr
-    op = '+'
-       | '-'
-       | '*'
-       | '/'
-       | '^'
-       | '%'
-       | '='
-       | '>'
-       | '<'
-       | '<='
-       | '>='
-       ;
-
-stmt = (def | expr) ';'
+stmt = (def | label | break | return | continue | expr) ';'
     def = 'def' name ':' primary? '=' expr ;
+
+    break = 'break' label? expr ;
+
+    return = 'return' label? expr ;
+
+    continue = 'continue' label? ;
+
+    expr = operand | label | var_expr;
+        label = '\'' name ;
+        
+        var_expr = primary (':' primary? ('=' expr)?)? ;
+
+        operand = primary | unary | binary | if | loop | labeled;
+
+            primary = name
+                    | integer
+                    | char
+                    | list
+                    | block
+                    | function
+                    | call
+                    | path
+                    ;
+
+                list = list_open ','* (var_expr ',')* list_close ;
+
+                block = '{' smt* '}' ;
+
+                function = primary '=>' expr ;
+
+                call = (list | name | path | self_call) '.'? (list | name | path)
+                    | call '.'? call
+                    ;
+
+                path = (name | list | call | self_call) '::' (name | list | call)
+                    | path '::' path
+                    ;
+
+            unary = negate
+                | self_call
+                ;
+                
+                negate = '-' primary ;
+
+                self_call = '.' primary ;
+
+            binary = operand op operand
+                op = '+'
+                | '-'
+                | '*'
+                | '/'
+                | '^'
+                | '%'
+                | '='
+                | '>'
+                | '<'
+                | '<='
+                | '>='
+                ;
+
+            if = 'if' operand block (else operand)? ;
+
+            loop = 'loop' operand ;
+
+            labeled = label (if | loop | block | function) ;

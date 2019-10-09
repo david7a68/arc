@@ -92,7 +92,15 @@ struct AstPrinter {
             break;
         case Define:
             str.put("\n");
-            write_named_children(n, "Name: ", "Type ", "Value: ");
+            write_named_children(n, "Name: ", "Type: ", "Value: ");
+            break;
+        case If:
+            str.put("\n");
+            write_named_children(n, "Cond: ", "Body: ", "Else: ");
+            break;
+        case Loop:
+            str.put("\n");
+            write_named_children(n, "Body: ");
             break;
         default:
             str.put("\n");

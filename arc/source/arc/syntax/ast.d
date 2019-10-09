@@ -16,6 +16,11 @@ class AstNode {
         Negate,
         SelfCall,
         Assign,
+        Less,
+        LessEqual,
+        Greater,
+        GreaterEqual,
+        Equality,
         Add,
         Subtract,
         Multiply,
@@ -24,7 +29,14 @@ class AstNode {
         Call,
         Path,
         VarExpression,
-        Define
+        Define,
+        If,
+        Loop,
+        Label,
+        Break,
+        Return,
+        Continue,
+        Labeled,
     }
 
     alias type this;
@@ -70,6 +82,7 @@ static AstNode make_char(Span span) {
 
 alias make_name = make_value!("key", Key, AstNode.Name);
 alias make_int = make_value!("value", ulong, AstNode.Integer);
+alias make_label = make_value!("key", Key, AstNode.Label);
 
 static AstNode make_value(string name, T, AstNode.Type t)(Span span, T value) {
     auto node = new AstNode(t, span);

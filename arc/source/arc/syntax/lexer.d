@@ -29,10 +29,12 @@ struct Token {
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=',
-        FatRArrow, ColonColon,
+        Less = '<', Greater = '>',
+        LessEqual, GreaterEqual, EqualEqual,
+        FatRArrow, ColonColon, Label,
 
-        If, Else, Loop, Break, Return,
-        Let, Def,
+        If, Else, Loop, Break, Return, Continue,
+        Def,
     }
 
     alias Type this;
@@ -58,7 +60,7 @@ shared static this() {
     keywords[StringTable.digest("loop")] = Token.Loop;
     keywords[StringTable.digest("break")] = Token.Break;
     keywords[StringTable.digest("return")] = Token.Return;
-    keywords[StringTable.digest("let")] = Token.Let;
+    keywords[StringTable.digest("continue")] = Token.Continue;
     keywords[StringTable.digest("def")] = Token.Def;
 }
 
@@ -179,13 +181,17 @@ RefinedToken refine(ScanResult result, StringTable* table) {
         key = table.insert(result.text);
         result.type = keywords.get(key, Token.Name);
     }
+    else if (result.type == Token.Label) {
+        key = table.insert(result.text);
+    }
+    
     return tuple!("type", "text", "key")(result.type, result.text, key);
 }
 
 unittest { // Test keyword detection
-    const keys = "if else loop break return let def";
+    const keys = "if else loop break return def";
     const types = [
-        Token.If, Token.Else, Token.Loop, Token.Break, Token.Return, Token.Let, Token.Def
+        Token.If, Token.Else, Token.Loop, Token.Break, Token.Return, Token.Def
     ];
 
     StringTable table;
@@ -258,16 +264,45 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             cursor++;
             if (*cursor == '>') // advance only by one
                 return make_token(Token.FatRArrow, 1);
+            else if (*cursor == '=')
+                return make_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Equals, 0);
+        case '<':
+            cursor++;
+            if (*cursor == '=')
+                return make_token(Token.LessEqual, 1);
+            else
+                return make_token(Token.Less, 0);
+        case '>':
+            cursor++;
+            if (*cursor == '=')
+                return make_token(Token.GreaterEqual, 1);
+            else
+                return make_token(Token.Greater, 0);
         case '\'':
             cursor++;
             if (*cursor == '\\')
-                cursor += 2;
-            else
+                return make_token(Token.Char, 2 + 1);
+            else {
                 cursor++;
-            cursor++;
-            return make_token(Token.Char, 0);
+
+                if (*cursor == '\'')
+                    return make_token(Token.Char, 1);
+                else {
+                    char_loop: if (cursor < end) switch (*cursor) {
+                        case 'a': .. case 'z':
+                        case 'A': .. case 'Z':
+                        case '0': .. case '9':
+                        case '_':
+                            cursor++;
+                            goto char_loop;
+                        default:
+                    }
+
+                    return make_token(Token.Label, 0);
+                }
+            }
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
@@ -303,7 +338,7 @@ unittest { // Test empty lexer with whitespace
 }
 
 unittest {
-    mixin(init_scan("()[],.;=>129400_81anb_wo283"));
+    mixin(init_scan("()[],.;=>129400_81anb_wo283'some_label"));
 
     bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
         auto tok = scan_type(cursor, end);
@@ -320,6 +355,7 @@ unittest {
     assert(test_scan(Token.FatRArrow,   "=>", 9));
     assert(test_scan(Token.Integer,     "129400_81", 18));
     assert(test_scan(Token.Name,        "anb_wo283", 27));
+    assert(test_scan(Token.Label,       "'some_label", 38));
 
     // Keywords are not preocessed at scan_type level
     assert(scan_type(cursor, end).type == Token.Eof);
