@@ -15,12 +15,15 @@ class AstNode {
         Function,
         Negate,
         SelfCall,
+        Pointer,
+        GetRef,
         Assign,
         Less,
         LessEqual,
         Greater,
         GreaterEqual,
-        Equality,
+        Equal,
+        NotEqual,
         Add,
         Subtract,
         Multiply,
@@ -61,6 +64,7 @@ class AstNode {
             case Name:
             case Integer:
             case Char:
+            case Label:
                 return 0;
             default:
                 return children.length;

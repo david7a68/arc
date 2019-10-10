@@ -27,10 +27,11 @@ struct Token {
         Lbracket = '[', Rbracket = ']',
         Lbrace = '{', Rbrace = '}',
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
+        Ampersand = '&',
         Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=',
         Less = '<', Greater = '>',
-        LessEqual, GreaterEqual, EqualEqual,
+        LessEqual, GreaterEqual, EqualEqual, BangEqual,
         FatRArrow, ColonColon, Label,
 
         If, Else, Loop, Break, Return, Continue,
@@ -118,7 +119,7 @@ struct Lexer {
 
     /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
-        if ((next.type == Token.Eol || next.type == Token.Eof) && eol_type_stack.length > 0) {
+        if ((next.type == Token.Rbrace || next.type == Token.Eol || next.type == Token.Eof) && eol_type_stack.length > 0) {
             switch (current.type) with (Token.Type) {
             case Rparen:
             case Rbracket:
@@ -141,6 +142,8 @@ struct Lexer {
                 next = scan_type(source_text, end_of_text).refine(table).locate(source);
             } while (current.type == Token.Eol);
         }
+        import std.stdio;
+        writeln(current);
     }
 }
 
@@ -222,7 +225,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
 
     switch_start:
     if (cursor >= end)
-        return make_token(Token.Eof, 0); 
+        return tuple!("type", "text")(Token.Eof, (end - 1)[0 .. 0]); 
 
     // @Optimize A character-table driven approach may be more performant.
     switch (*cursor) {
@@ -246,6 +249,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '*':
         case '^':
         case '-':
+        case '&':
             return make_token(cast(Token.Type) *cursor, 1);
         case ':':
             cursor++;
@@ -280,6 +284,12 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
                 return make_token(Token.GreaterEqual, 1);
             else
                 return make_token(Token.Greater, 0);
+        case '!':
+            cursor++;
+            if (*cursor == '=')
+                return make_token(Token.BangEqual, 1);
+            else
+                return make_token(Token.Invalid, 0);
         case '\'':
             cursor++;
             if (*cursor == '\\')
@@ -359,6 +369,14 @@ unittest {
 
     // Keywords are not preocessed at scan_type level
     assert(scan_type(cursor, end).type == Token.Eof);
+}
+
+unittest {
+    mixin(init_scan("{
+} else break
+//    return false"));
+    // this may cause an assertion error
+    while (scan_type(cursor, end).type != Token.Eof) continue;
 }
 
 version(unittest) {

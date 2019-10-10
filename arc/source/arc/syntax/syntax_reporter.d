@@ -46,25 +46,20 @@ struct SyntaxReporter {
      */
     ReportingFunction_loc unexpected_end_of_file_impl = (reporter, loc) {
         // assert(false, "Error: Unexpected end of file!");
+        assert(false);
     };
 
-    /**
-     * Reports that the list does not have a matching closing token. Either the
-     * end of the file has been reached unexpectedly, or the next token is not a
-     * comma or closing token.
-     */
-    ReportingFunction_loc_err list_not_closed_impl = (reporter, expr_loc, err_loc) {
-        auto exp_loc = reporter.source.get_loc(expr_loc.start);
-        auto err_pos = reporter.source.get_loc(err_loc.start);
-        const s = "Error: The list at (line: %s, column: %s) is not closed:\n%s (line: %s, column: %s)".format(
-            exp_loc.line,
-            exp_loc.column,
-            reporter.source.name,
+    ReportingFunction_loc_err definition_missing_colon_impl = (reporter, span, pos) {
+        auto stat_loc = reporter.source.get_loc(span.start);
+        auto err_pos = reporter.source.get_loc(pos.start);
+        const s = "Error: The definition at (line: %s, column: %s) must have a type specification.".format(
             err_pos.line,
             err_pos.column
         );
         writeln(s);
-    }; 
+        writeln("    To automatically infer the type specification, insert a colon (:) after the name.");
+        writeln("        Grammar: 'def' path ':' primary? '=' expr ';' ;");
+    };
 
     ReportingFunction_loc_err_type seq_not_closed_impl = (reporter, expr_loc, err_loc, type) {
         auto exp_loc = reporter.source.get_loc(expr_loc.start);
@@ -79,12 +74,6 @@ struct SyntaxReporter {
         );
         writeln(s);
     }; 
-
-
-    ///
-    ReportingFunction_loc_err list_missing_comma_impl = (reporter, expr_loc, err_loc) {
-        assert(false, "Error: The list is missing a comma here...");
-    };
 
     /**
      * Reports that the described token cannot start an expression

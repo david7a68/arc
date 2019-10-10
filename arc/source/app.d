@@ -8,10 +8,11 @@ import std.stdio;
 void main(string[] args) {
     import std.file: readText;
 
-    if (args.length == 3 && args[1] == "-f")
-        print_ast(args[2], readText(args[2]));
-    else if (args.length == 3 && args[1] == "-i")
-        print_ast("console", args[2]);
+	if (args.length == 3 && args[1] == "-f")
+	   print_ast(args[2], readText(args[2]));
+	else if (args.length == 3 && args[1] == "-i")
+	   print_ast("console", args[2]);
+	// print_ast("", readText("sample.arc"));
 }
 
 void print_ast(string filename, string text) {
@@ -28,7 +29,7 @@ void print_ast(string filename, string text) {
     auto source = sources.put(filename, text);
     auto error = SyntaxReporter(null, source);
     auto parser = Parser(source.span, &table, &error);
-
+    writeln("parsed");
 
     
     auto printer = new AstPrinter(source.span);

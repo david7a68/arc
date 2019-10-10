@@ -2,12 +2,11 @@ module arc.syntax.parser;
 
 import arc.syntax.ast;
 import arc.syntax.lexer;
-import arc.syntax.location: SpannedText;
+import arc.syntax.location: SpannedText, Span;
 
 struct Parser {
     import arc.syntax.syntax_reporter: SyntaxReporter;
     import arc.stringtable: StringTable;
-    import arc.syntax.location: SpannedText;
 
     ///
     Lexer lexer;
@@ -80,8 +79,10 @@ bool is_stat_token(Token.Type t) {
     case Name:
     case Lparen:
     case Lbracket:
-    case Rbrace:
+    case Lbrace:
     case Dot:
+	case If:
+	case Loop:
     case Break:
     case Return:
     case Def:
@@ -101,10 +102,14 @@ AstNode def(ref Parser p) {
     while (p.current.type == Token.ColonColon)
         name = p.path(name);
     
-    p.consume(Token.Colon);
     auto type = AstNode.none;
-    if (p.current.type != Token.Equals)
+    if (!p.consume(Token.Colon)) {
+        p.error.definition_missing_colon(span.merge(name.span), p.current.span);
+        type = make_invalid(Span(0, 0));
+    }
+    else if (p.current.type != Token.Equals) {
         type = p.primary();
+    }
     
     p.consume(Token.Equals);
     auto value = p.expression();
@@ -116,13 +121,13 @@ AstNode break_(ref Parser p) {
     auto span = p.current.span;
     p.advance();
 
-    AstNode label;
+    AstNode label = AstNode.none;
     if (p.current.type == Token.Label) {
         label = make_label(p.current.span, p.current.key);
         p.advance();
     }
 
-    AstNode value;
+    AstNode value = AstNode.none;
     if (is_expr_token(p.current.type))
         value = expression(p);
     return make_n_ary(AstNode.Break, span, label, value);
@@ -132,13 +137,13 @@ AstNode return_(ref Parser p) {
     auto span = p.current.span;
     p.advance();
 
-    AstNode label;
+    auto label = AstNode.none;
     if (p.current.type == Token.Label) {
         label = make_label(p.current.span, p.current.key);
         p.advance();
     }
 
-    AstNode value;
+    auto value = AstNode.none;
     if (is_expr_token(p.current.type))
         value = expression(p);
     return make_n_ary(AstNode.Return, span, label, value);
@@ -148,7 +153,7 @@ AstNode continue_(ref Parser p) {
     auto span = p.current.span;
     p.advance();
 
-    AstNode label;
+    auto label = AstNode.none;
     if (p.current.type == Token.Label) {
         label = make_label(p.current.span, p.current.key);
         p.advance();
@@ -180,6 +185,8 @@ immutable Prefix[256] prefix_parslets = () {
     p[Token.Label] = &label;
     p[Token.If] = &if_;
     p[Token.Loop] = &loop;
+    p[Token.Ampersand] = &get_ref;
+    p[Token.Star] = &pointer;
 
     return p;
 } ();
@@ -226,7 +233,8 @@ immutable Infix[256] infix_parslets = () {
     p[Token.LessEqual]      = Infix(Infix.Comparison, &less_equal);
     p[Token.Greater]        = Infix(Infix.Comparison, &greater);
     p[Token.GreaterEqual]   = Infix(Infix.Comparison, &greater_equal);
-    p[Token.EqualEqual]     = Infix(Infix.Comparison, &equality);
+    p[Token.EqualEqual]     = Infix(Infix.Equality, &equal);
+    p[Token.BangEqual]      = Infix(Infix.Equality, &not_equal);
     p[Token.Equals]         = Infix(Infix.Assignment, &assign);
     p[Token.Lparen]         = Infix(Infix.Call, &call);
     p[Token.Lbracket]       = Infix(Infix.Call, &call);
@@ -286,12 +294,15 @@ bool is_primary_token(Token.Type t) {
     switch (t) with (Token.Type) {
     case Name:
     case Char:
+    case Integer:
     case Lparen:    // our good fortune that () and a() are both primaries
     case Lbracket:  // ditto
     case Dot:
     case FatRArrow:
     case ColonColon:
     case Label:
+    case Star:
+    case Ampersand:
         return true;
     default:
         return false;
@@ -300,7 +311,7 @@ bool is_primary_token(Token.Type t) {
 
 AstNode primary(ref Parser p) {
     auto node = prefix_parslets[p.current.type](p);
-    while (is_primary_token(p.current.type)) {
+    while (is_primary_token(p.current.type) && infix_parslets[p.current.type].parselet !is null) {
         node = infix_parslets[p.current.type].parselet(p, node);
     }
     return node;
@@ -436,6 +447,8 @@ AstNode path(ref Parser p, AstNode lhs) {
 }
 
 alias negate = unary!(AstNode.Negate, Token.Minus);
+alias pointer = unary!(AstNode.Pointer, Token.Star);
+alias get_ref = unary!(AstNode.GetRef, Token.Ampersand);
 
 /// Unary := <op> Expression
 AstNode unary(AstNode.Type t, Token.Type ttype)(ref Parser p) {
@@ -463,7 +476,8 @@ alias less = binary!(AstNode.Less, Infix.Comparison + 1, Token.Less);
 alias less_equal = binary!(AstNode.LessEqual, Infix.Comparison + 1, Token.LessEqual);
 alias greater = binary!(AstNode.Greater, Infix.Comparison + 1, Token.Greater);
 alias greater_equal = binary!(AstNode.GreaterEqual, Infix.Comparison + 1, Token.GreaterEqual);
-alias equality = binary!(AstNode.Equality, Infix.Comparison + 1, Token.EqualEqual);
+alias equal = binary!(AstNode.Equal, Infix.Comparison + 1, Token.EqualEqual);
+alias not_equal = binary!(AstNode.NotEqual, Infix.Comparison + 1, Token.BangEqual);
 
 // not Infix.Power + 1 because we want this to be right-associative
 alias power = binary!(AstNode.Power, Infix.Power, Token.Caret);
@@ -476,7 +490,7 @@ AstNode binary(AstNode.Type t, int prec, Token.Type ttype)(ref Parser p, AstNode
 }
 
 AstNode if_(ref Parser p) {
-    auto span = p.current.span;
+    Span span = p.current.span;
     p.consume(Token.If);
 
     auto cond = p.expression();
@@ -485,7 +499,7 @@ AstNode if_(ref Parser p) {
 
     AstNode else_branch = AstNode.none;
     if (p.consume(Token.Else)) {
-        else_branch = p.expression();
+        else_branch = p.statement();
         span = span.merge(else_branch.span);
     }
 
@@ -494,6 +508,7 @@ AstNode if_(ref Parser p) {
 
 AstNode loop(ref Parser p, ) {
     auto span = p.current.span;
+    p.consume(Token.Loop);
     auto body = p.expression();
     return make_n_ary(AstNode.Loop, span.merge(body.span), body);
 }

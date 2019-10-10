@@ -40,11 +40,17 @@ stmt = (def | label | break | return | continue | expr) ';'
 
             unary = negate
                 | self_call
+                | pointer
+                | get_ref
                 ;
                 
                 negate = '-' primary ;
 
                 self_call = '.' primary ;
+
+                pointer = '*' primary ;
+
+                get_ref = '&' primary ;
 
             binary = operand op operand
                 op = '+'
@@ -58,6 +64,7 @@ stmt = (def | label | break | return | continue | expr) ';'
                 | '<'
                 | '<='
                 | '>='
+                | '=='
                 ;
 
             if = 'if' operand block (else operand)? ;

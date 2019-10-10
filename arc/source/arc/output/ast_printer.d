@@ -62,7 +62,7 @@ struct AstPrinter {
         void put_length() {
             str.put(" (");
             str.put(n.num_children.to!string);
-            str.put(")\n");
+            str.put(")");
         }
 
         str.put(prefix);
@@ -71,7 +71,7 @@ struct AstPrinter {
         case Invalid:
             str.put(" \"");
             str.put(text.get_text(n.span));
-            str.put("\"\n");
+            str.put("\"");
             write_children(n);
             break;
         case List:
@@ -79,36 +79,30 @@ struct AstPrinter {
             write_children(n, true);
             break;
         case Function:
-            put_length();
             write_named_children(n, "Params: ", "Body: ");
             break;
         case Call:
-            put_length();
             write_named_children(n, "Target: ", "Arguments: ");
             break;
         case VarExpression:
-            str.put("\n");
             write_named_children(n, "Pattern: ", "Type: ", "Value: ");
             break;
         case Define:
-            str.put("\n");
             write_named_children(n, "Name: ", "Type: ", "Value: ");
             break;
         case If:
-            str.put("\n");
             write_named_children(n, "Cond: ", "Body: ", "Else: ");
             break;
-        case Loop:
-            str.put("\n");
-            write_named_children(n, "Body: ");
+        case Break:
+            write_named_children(n, "Label: ", "Value: ");
             break;
         default:
-            str.put("\n");
             write_children(n);
         }
     }
 
     void write_children(AstNode n, bool numbered = false) {
+        str.put("\n");
         if (n.num_children > 0) {
             foreach (i, child; n.children) {
                 write_child(child, i + 1 == n.num_children, numbered ? ("#" ~ i.to!string ~ " ") : "");
@@ -118,7 +112,8 @@ struct AstPrinter {
 
     void write_named_children(AstNode n, string[] names...) {
         assert(n.num_children == names.length);
-
+        
+        str.put("\n");
         if (n.num_children > 0) {
             foreach (i, child; n.children) {
                 write_child(child, i + 1 == n.num_children, names[i]);
@@ -150,6 +145,8 @@ const(char)[] repr(SpannedText text, AstNode node) {
     switch (node.type) with (AstNode.Type) {
         case Name:
             return "Name(\"" ~ text.get_text(node.span) ~ "\")";
+        case Label:
+            return "Label: " ~ text.get_text(node.span);
         case Integer:
         case Char:
             return text.get_text(node.span);

@@ -197,3 +197,35 @@ AstNode[] diff(AstNode root, Match match) {
         Match(AstNode.Name),
     ])).length == 0);
 }
+
+@("parser:labeled_loop") unittest {
+    mixin(parser_init("'label loop {}"));
+    auto expr = parser.expression();
+    mixin(parser_done);
+    assert(diff(expr, Match(AstNode.Labeled, [
+        Match(AstNode.Label),
+        Match(AstNode.Loop, [
+            Match(AstNode.Block)
+        ])
+    ])).length == 0);
+}
+
+@("parser: if_else") unittest {
+    mixin(parser_init("if a {} else if b {} else { break }"));
+    auto expr = parser.expression();
+    mixin(parser_done);
+    assert(diff(expr, Match(AstNode.If, [
+        Match(AstNode.Name),
+        Match(AstNode.Block),
+        Match(AstNode.If, [
+            Match(AstNode.Name),
+            Match(AstNode.Block),
+            Match(AstNode.Block, [
+                Match(AstNode.Break, [
+                    Match(AstNode.None),
+                    Match(AstNode.None)
+                ])
+            ])
+        ])
+    ])).length == 0);
+}
