@@ -58,3 +58,26 @@ def statement := (p: *Parser) => {
     p.lexer.pop_eol_type()
     s
 }
+
+def def_ := (p: *Parser) => {
+    span := p.lexer.current.span
+    p.consume(Token::Def)
+
+    name := name(p)
+    loop if p.lexer.current.type == Token::ColonColon {
+        name = path(p, name)
+    }
+
+    type := AstNode.none
+    if p.consume(Token::Colon) == false {
+        p.error.definition_missing_colon(span.merge(name.span), p.current.span)
+        type := make_invalid(Span::new(0, 0))
+    } else if p.lexer.current.type != Token::Equals {
+        type = primary(p)
+    }
+
+    p.consume(Token::Equals)
+    value := expression(p)
+
+    make_n_ary(AstNode::Define, span.merge(value.span), name, type, value)
+}

@@ -202,6 +202,7 @@ struct Infix {
     enum Precedence {
         None,
         Assignment,
+        Logic,
         Equality,
         Comparison,
         Sum,
@@ -236,6 +237,8 @@ immutable Infix[256] infix_parslets = () {
     p[Token.EqualEqual]     = Infix(Infix.Equality, &equal);
     p[Token.BangEqual]      = Infix(Infix.Equality, &not_equal);
     p[Token.Equals]         = Infix(Infix.Assignment, &assign);
+    p[Token.And]            = Infix(Infix.Logic, &and);
+    p[Token.Or]             = Infix(Infix.Logic, &or);
     p[Token.Lparen]         = Infix(Infix.Call, &call);
     p[Token.Lbracket]       = Infix(Infix.Call, &call);
     p[Token.Dot]            = Infix(Infix.Call, &dot);
@@ -360,7 +363,7 @@ AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_e
             p.pop_eol_type();
             p.error.seq_not_closed(span, p.current.span, t);
             return make_invalid(span.merge(p.current.span));
-        } 
+        }
     } while (p.current.type != cast(Token.Type) close);
 
     span = span.merge(p.current.span);
@@ -478,6 +481,9 @@ alias greater = binary!(AstNode.Greater, Infix.Comparison + 1, Token.Greater);
 alias greater_equal = binary!(AstNode.GreaterEqual, Infix.Comparison + 1, Token.GreaterEqual);
 alias equal = binary!(AstNode.Equal, Infix.Comparison + 1, Token.EqualEqual);
 alias not_equal = binary!(AstNode.NotEqual, Infix.Comparison + 1, Token.BangEqual);
+
+alias and = binary!(AstNode.And, Infix.Logic + 1, Token.And);
+alias or = binary!(AstNode.Or, Infix.Logic + 1, Token.Or);
 
 // not Infix.Power + 1 because we want this to be right-associative
 alias power = binary!(AstNode.Power, Infix.Power, Token.Caret);

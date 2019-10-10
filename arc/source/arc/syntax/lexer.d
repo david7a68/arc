@@ -34,6 +34,7 @@ struct Token {
         LessEqual, GreaterEqual, EqualEqual, BangEqual,
         FatRArrow, ColonColon, Label,
 
+        And, Or,
         If, Else, Loop, Break, Return, Continue,
         Def,
     }
@@ -56,6 +57,8 @@ struct Token {
 immutable Token.Type[Key] keywords;
 
 shared static this() {
+    keywords[StringTable.digest("and")] = Token.And;
+    keywords[StringTable.digest("or")] = Token.Or;
     keywords[StringTable.digest("if")] = Token.If;
     keywords[StringTable.digest("else")] = Token.Else;
     keywords[StringTable.digest("loop")] = Token.Loop;
@@ -142,8 +145,6 @@ struct Lexer {
                 next = scan_type(source_text, end_of_text).refine(table).locate(source);
             } while (current.type == Token.Eol);
         }
-        import std.stdio;
-        writeln(current);
     }
 }
 

@@ -24,6 +24,8 @@ class AstNode {
         GreaterEqual,
         Equal,
         NotEqual,
+        And,
+        Or,
         Add,
         Subtract,
         Multiply,

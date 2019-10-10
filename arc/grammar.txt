@@ -65,6 +65,8 @@ stmt = (def | label | break | return | continue | expr) ';'
                 | '<='
                 | '>='
                 | '=='
+                | 'and'
+                | 'or'
                 ;
 
             if = 'if' operand block (else operand)? ;
