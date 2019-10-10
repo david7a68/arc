@@ -2,6 +2,12 @@ module arc.syntax.location;
 
 alias CharPos = uint;
 
+struct SourceLoc {
+    uint line;
+    uint line_position;
+    uint column;
+}
+
 /**
  * A Span represents a contiguous region of code starting from `start` and
  * ending at `start + length` exclusive.
@@ -67,6 +73,24 @@ struct SpannedText {
         assert(start_index <= end_index);
         
         return text[start_index .. start_index + text_span.length];
+    }
+
+    SourceLoc get_loc(CharPos position) {
+        uint line_num = 1;
+        uint line_pos;
+        uint column;
+
+        const slice = text[0 .. position - start];
+        foreach (i, c; slice) {
+            if (c == '\n') {
+                column = 0;
+                line_num++;
+                line_pos = cast(uint) i;
+            }
+            column++;
+        }
+
+        return SourceLoc(line_num, line_pos, column);
     }
 
     Span merge(Span other) const {

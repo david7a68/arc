@@ -19,7 +19,7 @@ void print_ast(string filename, string text) {
     writeln("print ast");
     import arc.stringtable: StringTable;
     import arc.syntax.parser: Parser, statement;
-    import arc.syntax.syntax_reporter: SyntaxReporter;
+    import arc.syntax.reporter: SyntaxReporter;
     import arc.output.ast_printer: AstPrinter;
     import arc.syntax.location: SourceMap;
     
@@ -27,8 +27,8 @@ void print_ast(string filename, string text) {
     StringTable table;
     SourceMap sources;
     auto source = sources.put(filename, text);
-    auto error = SyntaxReporter(null, source);
-    auto parser = Parser(source.span, &table, &error);
+    auto error = new SyntaxReporter();
+    auto parser = Parser(source.span, &table, error);
     writeln("parsed");
 
     

@@ -6,15 +6,15 @@ import arc.stringtable;
 import arc.syntax.ast;
 import arc.syntax.parser;
 import arc.syntax.location;
-import arc.syntax.syntax_reporter;
+import arc.syntax.reporter;
 
 string parser_init(string s) {
     import std.format: format;
     return "
         StringTable table;
-        auto error = SyntaxReporter.with_default_handlers(null, Source());
+        auto error = new SyntaxReporter();
         auto text = SpannedText(0, %s, \"%s\");
-        auto parser = Parser(text, &table, &error);
+        auto parser = Parser(text, &table, error);
     ".format(s.length, s);
 }
 
@@ -60,15 +60,7 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:list") unittest {
-    mixin(parser_init("[3:T, b=[4), c:k()=j]"));
-    bool not_closed;
-    parser.error.user_data = &not_closed;
-    parser.error.seq_not_closed_impl = (reporter, expr_loc, err_loc, type) {
-        *(cast(bool*) reporter.user_data) = true;
-    };
-
-    auto expr = parser.primary();
-    mixin(parser_done);
+    mixin(parser_init("[3:T, b=[4), c:k()=j]", "primary"));
     assert(diff(expr, Match(AstNode.List, [
         Match(AstNode.VarExpression, [
             Match(AstNode.Integer),
@@ -89,7 +81,7 @@ AstNode[] diff(AstNode root, Match match) {
             Match(AstNode.Name),
         ])
     ])).length == 0);
-    assert(not_closed);
+    assert(parser.reporter.has_error(SyntaxError.SequenceMissingClosingDelimiter));
 }
 
 @("parser:function") unittest {

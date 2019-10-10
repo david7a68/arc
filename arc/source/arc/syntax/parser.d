@@ -3,23 +3,24 @@ module arc.syntax.parser;
 import arc.syntax.ast;
 import arc.syntax.lexer;
 import arc.syntax.location: SpannedText, Span;
+import arc.syntax.reporter: SyntaxError;
 
 struct Parser {
-    import arc.syntax.syntax_reporter: SyntaxReporter;
+    import arc.syntax.reporter: SyntaxReporter;
     import arc.stringtable: StringTable;
 
     ///
     Lexer lexer;
     ///
-    SyntaxReporter *error;
+    SyntaxReporter reporter;
 
     alias lexer this;
 
     ///
-    this(SpannedText source, StringTable* table, SyntaxReporter* error) {
+    this(SpannedText source, StringTable* table, SyntaxReporter reporter) {
         lexer = Lexer(source, table);
         lexer.ready();
-        this.error = error;
+        this.reporter = reporter;
     }
 
     ///
@@ -29,12 +30,6 @@ struct Parser {
         
         advance();
         return true;
-    }
-
-    void strict_consume(Token.Type t) {
-        if (t != current.type) {
-
-        }
     }
 
     bool empty() { return current.type == Token.Eof; }
@@ -101,7 +96,13 @@ AstNode def(ref Parser p) {
     
     auto type = AstNode.none;
     if (!p.consume(Token.Colon)) {
-        p.error.definition_missing_colon(span.merge(name.span));
+        p.reporter.error(
+            SyntaxError.DefineMissingTypeSpec,
+            "The definition of %s at (%s:%s) must have a type specification",
+            p.source.get_text(name.span),
+            p.source.get_loc(span.start).line,
+            p.source.get_loc(span.start).column
+        );
         type = make_invalid(Span(0, 0));
     }
     else if (p.current.type != Token.Equals) {
@@ -169,7 +170,13 @@ immutable Prefix[256] prefix_parslets = () {
 } ();
 
 AstNode null_prefix(ref Parser p) {
-    p.error.token_cannot_start_expr(p.current);
+    p.reporter.error(
+        SyntaxError.TokenNotAnExpression,
+        "The token %s at (%s:%s) cannot start an expression",
+        p.source.get_text(p.current.span),
+        p.source.get_loc(p.current.span.start).line,
+        p.source.get_loc(p.current.span.start).column
+    );
     scope(exit) p.advance();
     return make_invalid(p.current.span);
 }
@@ -340,7 +347,7 @@ AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_e
         if (!type_fn(p.current.type) && (p.current.type != close)) {
             scope(exit) p.advance();
             p.pop_eol_type();
-            p.error.seq_not_closed(span, p.current.span, t);
+            p.reporter.error(SyntaxError.SequenceMissingClosingDelimiter, "The %s at %s is not closed.", t, p.source.get_loc(span.start));
             return make_invalid(span.merge(p.current.span));
         }
     } while (p.current.type != cast(Token.Type) close);
