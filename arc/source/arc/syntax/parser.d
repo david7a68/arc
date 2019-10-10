@@ -117,23 +117,10 @@ AstNode def(ref Parser p) {
     return make_n_ary(AstNode.Define, span.merge(value.span), name, type, value);
 }
 
-AstNode break_(ref Parser p) {
-    auto span = p.current.span;
-    p.advance();
+alias break_ = ret_break!(AstNode.Break);
+alias return_ = ret_break!(AstNode.Return);
 
-    AstNode label = AstNode.none;
-    if (p.current.type == Token.Label) {
-        label = make_label(p.current.span, p.current.key);
-        p.advance();
-    }
-
-    AstNode value = AstNode.none;
-    if (is_expr_token(p.current.type))
-        value = expression(p);
-    return make_n_ary(AstNode.Break, span, label, value);
-}
-
-AstNode return_(ref Parser p) {
+AstNode ret_break(AstNode.Type t)(ref Parser p) {
     auto span = p.current.span;
     p.advance();
 
@@ -146,7 +133,7 @@ AstNode return_(ref Parser p) {
     auto value = AstNode.none;
     if (is_expr_token(p.current.type))
         value = expression(p);
-    return make_n_ary(AstNode.Return, span, label, value);
+    return make_n_ary(t, span, label, value);
 }
 
 AstNode continue_(ref Parser p) {
@@ -268,29 +255,25 @@ AstNode label(ref Parser p) {
     p.advance();
 
     auto label = make_label(token.span, token.key);
-    if (p.current.type == Token.If) {
-        auto inner = if_(p);
-        return make_n_ary(AstNode.Labeled, label.span.merge(inner.span), label, inner);
-    }
-    else if (p.current.type == Token.Loop) {
-        auto inner = loop(p);
-        return make_n_ary(AstNode.Labeled, label.span.merge(inner.span), label, inner);
-    }
-    else if (p.current.type == Token.Lbracket) {
-        auto inner = block(p);
-        return make_n_ary(AstNode.Labeled, label.span.merge(inner.span), label, inner);
-    }
-    else if (is_primary_token(p.current.type)) {
-        auto inner = primary(p);
-        assert(inner.type == AstNode.Function);
-        return make_n_ary(AstNode.Labeled, label.span.merge(inner.span), label, inner);
-    }
-    else if (p.current.type == Token.Semicolon) {
+    if (p.current.type == Token.Semicolon)
         return label;
-    }
-    else {
-        assert(false);
-    }
+    
+    auto i = () {
+        switch (p.current.type) with (Token.Type) {
+        case If: return if_(p);
+        case Loop: return loop(p);
+        case Lbracket: return block(p);
+        default:
+            if (is_primary_token(p.current.type)) {
+                auto inner = primary(p);
+                assert(inner.type == AstNode.Function);
+                return inner;
+            }
+            else
+                assert(false);
+        }
+    } ();
+    return make_binary(AstNode.Labeled, label, i);
 }
 
 bool is_primary_token(Token.Type t) {
@@ -381,14 +364,15 @@ AstNode var_expr(ref Parser p) {
 }
 
 AstNode var_expr2(ref Parser p, AstNode first) {
-    AstNode name_expr, type_expr, value_expr;
     auto span = first.span;
 
+    auto name_expr = AstNode.none;
+    auto type_expr = AstNode.none;
+    auto value_expr = AstNode.none;
     if (p.consume(Token.Colon)) {
         name_expr = first;
         if (p.consume(Token.Equals)) {
             value_expr = p.primary();
-            type_expr = AstNode.none;
             span = span.merge(value_expr.span);
         }
         else {
@@ -401,23 +385,17 @@ AstNode var_expr2(ref Parser p, AstNode first) {
                 value_expr = p.expression();
                 span = span.merge(value_expr.span);
             }
-            else {
-                value_expr = AstNode.none;
-            }
         }
     }
     else if (p.consume(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
         name_expr = first;
         value_expr = p.expression();
-        type_expr = AstNode.none;
         span = span.merge(value_expr.span);
     }
     else {
         // var_expr : Expression
         value_expr = first;
-        name_expr = AstNode.none;
-        type_expr = AstNode.none;
     }
 
     return make_n_ary(AstNode.VarExpression, span, name_expr, type_expr, value_expr);
@@ -468,25 +446,25 @@ AstNode self_call(ref Parser p) {
     return make_n_ary(AstNode.SelfCall, span.merge(expr.span), expr);
 }
 
-alias assign = binary!(AstNode.Assign, Infix.Assignment + 1, Token.Equals);
+alias assign        = binary!(AstNode.Assign, Infix.Assignment + 1, Token.Equals);
 
-alias add = binary!(AstNode.Add, Infix.Sum + 1, Token.Plus);
-alias subtract = binary!(AstNode.Subtract, Infix.Sum + 1, Token.Minus);
-alias multiply = binary!(AstNode.Multiply, Infix.Product + 1, Token.Star);
-alias divide = binary!(AstNode.Divide, Infix.Product + 1, Token.Slash);
-
-alias less = binary!(AstNode.Less, Infix.Comparison + 1, Token.Less);
-alias less_equal = binary!(AstNode.LessEqual, Infix.Comparison + 1, Token.LessEqual);
-alias greater = binary!(AstNode.Greater, Infix.Comparison + 1, Token.Greater);
-alias greater_equal = binary!(AstNode.GreaterEqual, Infix.Comparison + 1, Token.GreaterEqual);
-alias equal = binary!(AstNode.Equal, Infix.Comparison + 1, Token.EqualEqual);
-alias not_equal = binary!(AstNode.NotEqual, Infix.Comparison + 1, Token.BangEqual);
-
-alias and = binary!(AstNode.And, Infix.Logic + 1, Token.And);
-alias or = binary!(AstNode.Or, Infix.Logic + 1, Token.Or);
+alias add           = binary!(AstNode.Add, Infix.Sum + 1, Token.Plus);
+alias subtract      = binary!(AstNode.Subtract, Infix.Sum + 1, Token.Minus);
+alias multiply      = binary!(AstNode.Multiply, Infix.Product + 1, Token.Star);
+alias divide        = binary!(AstNode.Divide, Infix.Product + 1, Token.Slash);
 
 // not Infix.Power + 1 because we want this to be right-associative
-alias power = binary!(AstNode.Power, Infix.Power, Token.Caret);
+alias power         = binary!(AstNode.Power, Infix.Power, Token.Caret);
+
+alias less          = binary!(AstNode.Less, Infix.Comparison + 1, Token.Less);
+alias less_equal    = binary!(AstNode.LessEqual, Infix.Comparison + 1, Token.LessEqual);
+alias greater       = binary!(AstNode.Greater, Infix.Comparison + 1, Token.Greater);
+alias greater_equal = binary!(AstNode.GreaterEqual, Infix.Comparison + 1, Token.GreaterEqual);
+alias equal         = binary!(AstNode.Equal, Infix.Comparison + 1, Token.EqualEqual);
+alias not_equal     = binary!(AstNode.NotEqual, Infix.Comparison + 1, Token.BangEqual);
+
+alias and           = binary!(AstNode.And, Infix.Logic + 1, Token.And);
+alias or            = binary!(AstNode.Or, Infix.Logic + 1, Token.Or);
 
 /// Binary := Expression <op> Expression ;
 AstNode binary(AstNode.Type t, int prec, Token.Type ttype)(ref Parser p, AstNode lhs) {
