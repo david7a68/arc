@@ -23,13 +23,52 @@ struct Parser {
         this.reporter = reporter;
     }
 
-    ///
-    bool consume(Token.Type type) {
-        if (type != current.type)
+    Token take() {
+        scope(exit) advance();
+        return lexer.current;
+    }
+
+    /// Consumes the next token if current.type == t, else raises a TokenExpectMismatch error
+    bool expect(Token.Type t, string func = __FUNCTION__) {
+        if (current.type == t) {
+            advance();
+            return true;
+        }
+        else {
+            reporter.error(
+                SyntaxError.TokenExpectMismatch,
+                "A token of type %s was expected, but a %s was encountered instead at (%s:%s) by %s.",
+                t,
+                current.type,
+                source.get_loc(current.span.start).line,
+                source.get_loc(current.span.start).column,
+                func
+            );
+            advance();
             return false;
-        
-        advance();
-        return true;
+        }
+    }
+
+    /// Returns the next token if current.type == t, else raises a TokenExpectMismatch error
+    Token take(Token.Type t) {
+        auto tok = current;
+        if (expect(t))
+            return tok;
+        else
+            return Token(); // Token.type default initializes to Token.Invalid
+    }
+
+    /// Skips the next token if curent.type == t and returns true, else returns false
+    bool skip(Token.Type t) {
+        if (current.type == t) {
+            advance();
+            return true;
+        }
+        return false;
+    }
+
+    void skip_all(Token.Type t) {
+        while (skip(t)) continue;
     }
 
     bool empty() { return current.type == Token.Eof; }
@@ -50,7 +89,7 @@ debug bool matches(T)(T t, T[] types...) {
 
 AstNode statement(ref Parser p) {
     p.push_eol_type(Token.Semicolon);
-
+    
     auto s = () {
         switch (p.current.type) with (Token.Type) {
         case Def:       return def(p);
@@ -61,7 +100,7 @@ AstNode statement(ref Parser p) {
         }
     } ();
 
-    p.consume(Token.Semicolon);
+    p.expect(Token.Semicolon);
     p.pop_eol_type();
     return s;
 }
@@ -88,14 +127,14 @@ bool is_stat_token(Token.Type t) {
 /// def = 'def' name ':' primary? '=' expr ;
 AstNode def(ref Parser p) {
     auto span = p.current.span;
-    p.consume(Token.Def);
+    p.expect(Token.Def);
     
     auto name = p.name!true();
     while (p.current.type == Token.ColonColon)
         name = p.path(name);
     
     auto type = AstNode.none;
-    if (!p.consume(Token.Colon)) {
+    if (!p.skip(Token.Colon)) {
         p.reporter.error(
             SyntaxError.DefineMissingTypeSpec,
             "The definition of %s at (%s:%s) must have a type specification",
@@ -109,19 +148,19 @@ AstNode def(ref Parser p) {
         type = p.primary();
     }
     
-    p.consume(Token.Equals);
+    p.expect(Token.Equals);
     auto value = p.expression();
 
     return make_n_ary(AstNode.Define, span.merge(value.span), name, type, value);
 }
 
-alias break_ = ctrl_flow!(AstNode.Break, true);
-alias return_ = ctrl_flow!(AstNode.Return, true);
-alias continue_ = ctrl_flow!(AstNode.Continue, false);
+alias break_ = ctrl_flow!(AstNode.Break, Token.Break, true);
+alias return_ = ctrl_flow!(AstNode.Return, Token.Return, true);
+alias continue_ = ctrl_flow!(AstNode.Continue, Token.Continue, false);
 
-AstNode ctrl_flow(AstNode.Type t, bool with_value)(ref Parser p) {
+AstNode ctrl_flow(AstNode.Type t, Token.Type keyword, bool with_value)(ref Parser p) {
     auto span = p.current.span;
-    p.advance();
+    p.expect(keyword);
 
     auto label = AstNode.none;
     if (p.current.type == Token.Label) {
@@ -131,7 +170,7 @@ AstNode ctrl_flow(AstNode.Type t, bool with_value)(ref Parser p) {
 
     static if (with_value) {
         auto value = AstNode.none;
-        if (is_expr_token(p.current.type))
+        if (p.current.type != Token.Semicolon)
             value = expression(p);
         return make_n_ary(t, span, label, value);
     }
@@ -165,6 +204,7 @@ immutable Prefix[256] prefix_parslets = () {
     p[Token.Loop] = &loop;
     p[Token.Ampersand] = &get_ref;
     p[Token.Star] = &pointer;
+    p[Token.Label] = &label;
 
     return p;
 } ();
@@ -223,10 +263,10 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Equals]         = Infix(Infix.Assignment, &assign);
     p[Token.And]            = Infix(Infix.Logic, &and);
     p[Token.Or]             = Infix(Infix.Logic, &or);
-    p[Token.Lparen]         = Infix(Infix.Call, &call);
-    p[Token.Lbracket]       = Infix(Infix.Call, &call);
-    p[Token.Dot]            = Infix(Infix.Call, &dot);
-    p[Token.Colon]          = Infix(Infix.Primary, &var_expr2);
+    p[Token.Lparen]         = Infix(Infix.Primary, &call);
+    p[Token.Lbracket]       = Infix(Infix.Primary, &call);
+    p[Token.Dot]            = Infix(Infix.Primary, &dot);
+    p[Token.Colon]          = Infix(Infix.Assignment, &var_expr2);
     p[Token.ColonColon]     = Infix(Infix.Primary, &path);
 
     return p;
@@ -255,61 +295,22 @@ AstNode label(ref Parser p) {
     if (p.current.type == Token.Semicolon)
         return label;
     
-    auto i = () {
-        switch (p.current.type) with (Token.Type) {
-        case If:        return if_(p);
-        case Loop:      return loop(p);
-        case Lbracket:  return block(p);
-        default:
-            if (is_primary_token(p.current.type)) {
-                auto inner = primary(p);
-                assert(inner.type == AstNode.Function);
-                return inner;
-            }
-            else
-                assert(false);
-        }
-    } ();
-    return make_binary(AstNode.Labeled, label, i);
-}
-
-bool is_primary_token(Token.Type t) {
-    switch (t) with (Token.Type) {
-    case Name:
-    case Char:
-    case Integer:
-    case Lparen:    // our good fortune that () and a() are both primaries
-    case Lbracket:  // ditto
-    case Dot:
-    case FatRArrow:
-    case ColonColon:
-    case Label:
-    case Star:
-    case Ampersand:
-        return true;
-    default:
-        return false;
-    }
+    return make_binary(AstNode.Labeled, label, expression(p));
 }
 
 AstNode primary(ref Parser p) {
-    auto node = prefix_parslets[p.current.type](p);
-    while (is_primary_token(p.current.type) && infix_parslets[p.current.type].parselet !is null) {
-        node = infix_parslets[p.current.type].parselet(p, node);
-    }
-    return node;
+    return expression(p, Infix.Primary);
 }
 
 /// Name := ('_' | $a-zA-Z)* ;
 AstNode name(bool should_test)(ref Parser p) {
-    static if (should_test) {
-        if (p.current.type != Token.Name) {
-            // @implement_error
-            return make_invalid(p.current.span);
-        }
-    }
-    scope(exit) p.advance();
-    return make_name(p.current.span, p.current.key);
+    Token t;
+    static if (should_test)
+        t = p.take(Token.Name);
+    else
+        t = p.take();
+
+    return make_name(t.span, t.key);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -332,9 +333,9 @@ alias block = seq!(AstNode.Block, '{', '}', ';', statement, is_stat_token);
 AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_element, alias type_fn)(ref Parser p) {
     auto span = p.current.span.span;
     p.push_eol_type(cast(Token.Type) separator);
-    p.consume(cast(Token.Type) open);
+    p.expect(cast(Token.Type) open);
 
-    while (p.consume(cast(Token.Type) separator)) continue;
+    p.skip_all(cast(Token.Type) separator);
     
     AstNode[] members;
     if (p.current.type != cast(Token.Type) close) do {
@@ -342,12 +343,17 @@ AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_e
         span = span.merge(e.span);
         members ~= e;
 
-        while (p.consume(cast(Token.Type) separator)) continue;
+        p.skip_all(cast(Token.Type) separator);
 
         if (!type_fn(p.current.type) && (p.current.type != close)) {
             scope(exit) p.advance();
             p.pop_eol_type();
-            p.reporter.error(SyntaxError.SequenceMissingClosingDelimiter, "The %s at %s is not closed.", t, p.source.get_loc(span.start));
+            p.reporter.error(
+                SyntaxError.SequenceMissingClosingDelimiter,
+                "The %s at %s is not closed.",
+                t,
+                p.source.get_loc(span.start)
+            );
             return make_invalid(span.merge(p.current.span));
         }
     } while (p.current.type != cast(Token.Type) close);
@@ -372,9 +378,9 @@ AstNode var_expr2(ref Parser p, AstNode first) {
     auto name_expr = AstNode.none;
     auto type_expr = AstNode.none;
     auto value_expr = AstNode.none;
-    if (p.consume(Token.Colon)) {
+    if (p.skip(Token.Colon)) {
         name_expr = first;
-        if (p.consume(Token.Equals)) {
+        if (p.skip(Token.Equals)) {
             value_expr = p.primary();
             span = span.merge(value_expr.span);
         }
@@ -383,14 +389,14 @@ AstNode var_expr2(ref Parser p, AstNode first) {
             type_expr = p.primary();
             span = span.merge(type_expr.span);
 
-            if (p.consume(Token.Equals)) {
+            if (p.skip(Token.Equals)) {
                 // var_expr : Expression (":" Expression ("=" Expression)?)?
                 value_expr = p.expression();
                 span = span.merge(value_expr.span);
             }
         }
     }
-    else if (p.consume(Token.Equals)) {
+    else if (p.skip(Token.Equals)) {
         // var_expr : Expression ("=" Expression)?
         name_expr = first;
         value_expr = p.expression();
@@ -406,14 +412,14 @@ AstNode var_expr2(ref Parser p, AstNode first) {
 
 /// Function := Expression '=>' Expression ;
 AstNode function_(ref Parser p, AstNode params) {
-    p.consume(Token.FatRArrow);
+    p.expect(Token.FatRArrow);
     auto body = p.expression();
     return make_binary(AstNode.Function, params, body);
 }
 
 AstNode dot(ref Parser p, AstNode lhs) {
     assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall));
-    p.consume(Token.Dot);
+    p.expect(Token.Dot);
 
     return make_binary(AstNode.Call, lhs, prefix_parslets[p.current.type](p));
 }
@@ -426,7 +432,7 @@ AstNode call(ref Parser p, AstNode lhs) {
 
 AstNode path(ref Parser p, AstNode lhs) {
     assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall, AstNode.Path));
-    p.consume(Token.ColonColon);
+    p.expect(Token.ColonColon);
     return make_binary(AstNode.Path, lhs, prefix_parslets[p.current.type](p));
 }
 
@@ -472,14 +478,14 @@ AstNode binary(AstNode.Type t, int prec)(ref Parser p, AstNode lhs) {
 
 AstNode if_(ref Parser p) {
     Span span = p.current.span;
-    p.consume(Token.If);
+    p.expect(Token.If);
 
     auto cond = p.expression();
     auto body = p.block();
     span = span.merge(body.span);
 
     AstNode else_branch = AstNode.none;
-    if (p.consume(Token.Else)) {
+    if (p.skip(Token.Else)) {
         else_branch = p.statement();
         span = span.merge(else_branch.span);
     }
@@ -489,7 +495,7 @@ AstNode if_(ref Parser p) {
 
 AstNode loop(ref Parser p, ) {
     auto span = p.current.span;
-    p.consume(Token.Loop);
+    p.expect(Token.Loop);
     auto body = p.expression();
     return make_n_ary(AstNode.Loop, span.merge(body.span), body);
 }

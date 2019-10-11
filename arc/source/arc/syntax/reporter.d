@@ -29,6 +29,7 @@ class SyntaxReporter {
 
 enum SyntaxError {
     NoError,
+    TokenExpectMismatch,
     TokenNotAnExpression,
     SequenceMissingClosingDelimiter,
     DefineMissingTypeSpec,

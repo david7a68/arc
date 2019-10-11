@@ -130,7 +130,10 @@ struct Lexer {
             case Name:
             case Integer:
             case Char:
-                current = Token(eol_type_stack.back, next.span);
+            case Break:
+            case Continue:
+            case Return:
+                current = Token(eol_type_stack.back, SpannedText(next.span.start, 0, next.span.text[0 .. 0]));
                 break;
             default:
                 do {

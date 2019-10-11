@@ -1,16 +1,16 @@
 stmt = (def | label | break | return | continue | expr) ';'
     def = 'def' name ':' primary? '=' expr ;
 
-    break = 'break' label? expr ;
+    break = 'break' label? expr? ;
 
-    return = 'return' label? expr ;
+    return = 'return' label? expr? ;
 
     continue = 'continue' label? ;
 
     expr = operand | label | var_expr;
         label = '\'' name ;
         
-        var_expr = primary (':' primary? ('=' expr)?)? ;
+        var_expr = name (':' primary? ('=' expr)?)? ;
 
         operand = primary | unary | binary | if | loop | labeled;
 
