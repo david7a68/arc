@@ -32,7 +32,7 @@ struct Token {
         Equals = '=',
         Less = '<', Greater = '>',
         LessEqual, GreaterEqual, EqualEqual, BangEqual,
-        FatRArrow, ColonColon, Label,
+        FatRArrow, ColonColon, Label, DotDotDot,
 
         And, Or,
         If, Else, Loop, Break, Return, Continue,
@@ -249,7 +249,6 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '{':
         case '}':
         case ',':
-        case '.':
         case ';':
         case '+':
         case '*':
@@ -257,6 +256,16 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '-':
         case '&':
             return make_token(cast(Token.Type) *cursor, 1);
+        case '.':
+            cursor++;
+            if (cursor <= end && *cursor == '.') {
+                cursor++;
+                if (cursor <= end && *cursor == '.')
+                    return make_token(Token.DotDotDot, 1);
+                else
+                    return make_token(Token.Invalid, 0);
+            }
+            return make_token(Token.Dot, 0);
         case ':':
             cursor++;
             if (cursor <= end && *cursor == ':')

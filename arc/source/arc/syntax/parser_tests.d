@@ -176,7 +176,33 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:var_expr") unittest {
+    mixin(parser_init("parser:var_expr", "a", "var_expr"));
+    assert(diff(tree, Match(AstNode.VarExpression, [
+        Match(AstNode.None),
+        Match(AstNode.None),
+        Match(AstNode.Name),
+    ])).length == 0);
+}
 
+@("parser:var_expr2") unittest {
+    mixin(parser_init("parser:var_expr2", "a : b()", "var_expr"));
+    assert(diff(tree, Match(AstNode.VarExpression, [
+        Match(AstNode.Name),
+        Match(AstNode.Call, [
+            Match(AstNode.Name),
+            Match(AstNode.List)
+        ]),
+        Match(AstNode.None),
+    ])).length == 0);
+}
+
+@("parser:var_expr3") unittest {
+    mixin(parser_init("parser:var_expr3", "a:b=c", "var_expr"));
+    assert(diff(tree, Match(AstNode.VarExpression, [
+        Match(AstNode.Name),
+        Match(AstNode.Name),
+        Match(AstNode.Name),
+    ])).length == 0);
 }
 
 @("parser:name") unittest {

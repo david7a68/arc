@@ -306,7 +306,10 @@ AstNode name(bool should_test)(ref Parser p) {
     else
         t = p.take();
 
-    return make_name(t.span, t.key);
+    if (t.type == Token.Name)
+        return make_name(t.span, t.key);
+    else
+        return make_invalid(t.span);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -322,26 +325,25 @@ AstNode char_(ref Parser p) {
     return make_char(p.current.span);
 }
 
-alias paren_list = seq!(AstNode.List, '(', ')', ',', var_expr, is_expr_token);
-alias bracket_list = seq!(AstNode.List, '[', ']', ',', var_expr, is_expr_token);
-alias block = seq!(AstNode.Block, '{', '}', ';', statement, is_stat_token);
+alias paren_list = seq!(AstNode.List, '(', ')');
+alias bracket_list = seq!(AstNode.List, '[', ']');
 
-AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_element, alias type_fn)(ref Parser p) {
+AstNode seq(AstNode.Type t, char open, char close)(ref Parser p) {
     auto span = p.current.span.span;
-    p.push_eol_type(cast(Token.Type) separator);
     p.expect(cast(Token.Type) open);
 
-    p.skip_all(cast(Token.Type) separator);
+    p.skip_all(Token.Comma);
+    p.push_eol_type(Token.Comma);
     
     AstNode[] members;
     if (p.current.type != cast(Token.Type) close) do {
-        auto e = parse_element(p);
+        auto e = var_expr(p);
         span = span.merge(e.span);
         members ~= e;
 
-        p.skip_all(cast(Token.Type) separator);
+        p.skip_all(Token.Comma);
 
-        if (!type_fn(p.current.type) && (p.current.type != close)) {
+        if (!is_expr_token(p.current.type) && (p.current.type != close)) {
             scope(exit) p.advance();
             p.pop_eol_type();
             p.reporter.error(
@@ -358,6 +360,40 @@ AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_e
     p.pop_eol_type();
     p.advance();
     return make_n_ary(t, span, members);
+}
+
+AstNode block(ref Parser p) {
+    auto span = p.current.span.span;
+    p.push_eol_type(Token.Semicolon);
+    p.expect(Token.Lbrace);
+
+    p.skip_all(Token.Semicolon);
+    
+    AstNode[] members;
+    if (p.current.type != Token.Rbrace) do {
+        auto e = statement(p);
+        span = span.merge(e.span);
+        members ~= e;
+
+        p.skip_all(Token.Semicolon);
+
+        if (!is_stat_token(p.current.type) && (p.current.type != Token.Rbrace)) {
+            scope(exit) p.advance();
+            p.pop_eol_type();
+            p.reporter.error(
+                SyntaxError.SequenceMissingClosingDelimiter,
+                span.start,
+                "Block not closed",
+                AstNode.Block,
+            );
+            return make_invalid(span.merge(p.current.span));
+        }
+    } while (p.current.type != Token.Rbrace);
+
+    span = span.merge(p.current.span);
+    p.pop_eol_type();
+    p.advance();
+    return make_n_ary(AstNode.Block, span, members);
 }
 
 /**
