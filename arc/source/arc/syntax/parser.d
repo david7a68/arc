@@ -389,8 +389,6 @@ AstNode seq(char open, char close)(ref Parser p) {
             return make_n_ary(AstNode.List, span.merge(p.take().span), wrap(next));
         }
         else {
-            import std.stdio; 
-            writeln(p.current);
             scope(exit) p.advance();
             p.reporter.error(
                 SyntaxError.SequenceMissingClosingDelimiter,
