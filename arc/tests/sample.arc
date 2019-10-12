@@ -30,7 +30,9 @@ def matches := (meta::Type T) => (t: T, T[] types) => {
     i := 0
     loop if i < types.length {
         if types[i] == t { return true }
-    } else break
+    } else {
+        break
+    }
     return false
 }
 

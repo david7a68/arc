@@ -26,7 +26,7 @@ void print_ast(string filename, string text) {
     StringTable table;
     SourceMap sources;
     auto source = sources.put(filename, text);
-    auto error = new SyntaxReporter();
+    auto error = new SyntaxReporter(source);
     auto parser = Parser(source.span, &table, error);
 
     
@@ -37,5 +37,6 @@ void print_ast(string filename, string text) {
     }
     assert(parser.empty);
     writeln(printer.data);
+    writeln("errors: ", parser.reporter.errors);
     printer.reset();
 }

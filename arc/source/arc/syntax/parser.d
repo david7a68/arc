@@ -37,11 +37,10 @@ struct Parser {
         else {
             reporter.error(
                 SyntaxError.TokenExpectMismatch,
-                "A token of type %s was expected, but a %s was encountered instead at (%s:%s) by %s.",
+                current.span.start,
+                "A token of type %s was expected, but a %s was encountered instead by %s.",
                 t,
                 current.type,
-                source.get_loc(current.span.start).line,
-                source.get_loc(current.span.start).column,
                 func
             );
             advance();
@@ -96,11 +95,12 @@ AstNode statement(ref Parser p) {
         case Break:     return break_(p);
         case Return:    return return_(p);
         case Continue:  return continue_(p);
-        default:        return expression(p);
+        default:
+            auto e = expression(p);
+            p.expect(Token.Semicolon);
+            return e;
         }
     } ();
-
-    p.expect(Token.Semicolon);
     p.pop_eol_type();
     return s;
 }
@@ -113,6 +113,7 @@ bool is_stat_token(Token.Type t) {
     case Lbrace:
     case Dot:
 	case If:
+    case Label:
 	case Loop:
     case Break:
     case Return:
@@ -137,10 +138,9 @@ AstNode def(ref Parser p) {
     if (!p.skip(Token.Colon)) {
         p.reporter.error(
             SyntaxError.DefineMissingTypeSpec,
-            "The definition of %s at (%s:%s) must have a type specification",
+            span.start,
+            "The definition of %s must have a type specification",
             p.source.get_text(name.span),
-            p.source.get_loc(span.start).line,
-            p.source.get_loc(span.start).column
         );
         type = make_invalid(Span(0, 0));
     }
@@ -150,6 +150,7 @@ AstNode def(ref Parser p) {
     
     p.expect(Token.Equals);
     auto value = p.expression();
+    p.expect(Token.Semicolon);
 
     return make_n_ary(AstNode.Define, span.merge(value.span), name, type, value);
 }
@@ -161,6 +162,7 @@ alias continue_ = ctrl_flow!(AstNode.Continue, Token.Continue, false);
 AstNode ctrl_flow(AstNode.Type t, Token.Type keyword, bool with_value)(ref Parser p) {
     auto span = p.current.span;
     p.expect(keyword);
+    scope(exit) p.expect(Token.Semicolon);
 
     auto label = AstNode.none;
     if (p.current.type == Token.Label) {
@@ -190,7 +192,6 @@ alias Prefix = AstNode function(ref Parser);
 /// List of functions for parsing tokens that can start expressions
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p = &null_prefix;
-
     p[Token.Name] = &name!false;
     p[Token.Integer] = &integer;
     p[Token.Char] = &char_;
@@ -205,17 +206,15 @@ immutable Prefix[256] prefix_parslets = () {
     p[Token.Ampersand] = &get_ref;
     p[Token.Star] = &pointer;
     p[Token.Label] = &label;
-
     return p;
 } ();
 
 AstNode null_prefix(ref Parser p) {
     p.reporter.error(
         SyntaxError.TokenNotAnExpression,
-        "The token %s at (%s:%s) cannot start an expression",
+        p.current.span.start,
+        "The token %s cannot start an expression",
         p.source.get_text(p.current.span),
-        p.source.get_loc(p.current.span.start).line,
-        p.source.get_loc(p.current.span.start).column
     );
     scope(exit) p.advance();
     return make_invalid(p.current.span);
@@ -247,7 +246,6 @@ struct Infix {
 /// List of functions for parsing infix expressions (binary operators, calls, etc)
 immutable Infix[256] infix_parslets = () {
     Infix[256] p;
-
     p[Token.FatRArrow]      = Infix(Infix.Primary, &function_);
     p[Token.Plus]           = Infix(Infix.Sum, &add);
     p[Token.Minus]          = Infix(Infix.Sum, &subtract);
@@ -268,7 +266,6 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Dot]            = Infix(Infix.Primary, &dot);
     p[Token.Colon]          = Infix(Infix.Assignment, &var_expr2);
     p[Token.ColonColon]     = Infix(Infix.Primary, &path);
-
     return p;
 } ();
 
@@ -288,14 +285,13 @@ AstNode expression(ref Parser p, Infix.Precedence prec = Infix.Precedence.Assign
 }
 
 AstNode label(ref Parser p) {
-    auto token = p.current;
-    p.advance();
-
+    auto token = p.take();
     auto label = make_label(token.span, token.key);
-    if (p.current.type == Token.Semicolon)
-        return label;
-    
-    return make_binary(AstNode.Labeled, label, expression(p));
+
+    if (prefix_parslets[p.current.type] !is &null_prefix)
+        return make_binary(AstNode.Labeled, label, expression(p));
+
+    return label;
 }
 
 AstNode primary(ref Parser p) {
@@ -350,9 +346,9 @@ AstNode seq(AstNode.Type t, char open, char close, char separator, alias parse_e
             p.pop_eol_type();
             p.reporter.error(
                 SyntaxError.SequenceMissingClosingDelimiter,
-                "The %s at %s is not closed.",
+                span.start,
+                "List not closed",
                 t,
-                p.source.get_loc(span.start)
             );
             return make_invalid(span.merge(p.current.span));
         }
@@ -486,7 +482,7 @@ AstNode if_(ref Parser p) {
 
     AstNode else_branch = AstNode.none;
     if (p.skip(Token.Else)) {
-        else_branch = p.statement();
+        else_branch = p.expression();
         span = span.merge(else_branch.span);
     }
 

@@ -99,9 +99,10 @@ struct Lexer {
     this(SpannedText source, StringTable* table) {
         source_text = source.text.ptr;
         end_of_text = source.text.ptr + source.length;
-        eol_type_stack.clear();
         this.table = table;
         this.source = source;
+
+        eol_type_stack.clear();
     }
 
     /// Advances the lexer so that `current` is the first-read token.
@@ -129,6 +130,7 @@ struct Lexer {
             case Rbrace:
             case Name:
             case Integer:
+            case Label:
             case Char:
             case Break:
             case Continue:
@@ -257,51 +259,55 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             return make_token(cast(Token.Type) *cursor, 1);
         case ':':
             cursor++;
-            if (*cursor == ':')
+            if (cursor <= end && *cursor == ':')
                 return make_token(Token.ColonColon, 1);
             else
                 return make_token(Token.Colon, 0);
         case '/':
             cursor++;
-            if (*cursor == '/') {
+            if (cursor <= end && *cursor == '/') {
                 while (*cursor != '\n') cursor++;
                 goto switch_start;
             }
             else return make_token(Token.Slash, 0);
         case '=':
             cursor++;
-            if (*cursor == '>') // advance only by one
+            if (cursor != end && *cursor == '>') // advance only by one
                 return make_token(Token.FatRArrow, 1);
-            else if (*cursor == '=')
+            else if (cursor != end && *cursor == '=')
                 return make_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Equals, 0);
         case '<':
             cursor++;
-            if (*cursor == '=')
+            if (cursor != end && *cursor == '=')
                 return make_token(Token.LessEqual, 1);
             else
                 return make_token(Token.Less, 0);
         case '>':
             cursor++;
-            if (*cursor == '=')
+            if (cursor != end && *cursor == '=')
                 return make_token(Token.GreaterEqual, 1);
             else
                 return make_token(Token.Greater, 0);
         case '!':
             cursor++;
-            if (*cursor == '=')
+            if (cursor != end && *cursor == '=')
                 return make_token(Token.BangEqual, 1);
             else
                 return make_token(Token.Invalid, 0);
         case '\'':
             cursor++;
-            if (*cursor == '\\')
+            if (cursor == end)
+                return make_token(Token.Invalid, 0);
+            else if (*cursor == '\\')
                 return make_token(Token.Char, 2 + 1);
             else {
                 cursor++;
 
-                if (*cursor == '\'')
+                if (cursor == end)
+                    return make_token(Token.Invalid, 0);
+                else if (*cursor == '\'')
                     return make_token(Token.Char, 1);
                 else {
                     char_loop: if (cursor < end) switch (*cursor) {

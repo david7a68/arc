@@ -8,15 +8,17 @@ import arc.syntax.parser;
 import arc.syntax.location;
 import arc.syntax.reporter;
 
-string parser_init(string s, string parser_name, bool err_check = true) {
+string parser_init(string test_name, string s, string parser_name, bool err_check = true) {
     import std.format: format;
-    return "StringTable table;
-        auto error = new SyntaxReporter();
-        auto text = SpannedText(0, %s, \"%s\");
-        auto parser = Parser(text, &table, error);
-        auto expr = parser.%s();
-        assert(parser.empty == true);
-        %s".format(s.length, s, parser_name, err_check ? "assert(parser.reporter.errors.length == 0);" : "");
+    return "
+        StringTable table;
+        SourceMap sources;
+        auto source = sources.put(\"%s\", \"%s\");
+        auto error = new SyntaxReporter(source);
+        auto parser = Parser(source.span, &table, error);
+        auto tree = parser.%s();
+        assert(parser.empty);
+        %s".format(test_name, s, parser_name, err_check ? "assert(parser.reporter.errors.length == 0);" : "");
 }
 
 
@@ -39,8 +41,8 @@ AstNode[] diff(AstNode root, Match match) {
 // ---------- Tests Begin Here ---------- //
 
 @("parser:def") unittest {
-    mixin(parser_init("def a: T = init;", "statement"));
-    assert(diff(expr, Match(AstNode.Define, [
+    mixin(parser_init("parser:def", "def a: T = init;", "statement"));
+    assert(diff(tree, Match(AstNode.Define, [
         Match(AstNode.Name),
         Match(AstNode.Name),
         Match(AstNode.Name),
@@ -49,22 +51,22 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:break") unittest {
     {
-        mixin(parser_init("break;", "statement"));
-        assert(diff(expr, Match(AstNode.Break, [
+        mixin(parser_init("parser:break", "break;", "statement"));
+        assert(diff(tree, Match(AstNode.Break, [
             Match(AstNode.None),
             Match(AstNode.None),
         ])).length == 0);
     }
     {
-        mixin(parser_init("break 'here;", "statement"));
-        assert(diff(expr, Match(AstNode.Break, [
+        mixin(parser_init("parser:break", "break 'here;", "statement"));
+        assert(diff(tree, Match(AstNode.Break, [
             Match(AstNode.Label),
             Match(AstNode.None),
         ])).length == 0);
     }
     {
-        mixin(parser_init("break -a * b;", "statement"));
-        assert(diff(expr, Match(AstNode.Break, [
+        mixin(parser_init("parser:break", "break -a * b;", "statement"));
+        assert(diff(tree, Match(AstNode.Break, [
             Match(AstNode.None),
             Match(AstNode.Multiply, [
                 Match(AstNode.Negate, [ Match(AstNode.Name) ]),
@@ -73,15 +75,15 @@ AstNode[] diff(AstNode root, Match match) {
         ])).length == 0);
     }
     {
-        mixin(parser_init("break 'here a;", "statement"));
-        assert(diff(expr, Match(AstNode.Break, [
+        mixin(parser_init("parser:break", "break 'here a;", "statement"));
+        assert(diff(tree, Match(AstNode.Break, [
             Match(AstNode.Label),
             Match(AstNode.Name)
         ])).length == 0);
     }
     {
-        mixin(parser_init("{break}", "statement"));
-        assert(diff(expr, Match(AstNode.Block, [
+        mixin(parser_init("parser:break", "{break}", "statement"));
+        assert(diff(tree, Match(AstNode.Block, [
             Match(AstNode.Break, [
                 Match(AstNode.None),
                 Match(AstNode.None),
@@ -92,8 +94,39 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:return") unittest {
     {
-        mixin(parser_init("{return}", "statement"));
-        assert(diff(expr, Match(AstNode.Block, [
+        mixin(parser_init("parser:return", "return;", "statement"));
+        assert(diff(tree, Match(AstNode.Return, [
+            Match(AstNode.None),
+            Match(AstNode.None),
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:return", "return 'here;", "statement"));
+        assert(diff(tree, Match(AstNode.Return, [
+            Match(AstNode.Label),
+            Match(AstNode.None),
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:return", "return -a * b;", "statement"));
+        assert(diff(tree, Match(AstNode.Return, [
+            Match(AstNode.None),
+            Match(AstNode.Multiply, [
+                Match(AstNode.Negate, [ Match(AstNode.Name) ]),
+                Match(AstNode.Name)
+            ]),
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:return", "return 'here a;", "statement"));
+        assert(diff(tree, Match(AstNode.Return, [
+            Match(AstNode.Label),
+            Match(AstNode.Name)
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:return", "{return}", "statement"));
+        assert(diff(tree, Match(AstNode.Block, [
             Match(AstNode.Return, [
                 Match(AstNode.None),
                 Match(AstNode.None),
@@ -104,8 +137,20 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:continue") unittest {
     {
-        mixin(parser_init("{continue}", "statement"));
-        assert(diff(expr, Match(AstNode.Block, [
+        mixin(parser_init("parser:continue", "continue;", "statement"));
+        assert(diff(tree, Match(AstNode.Continue, [
+            Match(AstNode.None),
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:continue", "continue 'here;", "statement"));
+        assert(diff(tree, Match(AstNode.Continue, [
+            Match(AstNode.Label),
+        ])).length == 0);
+    }
+    {
+        mixin(parser_init("parser:continue", "{continue}", "statement"));
+        assert(diff(tree, Match(AstNode.Block, [
             Match(AstNode.Continue, [
                 Match(AstNode.None),
             ])
@@ -113,25 +158,46 @@ AstNode[] diff(AstNode root, Match match) {
     }
 }
 
+@("parser:label") unittest {
+    mixin(parser_init("parser:label", "'any_alpha_name0", "expression"));
+    assert(diff(tree, Match(AstNode.Label)).length == 0);
+}
+
+@("parser:label2") unittest{
+    mixin(parser_init("parser:label2", "'label *c", "expression"));
+    assert(diff(tree,
+        Match(AstNode.Labeled, [
+            Match(AstNode.Label),
+            Match(AstNode.Pointer, [
+                Match(AstNode.Name)
+            ])
+        ])
+    ).length == 0);
+}
+
+@("parser:var_expr") unittest {
+
+}
+
 @("parser:name") unittest {
-    mixin(parser_init("bks_1029", "expression"));
-    assert(expr.type == AstNode.Name);
+    mixin(parser_init("parser:name", "bks_1029", "expression"));
+    assert(tree.type == AstNode.Name);
 }
 
 @("parser:int") unittest {
-    mixin(parser_init("10294", "expression"));
-    assert(expr.type == AstNode.Integer);
-    assert(expr.value == 10_294);
+    mixin(parser_init("parser:int", "10294", "expression"));
+    assert(tree.type == AstNode.Integer);
+    assert(tree.value == 10_294);
 }
 
 @("parser:char") unittest {
-    mixin(parser_init("'\n'", "expression"));
-    assert(expr.type == AstNode.Char);
+    mixin(parser_init("parser:char", "'\n'", "expression"));
+    assert(tree.type == AstNode.Char);
 }
 
 @("parser:list") unittest {
-    mixin(parser_init("[3:T, b=[4), c:k()=j]", "expression", false));
-    assert(diff(expr, Match(AstNode.List, [
+    mixin(parser_init("parser:list", "[3:T, b=[4), c:k()=j]", "expression", false));
+    assert(diff(tree, Match(AstNode.List, [
         Match(AstNode.VarExpression, [
             Match(AstNode.Integer),
             Match(AstNode.Name),
@@ -155,8 +221,8 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:function") unittest {
-    mixin(parser_init("() => blah * bleh", "expression"));
-    assert(diff(expr, Match(AstNode.Function, [
+    mixin(parser_init("parser:func", "() => blah * bleh", "expression"));
+    assert(diff(tree, Match(AstNode.Function, [
         Match(AstNode.List),
         Match(AstNode.Multiply, [
             Match(AstNode.Name),
@@ -166,8 +232,8 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:call") unittest {
-    mixin(parser_init("[][()]", "expression"));
-    assert(diff(expr, Match(AstNode.Call, [
+    mixin(parser_init("parser:call", "[][()]", "expression"));
+    assert(diff(tree, Match(AstNode.Call, [
         Match(AstNode.List),
         Match(AstNode.List, [
             Match(AstNode.VarExpression, [
@@ -180,8 +246,8 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:dot") unittest {
-    mixin(parser_init("a().c", "expression"));
-    assert(diff(expr, Match(AstNode.Call, [
+    mixin(parser_init("parser:dot", "a().c", "expression"));
+    assert(diff(tree, Match(AstNode.Call, [
         Match(AstNode.Call, [
             Match(AstNode.Name),
             Match(AstNode.List)
@@ -191,13 +257,13 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:negate") unittest {
-    mixin(parser_init("-3", "expression"));
-    assert(diff(expr, Match(AstNode.Negate, [Match(AstNode.Integer)])).length == 0);
+    mixin(parser_init("parser:negate", "-3", "expression"));
+    assert(diff(tree, Match(AstNode.Negate, [Match(AstNode.Integer)])).length == 0);
 }
 
 @("parser:self_call") unittest {
-    mixin(parser_init(".b.c", "expression"));
-    assert(diff(expr, Match(AstNode.Call, [
+    mixin(parser_init("parser:self_call", ".b.c", "expression"));
+    assert(diff(tree, Match(AstNode.Call, [
         Match(AstNode.SelfCall, [
             Match(AstNode.Name)
         ]),
@@ -207,8 +273,8 @@ AstNode[] diff(AstNode root, Match match) {
 
 @("parser:binary") unittest {
     //a = (b - c) + (d * ((e ^ f )^ g)) / h
-    mixin(parser_init("a = b - c + d * e ^ f ^ g / h", "expression"));
-    assert(diff(expr, Match(AstNode.Assign, [
+    mixin(parser_init("parser:binary", "a = b - c + d * e ^ f ^ g / h", "expression"));
+    assert(diff(tree, Match(AstNode.Assign, [
         Match(AstNode.Name),
         Match(AstNode.Add, [
             Match(AstNode.Subtract, [
@@ -227,41 +293,6 @@ AstNode[] diff(AstNode root, Match match) {
                     ])
                 ]),
                 Match(AstNode.Name)
-            ])
-        ])
-    ])).length == 0);
-}
-
-@("parser:loop") unittest {
-    mixin(parser_init("loop {}", "expression"));
-    assert(diff(expr, Match(AstNode.Loop, [
-            Match(AstNode.Block)
-    ])).length == 0);
-}
-
-@("parser:labeled_loop") unittest {
-    mixin(parser_init("'label loop {}", "expression"));
-    assert(diff(expr, Match(AstNode.Labeled, [
-        Match(AstNode.Label),
-        Match(AstNode.Loop, [
-            Match(AstNode.Block)
-        ])
-    ])).length == 0);
-}
-
-@("parser:if_else") unittest {
-    mixin(parser_init("if a {} else if b {} else { break }", "expression"));
-    assert(diff(expr, Match(AstNode.If, [
-        Match(AstNode.Name),
-        Match(AstNode.Block),
-        Match(AstNode.If, [
-            Match(AstNode.Name),
-            Match(AstNode.Block),
-            Match(AstNode.Block, [
-                Match(AstNode.Break, [
-                    Match(AstNode.None),
-                    Match(AstNode.None)
-                ])
             ])
         ])
     ])).length == 0);
