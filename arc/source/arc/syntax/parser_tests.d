@@ -222,8 +222,13 @@ AstNode[] diff(AstNode root, Match match) {
 }
 
 @("parser:list") unittest {
-    mixin(parser_init("parser:list", "[3:T, b=[4), c:k()=j]", "expression", false));
+    mixin(parser_init("parser:list", "[a, 3:T, b=[4), c:k()=j]", "expression", false));
     assert(diff(tree, Match(AstNode.List, [
+        Match(AstNode.VarExpression, [
+            Match(AstNode.None),
+            Match(AstNode.None),
+            Match(AstNode.Name),
+        ]),
         Match(AstNode.VarExpression, [
             Match(AstNode.Integer),
             Match(AstNode.Name),
@@ -244,6 +249,22 @@ AstNode[] diff(AstNode root, Match match) {
         ])
     ])).length == 0);
     assert(parser.reporter.has_error(SyntaxError.SequenceMissingClosingDelimiter));
+}
+
+@("parser:array") unittest {
+    mixin(parser_init("parser:array", "[[a()]..]", "expression"));
+    assert(diff(tree, Match(AstNode.Array, [
+        Match(AstNode.List, [
+            Match(AstNode.VarExpression, [
+                Match(AstNode.none),
+                Match(AstNode.none),
+                Match(AstNode.Call, [
+                    Match(AstNode.Name),
+                    Match(AstNode.List)
+                ])
+            ])
+        ])
+    ])).length == 0);
 }
 
 @("parser:function") unittest {

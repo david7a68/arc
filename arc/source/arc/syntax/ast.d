@@ -11,6 +11,7 @@ class AstNode {
         Integer,
         Char,
         List,
+        Array,
         Block,
         Function,
         Negate,

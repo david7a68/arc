@@ -325,41 +325,83 @@ AstNode char_(ref Parser p) {
     return make_char(p.current.span);
 }
 
-alias paren_list = seq!(AstNode.List, '(', ')');
-alias bracket_list = seq!(AstNode.List, '[', ']');
+alias paren_list = seq!('(', ')');
+alias bracket_list = seq!('[', ']');
 
-AstNode seq(AstNode.Type t, char open, char close)(ref Parser p) {
-    auto span = p.current.span.span;
+AstNode seq(char open, char close)(ref Parser p) {
+    AstNode list2(Span span, AstNode first) {
+        p.skip_all(Token.Comma);
+        p.push_eol_type(Token.Comma);
+
+        auto members = [first];
+        while(p.current.type != cast(Token.Type) close) {
+            members ~= var_expr(p);
+            p.skip_all(Token.Comma);
+
+            if (!is_expr_token(p.current.type) && (p.current.type != cast(Token.Type) close)) {
+                scope(exit) p.advance();
+                p.pop_eol_type();
+                p.reporter.error(
+                    SyntaxError.SequenceMissingClosingDelimiter,
+                    span.start,
+                    "List not closed",
+                    AstNode.List,
+                );
+                return make_invalid(span.merge(p.current.span));
+            }
+        }
+
+        p.pop_eol_type();
+        span = span.merge(p.take(cast(Token.Type) close).span);
+        return make_n_ary(AstNode.List, span, members);
+    }
+
+    AstNode list(Span start) {
+        p.skip_all(Token.Comma);
+        return list2(start, var_expr(p));
+    }
+
+    AstNode wrap(AstNode node) {
+        return make_n_ary(AstNode.VarExpression, node.span, [AstNode.none, AstNode.none, node]);
+    }
+
+    Span span = p.current.span;
     p.expect(cast(Token.Type) open);
 
-    p.skip_all(Token.Comma);
-    p.push_eol_type(Token.Comma);
-    
-    AstNode[] members;
-    if (p.current.type != cast(Token.Type) close) do {
-        auto e = var_expr(p);
-        span = span.merge(e.span);
-        members ~= e;
+    if (p.skip(Token.Comma)) return list(span); // list
 
-        p.skip_all(Token.Comma);
+    if (p.current.type != cast(Token.Type) close) {
+        auto next = expression(p);
 
-        if (!is_expr_token(p.current.type) && (p.current.type != close)) {
+        import std.stdio; writeln(next.type);
+
+        if (next.type == AstNode.VarExpression) {
+            return list2(span, next);
+        }
+        else if (p.skip(Token.Comma)) {
+            return list2(span, wrap(next));
+        }
+        else if (p.skip(Token.DotDot)) {
+            span = span.merge(p.take(cast(Token.Type) close).span);
+            return make_n_ary(AstNode.Array, span, next);
+        }
+        else if (p.current.type == cast(Token.Type) close) {
+            return make_n_ary(AstNode.List, span.merge(p.take().span), wrap(next));
+        }
+        else {
+            import std.stdio; 
+            writeln(p.current);
             scope(exit) p.advance();
-            p.pop_eol_type();
             p.reporter.error(
                 SyntaxError.SequenceMissingClosingDelimiter,
                 span.start,
                 "List not closed",
-                t,
+                AstNode.List,
             );
             return make_invalid(span.merge(p.current.span));
         }
-    } while (p.current.type != cast(Token.Type) close);
-
-    span = span.merge(p.current.span);
-    p.pop_eol_type();
-    p.advance();
-    return make_n_ary(t, span, members);
+    }
+    return make_n_ary(AstNode.List, span.merge(p.take().span));
 }
 
 AstNode block(ref Parser p) {
@@ -372,7 +414,6 @@ AstNode block(ref Parser p) {
     AstNode[] members;
     if (p.current.type != Token.Rbrace) do {
         auto e = statement(p);
-        span = span.merge(e.span);
         members ~= e;
 
         p.skip_all(Token.Semicolon);

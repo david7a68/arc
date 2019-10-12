@@ -27,7 +27,7 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 list = list_open ','* (var_expr ',')* list_close ;
 
-                vector = list_open primary '...' list_close ;
+                vector = list_open primary '..' list_close ;
 
                 block = '{' smt* '}' ;
 
