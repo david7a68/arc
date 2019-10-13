@@ -16,7 +16,7 @@ string parser_init(string test_name, string s, string parser_name, bool err_chec
         auto source = sources.put(\"%s\", \"%s\");
         auto error = new SyntaxReporter(source);
         auto parser = Parser(source.span, &table, error);
-        auto tree = parser.%s();
+        auto tree = parser.parse_%s();
         assert(parser.empty);
         %s".format(test_name, s, parser_name, err_check ? "assert(parser.reporter.errors.length == 0);" : "");
 }
@@ -27,8 +27,8 @@ struct Match {
     Match[] children;
 }
 
-AstNode[] diff(AstNode root, Match match) {
-    AstNode[] r;
+AstNode*[] diff(AstNode* root, Match match) {
+    AstNode*[] r;
     if (root.type != match.node_type || root.num_children != match.children.length)
         r ~= root;
     else if(root.num_children > 0) {
@@ -256,8 +256,8 @@ AstNode[] diff(AstNode root, Match match) {
     assert(diff(tree, Match(AstNode.Array, [
         Match(AstNode.List, [
             Match(AstNode.VarExpression, [
-                Match(AstNode.none),
-                Match(AstNode.none),
+                Match(AstNode.None),
+                Match(AstNode.None),
                 Match(AstNode.Call, [
                     Match(AstNode.Name),
                     Match(AstNode.List)

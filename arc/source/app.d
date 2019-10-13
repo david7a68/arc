@@ -17,7 +17,7 @@ void main(string[] args) {
 
 void print_ast(string filename, string text) {
     import arc.stringtable: StringTable;
-    import arc.syntax.parser: Parser, statement;
+    import arc.syntax.parser: Parser, parse_statement;
     import arc.syntax.reporter: SyntaxReporter;
     import arc.output.ast_printer: AstPrinter;
     import arc.syntax.location: SourceMap;
@@ -32,7 +32,7 @@ void print_ast(string filename, string text) {
     
     auto printer = new AstPrinter(source.span);
     while (!parser.empty) {
-        auto s = parser.statement();
+        auto s = parser.parse_statement();
         printer.print(s);
     }
     assert(parser.empty);

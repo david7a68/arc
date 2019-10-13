@@ -177,6 +177,9 @@ Token locate(RefinedToken result, SpannedText source) {
 /**
  * Refines the result given by `scan_type`, further separating tokens of the 
  * same character class such as keywords and names.
+ *
+ * It may improve performance to put this function into scan_type, avoiding
+ * some function call overhead as well as the 2 branches here.
  */
 RefinedToken refine(ScanResult result, StringTable* table) {
     Key key;

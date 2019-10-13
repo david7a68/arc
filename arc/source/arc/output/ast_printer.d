@@ -58,7 +58,7 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode n, string prefix = "") {
+    void print(AstNode* n, string prefix = "") {
         void put_length() {
             str.put(" (");
             str.put(n.num_children.to!string);
@@ -101,7 +101,7 @@ struct AstPrinter {
         }
     }
 
-    void write_children(AstNode n, bool numbered = false) {
+    void write_children(AstNode* n, bool numbered = false) {
         str.put("\n");
         if (n.num_children > 0) {
             foreach (i, child; n.children) {
@@ -110,7 +110,7 @@ struct AstPrinter {
         }
     }
 
-    void write_named_children(AstNode n, string[] names...) {
+    void write_named_children(AstNode* n, string[] names...) {
         assert(n.num_children == names.length);
         
         str.put("\n");
@@ -121,7 +121,7 @@ struct AstPrinter {
         }
     }
 
-    void write_child(AstNode n, bool is_last_child, string prefix) {
+    void write_child(AstNode* n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 
@@ -139,7 +139,7 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SpannedText text, AstNode node) {
+const(char)[] repr(SpannedText text, AstNode* node) {
     import std.conv: to;
 
     switch (node.type) with (AstNode.Type) {
