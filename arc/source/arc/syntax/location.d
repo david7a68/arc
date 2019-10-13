@@ -148,32 +148,4 @@ struct SourceMap {
         sources ~= src;
         return src;
     }
-
-    Source get_source(CharPos pos) {
-        // binary search for the source
-        if (sources.length > 0) {
-            size_t left = 0;
-            size_t right = sources.length - 1;
-            size_t mid = sources.length / 2;
-
-            while (pos !in sources[mid]) {
-                mid = (mid + right) / 2;
-                if (sources[mid].end < pos)
-                    left = mid + 1;
-                else if (pos < sources[mid].start)
-                    right = mid - 1;
-                else
-                    return sources[mid];
-            }
-            assert(0, "unreachable");
-        }
-        else {
-            return Source();
-        }
-    }
-
-    const(char)[] get_text(Span span) {
-        auto src = get_source(span.start);
-        return src.text[span.start - src.start .. span.length];
-    }
 }

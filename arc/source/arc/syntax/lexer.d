@@ -1,6 +1,5 @@
 module arc.syntax.lexer;
 
-import std.typecons: Tuple;
 import arc.stringtable: StringTable;
 import arc.syntax.location: SpannedText;
 import arc.hash: Key;
@@ -80,21 +79,20 @@ struct Lexer {
     const(char)* source_text;
     /// A pointer to the end of the source text
     const(char)* end_of_text;
+    ///
+    StringTable* table;
+    ///
+    SpannedText source;
+
     /// The ID with which the source text may be referred to
     /// The most recently analyzed token
-    Token next, current;
+    Token current;
 
     /**
      * Stores a stack of delimiters that will be automatically inserted after
      * any of: ) ] <NAME> <INTEGER>
      */
     Array!(Token.Type) eol_type_stack;
-
-    ///
-    StringTable* table;
-
-    ///
-    SpannedText source;
 
     this(SpannedText source, StringTable* table) {
         source_text = source.text.ptr;
@@ -108,7 +106,6 @@ struct Lexer {
     /// Advances the lexer so that `current` is the first-read token.
     void ready() {
         advance();
-        advance();
     }
 
     /// Push a token onto the automatic-delimiter-insertion stack
@@ -121,35 +118,34 @@ struct Lexer {
         eol_type_stack.removeBack();
     }
 
+    Token.Type eol_type() {
+        return eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
+    }
+
     /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
-        if ((next.type == Token.Rbrace || next.type == Token.Eol || next.type == Token.Eof) && eol_type_stack.length > 0) {
-            switch (current.type) with (Token.Type) {
-            case Rparen:
-            case Rbracket:
-            case Rbrace:
-            case Name:
-            case Integer:
-            case Label:
-            case Char:
-            case Break:
-            case Continue:
-            case Return:
-                current = Token(eol_type_stack.back, SpannedText(next.span.start, 0, next.span.text[0 .. 0]));
-                break;
-            default:
-                do {
-                    current = next;
-                    next = scan_type(source_text, end_of_text).refine(table).locate(source);
-                } while (current.type == Token.Eol);
-            }
+        current = scan_token(source_text, end_of_text, current.type, eol_type()).refine(table).locate(source);
+    }
+
+    Token take() {
+        scope(exit) advance();
+        return current;
+    }
+
+    bool matches(Token.Type t) {
+        return current.type == t;
+    }
+
+    bool skip(Token.Type t) {
+        if (matches(t)) {
+            advance();
+            return true;
         }
-        else {
-            do {
-                current = next;
-                next = scan_type(source_text, end_of_text).refine(table).locate(source);
-            } while (current.type == Token.Eol);
-        }
+        return false;
+    }
+
+    void skip_all(Token.Type t) {
+        while (skip(t)) continue;
     }
 }
 
@@ -165,8 +161,8 @@ unittest {
     assert(l.current.type == Token.Eof);
 }
 
-alias RefinedToken = Tuple!(Token.Type, "type", const(char)[], "text", Key, "key");
-alias ScanResult = Tuple!(Token.Type, "type", const(char)[], "text");
+struct RefinedToken { Token.Type type; const(char)[] text; Key key; }
+struct ScanResult { Token.Type type; const(char)[] text; }
 
 /**
 * Converts the result given from `refine` into a token.
@@ -183,8 +179,6 @@ Token locate(RefinedToken result, SpannedText source) {
  * same character class such as keywords and names.
  */
 RefinedToken refine(ScanResult result, StringTable* table) {
-    import std.typecons: tuple;
-
     Key key;
     if (result.type == Token.Name) {
         key = table.insert(result.text);
@@ -194,7 +188,7 @@ RefinedToken refine(ScanResult result, StringTable* table) {
         key = table.insert(result.text);
     }
     
-    return tuple!("type", "text", "key")(result.type, result.text, key);
+    return RefinedToken(result.type, result.text, key);
 }
 
 unittest { // Test keyword detection
@@ -210,6 +204,39 @@ unittest { // Test keyword detection
     assert(scan_type(cursor, end).type == Token.Eof);
 }
 
+ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
+    const start = cursor;
+    auto scan = scan_type(cursor, end);
+
+    bool is_rbrace;
+    if (scan.type == Token.Rbrace) {
+        // rewind the scanner so that we don't replace the Rbrace with eol_type
+        cursor = start;
+        is_rbrace = true;
+    }
+
+    if ((is_rbrace || scan.type == Token.Eol || scan.type == Token.Eof) && eol_type != Token.Invalid) {
+        switch (previous) with (Token.Type) {
+            case Rparen:
+            case Rbracket:
+            case Rbrace:
+            case Name:
+            case Integer:
+            case Label:
+            case Char:
+            case Break:
+            case Continue:
+            case Return:
+                return ScanResult(eol_type, scan.text);
+            default:
+                do {
+                    scan = scan_type(cursor, end);
+                } while (scan.type == Token.Eol);
+        }
+    }
+    return scan;
+}
+
 /**
  * Scans a character buffer from `cursor` to `end`, producing a tuple of the 
  * type of the first token, and its length. The scanner does not distinguish
@@ -219,19 +246,17 @@ unittest { // Test keyword detection
  * Returns: (type: Token.Type, text: const(char)[])
  */
 ScanResult scan_type(ref const(char)* cursor, const char* end) {
-    import std.typecons: tuple;
-
     auto start = cursor;
 
-    ScanResult make_token(Token.Type t, int advance_n) {
+    auto make_token(Token.Type t, int advance_n) {
         cursor += advance_n;
         assert(cursor <= end);
-        return tuple!("type", "text")(t, start[0 .. cursor - start]);
+        return ScanResult(t, start[0 .. cursor - start]);
     }
 
     switch_start:
     if (cursor >= end)
-        return tuple!("type", "text")(Token.Eof, (end - 1)[0 .. 0]); 
+        return ScanResult(Token.Eof, (end - 1)[0 .. 0]); 
 
     // @Optimize A character-table driven approach may be more performant.
     switch (*cursor) {
@@ -401,7 +426,7 @@ version(unittest) {
             const test_string = \"%s\";
             const(char)* start = test_string.ptr;
             const(char)* cursor = start;
-            const char* end = cursor + %s;
-        ".format(test_string, test_string.length);
+            const char* end = cursor + test_string.length;
+        ".format(test_string);
     }
 }
