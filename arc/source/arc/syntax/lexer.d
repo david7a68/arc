@@ -187,7 +187,7 @@ RefinedToken refine(ScanResult result, StringTable* table) {
         key = table.insert(result.text);
         result.type = keywords.get(key, Token.Name);
     }
-    else if (result.type == Token.Label) {
+    else if (result.type == Token.Label || result.type == Token.Char) {
         key = table.insert(result.text);
     }
     

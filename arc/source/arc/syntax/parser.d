@@ -120,7 +120,7 @@ AstNode* parse_def(ref Parser p) {
             "The definition of %s must have a type specification",
             p.lexer.source.get_text(name.span),
         );
-        type = make_invalid(Span(0, 0));
+        type = make!Invalid(Span(0, 0));
     }
     else if (!p.lexer.matches(Token.Equals)) {
         type = parse_primary(p);
@@ -130,21 +130,21 @@ AstNode* parse_def(ref Parser p) {
     auto value = parse_expression(p);
     p.lexer.skip_required(Token.Semicolon, p.reporter);
 
-    return make_n_ary(AstNode.Define, span.merge(value.span), name, type, value);
+    return make!Define(span.merge(value.span), name, type, value);
 }
 
-alias parse_break = ctrl_flow!(AstNode.Break, Token.Break, true);
-alias parse_return = ctrl_flow!(AstNode.Return, Token.Return, true);
-alias parse_continue = ctrl_flow!(AstNode.Continue, Token.Continue, false);
+alias parse_break = ctrl_flow!(Break, Token.Break, true);
+alias parse_return = ctrl_flow!(Return, Token.Return, true);
+alias parse_continue = ctrl_flow!(Continue, Token.Continue, false);
 
-AstNode* ctrl_flow(AstNode.Type t, Token.Type keyword, bool with_value)(ref Parser p) {
+AstNode* ctrl_flow(T, Token.Type keyword, bool with_value)(ref Parser p) {
     auto span = p.lexer.current.span;
     p.lexer.skip_required(keyword, p.reporter);
     scope(exit) p.lexer.skip_required(Token.Semicolon, p.reporter);
 
     auto label = AstNode.none;
     if (p.lexer.matches(Token.Label)) {
-        label = make_label(p.lexer.current.span, p.lexer.current.key);
+        label = make!Label(p.lexer.current.span, p.lexer.current.key);
         p.lexer.advance();
     }
 
@@ -152,10 +152,10 @@ AstNode* ctrl_flow(AstNode.Type t, Token.Type keyword, bool with_value)(ref Pars
         auto value = AstNode.none;
         if (!p.lexer.matches(Token.Semicolon))
             value = parse_expression(p);
-        return make_n_ary(t, span, label, value);
+        return make!T(span, label, value);
     }
     else {
-        return make_n_ary(t, span, label);
+        return make!T(span, label);
     }
 }
 
@@ -194,7 +194,7 @@ AstNode* parse_null_prefix(ref Parser p) {
         p.lexer.source.get_text(p.lexer.current.span),
     );
     scope(exit) p.lexer.advance();
-    return make_invalid(p.lexer.current.span);
+    return make!Invalid(p.lexer.current.span);
 }
 
 /// Convenience struct to hold the precedence and parser for an infix expression
@@ -263,10 +263,12 @@ AstNode* parse_expression(ref Parser p, Infix.Precedence prec = Infix.Precedence
 
 AstNode* parse_label(ref Parser p) {
     auto token = p.lexer.take();
-    auto label = make_label(token.span, token.key);
+    auto label = make!Label(token.span, token.key);
 
-    if (prefix_parslets[p.lexer.current.type] !is &parse_null_prefix)
-        return make_binary(AstNode.Labeled, label, parse_expression(p));
+    if (prefix_parslets[p.lexer.current.type] !is &parse_null_prefix) {
+        auto expr = parse_expression(p);
+        return make!Labeled(label.span.merge(expr.span), label, expr);
+    }
 
     return label;
 }
@@ -284,9 +286,9 @@ AstNode* parse_name(bool should_test)(ref Parser p) {
         t = p.lexer.take();
 
     if (t.type == Token.Name)
-        return make_name(t.span, t.key);
+        return make!Name(t.span, t.key);
     else
-        return make_invalid(t.span);
+        return make!Invalid(t.span);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -294,12 +296,13 @@ AstNode* parse_integer(ref Parser p) {
     import std.conv: to;
 
     scope(exit) p.lexer.advance();
-    return make_int(p.lexer.current.span, p.lexer.current.span.text.to!ulong);
+    return make!Integer(p.lexer.current.span, p.lexer.current.span.text.to!ulong);
 }
 
 AstNode* parse_char(ref Parser p) {
     scope(exit) p.lexer.advance();
-    return make_char(p.lexer.take().span);
+    auto t = p.lexer.take;
+    return make!Char(t.span, t.key);
 }
 
 alias parse_paren_list = parse_seq!('(', ')');
@@ -324,13 +327,13 @@ AstNode* parse_seq(char open, char close)(ref Parser p) {
                     "List not closed",
                     AstNode.List,
                 );
-                return make_invalid(span.merge(p.lexer.current.span));
+                return make!Invalid(span.merge(p.lexer.current.span));
             }
         }
 
         p.lexer.pop_eol_type();
         span = span.merge(p.lexer.take_required(cast(Token.Type) close, p.reporter).span);
-        return make_n_ary(AstNode.List, span, members);
+        return make!List(span, members);
     }
 
     AstNode* list(Span start) {
@@ -339,7 +342,7 @@ AstNode* parse_seq(char open, char close)(ref Parser p) {
     }
 
     AstNode* wrap(AstNode* node) {
-        return make_n_ary(AstNode.VarExpression, node.span, [AstNode.none, AstNode.none, node]);
+        return make!VarExpression(node.span, AstNode.none, AstNode.none, node);
     }
 
     Span span = p.lexer.current.span;
@@ -358,10 +361,10 @@ AstNode* parse_seq(char open, char close)(ref Parser p) {
         }
         else if (p.lexer.skip(Token.DotDot)) {
             span = span.merge(p.lexer.take_required(cast(Token.Type) close, p.reporter).span);
-            return make_n_ary(AstNode.Array, span, next);
+            return make!Array(span, [next]);
         }
         else if (p.lexer.current.type == cast(Token.Type) close) {
-            return make_n_ary(AstNode.List, span.merge(p.lexer.take().span), wrap(next));
+            return make!List(span.merge(p.lexer.take().span), [wrap(next)]);
         }
         else {
             scope(exit) p.lexer.advance();
@@ -371,10 +374,10 @@ AstNode* parse_seq(char open, char close)(ref Parser p) {
                 "List not closed",
                 AstNode.List,
             );
-            return make_invalid(span.merge(p.lexer.current.span));
+            return make!Invalid(span.merge(p.lexer.current.span));
         }
     }
-    return make_n_ary(AstNode.List, span.merge(p.lexer.take().span));
+    return make!List(span.merge(p.lexer.take().span));
 }
 
 AstNode* parse_block(ref Parser p) {
@@ -400,14 +403,14 @@ AstNode* parse_block(ref Parser p) {
                 "Block not closed",
                 AstNode.Block,
             );
-            return make_invalid(span.merge(p.lexer.current.span));
+            return make!Invalid(span.merge(p.lexer.current.span));
         }
     } while (!p.lexer.matches(Token.Rbrace));
 
     span = span.merge(p.lexer.current.span);
     p.lexer.pop_eol_type();
     p.lexer.take_required(Token.Rbrace, p.reporter);
-    return make_n_ary(AstNode.Block, span, members);
+    return make!Block(span, members);
 }
 
 /**
@@ -453,72 +456,75 @@ AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
         value_expr = first;
     }
 
-    return make_n_ary(AstNode.VarExpression, span, name_expr, type_expr, value_expr);
+    return make!VarExpression(span, name_expr, type_expr, value_expr);
 }
 
 /// Function := Expression '=>' Expression ;
 AstNode* parse_function(ref Parser p, AstNode* params) {
     p.lexer.skip_required(Token.FatRArrow, p.reporter);
     auto body = parse_expression(p);
-    return make_binary(AstNode.Function, params, body);
+    return make!Function(params.span.merge(body.span), params, body);
 }
 
 AstNode* parse_dot(ref Parser p, AstNode* lhs) {
     assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall));
     p.lexer.skip_required(Token.Dot, p.reporter);
 
-    return make_binary(AstNode.Call, lhs, prefix_parslets[p.lexer.current.type](p));
+    auto rhs = prefix_parslets[p.lexer.current.type](p);
+    return make!Call(lhs.span.merge(rhs.span), lhs, rhs);
 }
 
 /// Call := Expression List
 AstNode* parse_call(ref Parser p, AstNode* lhs) {
     assert(p.lexer.current.type == Token.Lparen || p.lexer.current.type == Token.Lbracket);
-    return make_binary(AstNode.Call, lhs, prefix_parslets[p.lexer.current.type](p));
+    auto rhs = prefix_parslets[p.lexer.current.type](p);
+    return make!Call(lhs.span.merge(rhs.span), lhs, rhs);
 }
 
 AstNode* parse_path(ref Parser p, AstNode* lhs) {
     assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.SelfCall, AstNode.Path));
     p.lexer.skip_required(Token.ColonColon, p.reporter);
-    return make_binary(AstNode.Path, lhs, prefix_parslets[p.lexer.current.type](p));
+    auto rhs = prefix_parslets[p.lexer.current.type](p);
+    return make!Path(lhs.span.merge(rhs.span), lhs, rhs);
 }
 
-alias parse_negate          = parse_unary!(AstNode.Negate, parse_primary);
-alias parse_pointer         = parse_unary!(AstNode.Pointer, parse_primary);
-alias parse_ref             = parse_unary!(AstNode.GetRef, parse_primary);
-alias parse_self_call       = parse_unary!(AstNode.SelfCall, parse_name!true);
+alias parse_negate          = parse_unary!(Negate, parse_primary);
+alias parse_pointer         = parse_unary!(Pointer, parse_primary);
+alias parse_ref             = parse_unary!(GetRef, parse_primary);
+alias parse_self_call       = parse_unary!(SelfCall, parse_name!true);
 
 /// Unary := <op> Expression
-AstNode* parse_unary(AstNode.Type t, alias next_expr_fn)(ref Parser p) {
+AstNode* parse_unary(T, alias next_expr_fn)(ref Parser p) {
     const start = p.lexer.take().span;
     auto expr = next_expr_fn(p);
-    return make_n_ary(t, start.merge(expr.span), expr);
+    return make!T(start.merge(expr.span), expr);
 }
 
-alias parse_assign          = parse_binary!(AstNode.Assign, Infix.Assignment + 1);
+alias parse_assign          = parse_binary!(Assign, Infix.Assignment + 1);
 
-alias parse_add             = parse_binary!(AstNode.Add, Infix.Sum + 1);
-alias parse_subtract        = parse_binary!(AstNode.Subtract, Infix.Sum + 1);
-alias parse_multiply        = parse_binary!(AstNode.Multiply, Infix.Product + 1);
-alias parse_divide          = parse_binary!(AstNode.Divide, Infix.Product + 1);
+alias parse_add             = parse_binary!(Add, Infix.Sum + 1);
+alias parse_subtract        = parse_binary!(Subtract, Infix.Sum + 1);
+alias parse_multiply        = parse_binary!(Multiply, Infix.Product + 1);
+alias parse_divide          = parse_binary!(Divide, Infix.Product + 1);
 
 // not Infix.Power + 1 because we want this to be right-associative
-alias parse_power           = parse_binary!(AstNode.Power, Infix.Power);
+alias parse_power           = parse_binary!(Power, Infix.Power);
 
-alias parse_less            = parse_binary!(AstNode.Less, Infix.Comparison + 1);
-alias parse_less_equal      = parse_binary!(AstNode.LessEqual, Infix.Comparison + 1);
-alias parse_greater         = parse_binary!(AstNode.Greater, Infix.Comparison + 1);
-alias parse_greater_equal   = parse_binary!(AstNode.GreaterEqual, Infix.Comparison + 1);
-alias parse_equal           = parse_binary!(AstNode.Equal, Infix.Comparison + 1);
-alias parse_not_equal       = parse_binary!(AstNode.NotEqual, Infix.Comparison + 1);
+alias parse_less            = parse_binary!(Less, Infix.Comparison + 1);
+alias parse_less_equal      = parse_binary!(LessEqual, Infix.Comparison + 1);
+alias parse_greater         = parse_binary!(Greater, Infix.Comparison + 1);
+alias parse_greater_equal   = parse_binary!(GreaterEqual, Infix.Comparison + 1);
+alias parse_equal           = parse_binary!(Equal, Infix.Comparison + 1);
+alias parse_not_equal       = parse_binary!(NotEqual, Infix.Comparison + 1);
 
-alias parse_and           = parse_binary!(AstNode.And, Infix.Logic + 1);
-alias parse_or            = parse_binary!(AstNode.Or, Infix.Logic + 1);
+alias parse_and           = parse_binary!(And, Infix.Logic + 1);
+alias parse_or            = parse_binary!(Or, Infix.Logic + 1);
 
 /// Binary := Expression <op> Expression ;
-AstNode* parse_binary(AstNode.Type t, int prec)(ref Parser p, AstNode* lhs) {
+AstNode* parse_binary(T, int prec)(ref Parser p, AstNode* lhs) {
     p.lexer.advance();
     auto rhs = parse_expression(p, cast(Infix.Precedence) prec);
-    return make_binary(t, lhs, rhs);
+    return make!T(lhs.span.merge(rhs.span), lhs, rhs);
 }
 
 AstNode* parse_if(ref Parser p) {
@@ -535,12 +541,12 @@ AstNode* parse_if(ref Parser p) {
         span = span.merge(else_branch.span);
     }
 
-    return make_n_ary(AstNode.If, span, cond, body, else_branch);
+    return make!If(span, cond, body, else_branch);
 }
 
 AstNode* parse_loop(ref Parser p) {
     auto span = p.lexer.current.span;
     p.lexer.skip_required(Token.Loop, p.reporter);
     auto body = parse_expression(p);
-    return make_n_ary(AstNode.Loop, span.merge(body.span), body);
+    return make!Loop(span.merge(body.span), body);
 }

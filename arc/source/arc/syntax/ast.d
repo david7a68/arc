@@ -78,30 +78,125 @@ struct AstNode {
     static AstNode* none() { return cast(AstNode*) &none_value; }
 }
 
-AstNode* make_value(string name, T, AstNode.Type t)(Span span, T value) {
-    auto node = new AstNode(t, span);
-    mixin("node." ~ name ~ " = value;");
-    return node;
+AstNode* make(T, Args...)(Span span, Args args) {
+    return cast(AstNode*) new T(span, args);
 }
 
-AstNode* make_binary(AstNode.Type t, AstNode* left, AstNode* right) {
-    return make_n_ary(t, left.span.merge(right.span), left, right);
+struct SimpleNode(AstNode.Type node_type) {
+    AstNode self;
+
+    this(AstNode other) in (other.type == node_type) {
+        self = other;
+    }
+
+    this(Span span) {
+        self = AstNode(node_type, span);
+    }
+
+    Span span() { return self.span; }
+    AstNode.Type type() { return self.type; }
 }
 
-AstNode* make_n_ary(AstNode.Type t, Span span, AstNode*[] nodes...) {
-    auto node = new AstNode(t, span);
-    node.children = nodes.dup;
-    return node;
+struct ValueNode(AstNode.Type node_type, ValueType, string value_name) {
+    import std.format: format;
+    
+    AstNode self;
+    
+    this(AstNode other) in (other.type == node_type) {
+        self = other;
+    }
+
+    mixin("this(Span span, ValueType %s) {
+        self = AstNode(node_type, span);
+        self.%s = %s;
+    }".format(value_name, value_name, value_name));
+
+    Span span() { return self.span; }
+    AstNode.Type type() { return self.type; }
+
+    mixin("ValueType %s() { return self.%s; }".format(value_name, value_name));
 }
 
-AstNode* make_invalid(Span span) {
-    return new AstNode(AstNode.Invalid, span);
+struct AggregateNode(AstNode.Type node_type, string[] children_names) {
+    import std.format: format;
+
+    AstNode self;
+    
+    this(AstNode other) in (other.type == node_type) {
+        self = other;
+    }
+
+    mixin("this(Span span, %-(AstNode* %s, %)) {
+        self = AstNode(node_type, span);
+        self.children = [%-(%s, %)];
+    }".format(children_names, children_names));
+
+    Span span() { return self.span; }
+    AstNode.Type type() { return self.type; }
+    AstNode*[] children() { return self.children; }
+
+    static foreach (i, child; children_names) {
+        mixin("AstNode* %s() { return children[%s]; }".format(child, i));
+        mixin("void %s(AstNode* node) { children[%s] = node; }".format(child, i));
+    }
 }
 
-alias make_name = make_value!("key", Key, AstNode.Name);
-alias make_int = make_value!("value", ulong, AstNode.Integer);
-alias make_label = make_value!("key", Key, AstNode.Label);
+struct SeqNode(AstNode.Type node_type) {
+    AstNode self;
 
-AstNode* make_char(Span span) {
-    return new AstNode(AstNode.Char, span);
+    this(AstNode other) in (other.type == node_type) {
+        self = other;
+    }
+
+    this(Span span) {
+        self = AstNode(node_type, span);
+    }
+
+    this(Span span, AstNode*[] members) {
+        self = AstNode(node_type, span);
+        self.children = members;
+    }
+
+    Span span() { return self.span; }
+    AstNode.Type type() { return self.type; }
+    AstNode*[] members() { return self.children; }
 }
+
+alias Invalid           = SimpleNode!(AstNode.Invalid);
+alias None              = SimpleNode!(AstNode.None);
+alias Name              = ValueNode!(AstNode.Name, Key, "key");
+alias Integer           = ValueNode!(AstNode.Integer, ulong, "value");
+alias Char              = ValueNode!(AstNode.Char, Key, "key");
+alias List              = SeqNode!(AstNode.List);
+alias Array             = SeqNode!(AstNode.Array);
+alias Block             = SeqNode!(AstNode.Block);
+alias Function          = AggregateNode!(AstNode.Function, ["params", "body"]);
+alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);
+alias SelfCall          = AggregateNode!(AstNode.SelfCall, ["member_name"]);
+alias Pointer           = AggregateNode!(AstNode.Pointer, ["operand"]);
+alias GetRef            = AggregateNode!(AstNode.GetRef, ["operand"]);
+alias Assign            = AggregateNode!(AstNode.Assign, ["lhs", "expression"]);
+alias Less              = AggregateNode!(AstNode.Less, ["lhs", "rhs"]);
+alias LessEqual         = AggregateNode!(AstNode.LessEqual, ["lhs", "rhs"]);
+alias Greater           = AggregateNode!(AstNode.Greater, ["lhs", "rhs"]);
+alias GreaterEqual      = AggregateNode!(AstNode.GreaterEqual, ["lhs", "rhs"]);
+alias Equal             = AggregateNode!(AstNode.Equal, ["lhs", "rhs"]);
+alias NotEqual          = AggregateNode!(AstNode.NotEqual, ["lhs", "rhs"]);
+alias And               = AggregateNode!(AstNode.And, ["lhs", "rhs"]);
+alias Or                = AggregateNode!(AstNode.Or, ["lhs", "rhs"]);
+alias Add               = AggregateNode!(AstNode.Add, ["lhs", "rhs"]);
+alias Subtract          = AggregateNode!(AstNode.Subtract, ["lhs", "rhs"]);
+alias Multiply          = AggregateNode!(AstNode.Multiply, ["lhs", "rhs"]);
+alias Divide            = AggregateNode!(AstNode.Divide, ["lhs", "rhs"]);
+alias Power             = AggregateNode!(AstNode.Power, ["lhs", "rhs"]);
+alias Call              = AggregateNode!(AstNode.Call, ["target", "arguments"]);
+alias Path              = AggregateNode!(AstNode.Path, ["base", "name"]);
+alias VarExpression     = AggregateNode!(AstNode.VarExpression, ["name", "type", "expression"]);
+alias Define            = AggregateNode!(AstNode.Define, ["name", "type", "expression"]);
+alias If                = AggregateNode!(AstNode.If, ["condition", "body", "else_"]);
+alias Loop              = AggregateNode!(AstNode.Loop, ["body"]);
+alias Label             = ValueNode!(AstNode.Label, Key, "key");
+alias Break             = AggregateNode!(AstNode.Break, ["label", "value"]);
+alias Return            = AggregateNode!(AstNode.Return, ["label", "value"]);
+alias Continue          = AggregateNode!(AstNode.Continue, ["label"]);
+alias Labeled           = AggregateNode!(AstNode.Labeled, ["label", "expression"]);
