@@ -15,7 +15,6 @@ struct AstNode {
         Block,
         Function,
         Negate,
-        SelfCall,
         Pointer,
         GetRef,
         Assign,
@@ -126,6 +125,11 @@ struct AggregateNode(AstNode.Type node_type, string[] children_names) {
         self = other;
     }
 
+    this(Span span, AstNode*[] members) {
+        self = AstNode(node_type, span);
+        self.children = members;
+    }
+
     mixin("this(Span span, %-(AstNode* %s, %)) {
         self = AstNode(node_type, span);
         self.children = [%-(%s, %)];
@@ -172,7 +176,6 @@ alias Array             = SeqNode!(AstNode.Array);
 alias Block             = SeqNode!(AstNode.Block);
 alias Function          = AggregateNode!(AstNode.Function, ["params", "body"]);
 alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);
-alias SelfCall          = AggregateNode!(AstNode.SelfCall, ["member_name"]);
 alias Pointer           = AggregateNode!(AstNode.Pointer, ["operand"]);
 alias GetRef            = AggregateNode!(AstNode.GetRef, ["operand"]);
 alias Assign            = AggregateNode!(AstNode.Assign, ["lhs", "expression"]);

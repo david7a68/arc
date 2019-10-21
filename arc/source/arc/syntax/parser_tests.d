@@ -308,16 +308,6 @@ AstNode*[] diff(AstNode* root, Match match) {
     assert(diff(tree, Match(AstNode.Negate, [Match(AstNode.Integer)])).length == 0);
 }
 
-@("parser:self_call") unittest {
-    mixin(parser_init("parser:self_call", ".b.c", "expression"));
-    assert(diff(tree, Match(AstNode.Call, [
-        Match(AstNode.SelfCall, [
-            Match(AstNode.Name)
-        ]),
-        Match(AstNode.Name)
-    ])).length == 0);
-}
-
 @("parser:binary") unittest {
     //a = (b - c) + (d * ((e ^ f )^ g)) / h
     mixin(parser_init("parser:binary", "a = b - c + d * e ^ f ^ g / h", "expression"));

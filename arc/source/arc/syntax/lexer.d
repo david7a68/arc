@@ -122,11 +122,6 @@ struct Lexer {
         return eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
     }
 
-    /// Scan a new token, automatically inserting end-of-line tokens as needed
-    void advance() {
-        current = scan_token(source_text, end_of_text, current.type, eol_type()).refine(table).locate(source);
-    }
-
     Token take() {
         scope(exit) advance();
         return current;
@@ -147,6 +142,22 @@ struct Lexer {
     void skip_all(Token.Type t) {
         while (skip(t)) continue;
     }
+
+    /// Scan a new token, automatically inserting end-of-line tokens as needed
+    void advance() {
+        auto scan = scan_token(source_text, end_of_text, current.type, eol_type());
+
+        Key key;
+        if (scan.type == Token.Name) {
+            key = table.insert(scan.text);
+            scan.type = keywords.get(key, Token.Name);
+        }
+        else if (scan.type == Token.Label || scan.type == Token.Char) {
+            key = table.insert(scan.text);
+        }
+
+        current = Token(scan.type, source.get_span(scan.text), key);
+    }
 }
 
 unittest {
@@ -161,51 +172,7 @@ unittest {
     assert(l.current.type == Token.Eof);
 }
 
-struct RefinedToken { Token.Type type; const(char)[] text; Key key; }
 struct ScanResult { Token.Type type; const(char)[] text; }
-
-/**
-* Converts the result given from `refine` into a token.
-*
-* Once spans with absolute positioning are implemented, this will find the
-* absolute position of the token.
-*/
-Token locate(RefinedToken result, SpannedText source) {
-    return Token(result.type, source.get_span(result.text), result.key);
-}
-
-/**
- * Refines the result given by `scan_type`, further separating tokens of the 
- * same character class such as keywords and names.
- *
- * It may improve performance to put this function into scan_type, avoiding
- * some function call overhead as well as the 2 branches here.
- */
-RefinedToken refine(ScanResult result, StringTable* table) {
-    Key key;
-    if (result.type == Token.Name) {
-        key = table.insert(result.text);
-        result.type = keywords.get(key, Token.Name);
-    }
-    else if (result.type == Token.Label || result.type == Token.Char) {
-        key = table.insert(result.text);
-    }
-    
-    return RefinedToken(result.type, result.text, key);
-}
-
-unittest { // Test keyword detection
-    const keys = "if else loop break return def";
-    const types = [
-        Token.If, Token.Else, Token.Loop, Token.Break, Token.Return, Token.Def
-    ];
-
-    StringTable table;
-    mixin(init_scan(keys));
-    foreach (type; types)
-        assert(scan_type(cursor, end).refine(&table).type == type);
-    assert(scan_type(cursor, end).type == Token.Eof);
-}
 
 ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
     const start = cursor;

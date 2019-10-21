@@ -5,7 +5,6 @@
 - [ ] Implement chunking of invalid characters
   - [ ] Implement checking and reporting of UTF8 characters as names
   - [ ] Parse invalid tokens into invalid nodes
-- [ ] Elaborate syntax reporter error messages
 
 ## List
 
@@ -15,7 +14,7 @@
   - [x] End-of-file tokens
     - [x] Tested
   - [x] End-of-line tokens
-    - [ ] Tested
+    - [x] Tested
   - [x] Delimiters: [ ] ( ) , ;
     - [x] Tested
   - [x] Alphanumeric identifiers
@@ -29,18 +28,18 @@
     - [ ] Invalid character identification
       - [ ] Tested
   - [x] Automatic delimiter (comma, semicolon) insertion
-    - [ ] Tested
+    - [x] Tested
   - [ ] Profiled
-- [ ] Syntactical analysis
+- [x] Syntactical analysis
   - [x] AST classes
-  - [ ] Syntax reporter
-    - [ ] Line-and-column finder
-      - [ ] Tested
+  - [x] Syntax reporter
+    - [x] Line-and-column finder
+      - [x] Tested
     - [x] AST printer
       - [x] Tested
     - [x] Error handlers (refer to syntax_errors.md)
       - [x] Tested
-  - [ ] Parser
+  - [x] Parser
     - [x] Expressions
       - [x] Lists
         - [x] Unnamed members
@@ -62,13 +61,11 @@
         - [x] Tested
       - [x] Function literals
       - [x] Tested
-    - [ ] Statements
-      - [ ] If-else branching
-      - [ ] While-loops
-    - [ ] Declarations
-      - [ ] Let declarations
-      - [ ] Def declarations
-    - [ ] Profiled
+    - [x] Statements
+      - [x] If-else branching
+      - [x] Loops
+    - [x] Declarations
+      - [x] Def declarations
   - [ ] Semantic Definitions
     - [ ] Partial tuple initialization
     - [ ] Dependency carrying functions, operator carrying tuples

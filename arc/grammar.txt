@@ -33,23 +33,20 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 function = primary '=>' expr ;
 
-                call = (list | name | path | self_call) '.'? (list | name | path)
+                call = (list | name | path) '.'? (list | name | path)
                     | call '.'? call
                     ;
 
-                path = (name | list | call | self_call) '::' (name | list | call)
+                path = (name | list | call) '::' (name | list | call)
                     | path '::' path
                     ;
 
             unary = negate
-                | self_call
                 | pointer
                 | get_ref
                 ;
                 
                 negate = '-' primary ;
-
-                self_call = '.' primary ;
 
                 pointer = '*' primary ;
 
@@ -72,8 +69,8 @@ stmt = (def | label | break | return | continue | expr) ';'
                 | 'or'
                 ;
 
-            if = 'if' operand block (else operand)? ;
+            if = 'if' operand block (else block)? ;
 
-            loop = 'loop' operand ;
+            loop = 'loop' block ;
 
             labeled = label (if | loop | block | function) ;
