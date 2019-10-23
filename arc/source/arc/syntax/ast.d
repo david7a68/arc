@@ -11,7 +11,8 @@ struct AstNode {
         Integer,
         Char,
         List,
-        Array,
+        ListMember,
+        ListRepeat,
         Block,
         Function,
         Negate,
@@ -126,6 +127,7 @@ struct AggregateNode(AstNode.Type node_type, string[] children_names) {
     }
 
     this(Span span, AstNode*[] members) {
+        assert(members.length == children_names.length);
         self = AstNode(node_type, span);
         self.children = members;
     }
@@ -172,13 +174,14 @@ alias Name              = ValueNode!(AstNode.Name, Key, "key");
 alias Integer           = ValueNode!(AstNode.Integer, ulong, "value");
 alias Char              = ValueNode!(AstNode.Char, Key, "key");
 alias List              = SeqNode!(AstNode.List);
-alias Array             = SeqNode!(AstNode.Array);
+alias ListMember        = AggregateNode!(AstNode.ListMember, ["name", "type", "value"]);
+alias ListRepeat        = AggregateNode!(AstNode.ListRepeat, ["type", "count"]);
 alias Block             = SeqNode!(AstNode.Block);
 alias Function          = AggregateNode!(AstNode.Function, ["params", "body"]);
 alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);
 alias Pointer           = AggregateNode!(AstNode.Pointer, ["operand"]);
 alias GetRef            = AggregateNode!(AstNode.GetRef, ["operand"]);
-alias Assign            = AggregateNode!(AstNode.Assign, ["lhs", "expression"]);
+alias Assign            = AggregateNode!(AstNode.Assign, ["lhs", "value"]);
 alias Less              = AggregateNode!(AstNode.Less, ["lhs", "rhs"]);
 alias LessEqual         = AggregateNode!(AstNode.LessEqual, ["lhs", "rhs"]);
 alias Greater           = AggregateNode!(AstNode.Greater, ["lhs", "rhs"]);
@@ -194,8 +197,8 @@ alias Divide            = AggregateNode!(AstNode.Divide, ["lhs", "rhs"]);
 alias Power             = AggregateNode!(AstNode.Power, ["lhs", "rhs"]);
 alias Call              = AggregateNode!(AstNode.Call, ["target", "arguments"]);
 alias Path              = AggregateNode!(AstNode.Path, ["base", "name"]);
-alias VarExpression     = AggregateNode!(AstNode.VarExpression, ["name", "type", "expression"]);
-alias Define            = AggregateNode!(AstNode.Define, ["name", "type", "expression"]);
+alias VarExpression     = AggregateNode!(AstNode.VarExpression, ["name", "type", "value"]);
+alias Define            = AggregateNode!(AstNode.Define, ["name", "type", "value"]);
 alias If                = AggregateNode!(AstNode.If, ["condition", "body", "else_"]);
 alias Loop              = AggregateNode!(AstNode.Loop, ["body"]);
 alias Label             = ValueNode!(AstNode.Label, Key, "key");

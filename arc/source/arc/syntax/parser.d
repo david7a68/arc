@@ -293,80 +293,113 @@ AstNode* parse_char(ref Parser p) {
     return make!Char(t.span, t.key);
 }
 
-alias parse_paren_list = parse_seq!('(', ')');
-alias parse_bracket_list = parse_seq!('[', ']');
+alias parse_paren_list = parse_seq!(Token.Lparen, Token.Rparen);
+alias parse_bracket_list = parse_seq!(Token.Lbracket, Token.Rbracket);
 
-AstNode* parse_seq(char open, char close)(ref Parser p) {
-    AstNode* list2(Span span, AstNode* first) {
-        p.lexer.skip_all(Token.Comma);
-        p.lexer.push_eol_type(Token.Comma);
+AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
+    static fast_forward(ref Parser p) {
+        Span span = p.lexer.take().span.span;
 
-        auto members = [first];
-        while(!p.lexer.matches(cast(Token.Type) close)) {
-            members ~= parse_var_expr(p);
-            p.lexer.skip_all(Token.Comma);
+        if (!p.lexer.matches(Token.Comma) && !p.lexer.matches(close) && !p.lexer.matches(Token.Semicolon)) {
+            int levels = 0;
+            loop: while (!p.empty && levels >= 0) {
+                if (p.lexer.matches(Token.Lparen) || p.lexer.matches(Token.Lbracket))
+                    levels++;
+                else if (p.lexer.matches(Token.Rparen) || p.lexer.matches(Token.Rbracket)) {
+                    levels--;
+                    // allow parse_seq to handle the closing delimiter
+                    if (levels < 0) break;
+                }
+                else if (p.lexer.matches(Token.Semicolon))
+                    break loop;
+                else if (levels == 0 && p.lexer.matches(Token.Comma))
+                    break loop;
 
-            const is_expr_token = prefix_parslets[p.lexer.current.type] !is &parse_null_prefix;
-            if (!is_expr_token && !p.lexer.matches(cast(Token.Type) close)) {
-                scope(exit) p.lexer.advance();
-                p.lexer.pop_eol_type();
-                p.reporter.error(
-                    SyntaxError.SequenceMissingClosingDelimiter,
-                    span.start,
-                    "List not closed",
-                    AstNode.List,
-                );
-                return make!Invalid(span.merge(p.lexer.current.span));
+                span = span.merge(p.lexer.take().span);
             }
         }
-
-        p.lexer.pop_eol_type();
-        span = span.merge(p.lexer.take_required(cast(Token.Type) close, p.reporter).span);
-        return make!List(span, members);
+        return span;
     }
 
-    AstNode* list(Span start) {
-        p.lexer.skip_all(Token.Comma);
-        return list2(start, parse_var_expr(p));
+    static parse_member(ref Parser p) {
+        auto first = parse_expression(p, Infix.Logic);
+
+        AstNode* name = AstNode.none;
+        AstNode* type = AstNode.none;
+        AstNode* value = AstNode.none;
+        Span span = first.span;
+        if (p.lexer.skip(Token.DotDot)) {
+            auto count = parse_expression(p);
+            type = make!ListRepeat(first.span.merge(count.span), first, count);
+            span = type.span;
+        }
+        else if (first.type == AstNode.Name) {
+            if (p.lexer.skip(Token.Equals)) {
+                name = first;
+                value = parse_expression(p);
+                span = span.merge(value.span);
+            }
+            else if (p.lexer.skip(Token.Colon)) {
+                name = first;
+                type = parse_primary(p);
+                
+                if (p.lexer.skip(Token.Equals)) {
+                    value = parse_expression(p);
+                    span = span.merge(value.span);
+                }
+                else if (p.lexer.skip(Token.DotDot)) {
+                    auto count = parse_expression(p);
+                    type = make!ListRepeat(first.span.merge(count.span), first, count);
+                    span = type.span;
+                }
+                else span = name.span.merge(type.span);
+            }
+            else value = first;
+        }
+        else value = first;
+
+        if (!p.empty && !p.lexer.matches(Token.Comma) && prefix_parslets[p.lexer.current.type] != &parse_null_prefix) {
+            p.reporter.error(
+                SyntaxError.SequenceMissingSeparator,
+                span.start + span.length,
+                "List is missing comma"
+            );
+
+            span = span.merge(fast_forward(p));
+
+            return make!Invalid(span);
+        }
+        return make!ListMember(span, name, type, value);
     }
+    
+    auto span = p.lexer.take_required(open, p.reporter).span.span;
+    AstNode*[] members;
 
-    AstNode* wrap(AstNode* node) {
-        return make!VarExpression(node.span, AstNode.none, AstNode.none, node);
-    }
+    p.lexer.skip_all(Token.Comma);
+    while(!p.empty && !p.lexer.matches(close)) {
+        auto member = parse_member(p);
+        members ~= member;
+        span = span.merge(member.span);
 
-    Span span = p.lexer.current.span;
-    p.lexer.skip_required(cast(Token.Type) open, p.reporter);
-
-    if (p.lexer.skip(Token.Comma)) return list(span); // list
-
-    if (!p.lexer.matches(cast(Token.Type) close)) {
-        auto next = parse_expression(p);
-
-        if (next.type == AstNode.VarExpression) {
-            return list2(span, next);
-        }
-        else if (p.lexer.skip(Token.Comma)) {
-            return list2(span, wrap(next));
-        }
-        else if (p.lexer.skip(Token.DotDot)) {
-            span = span.merge(p.lexer.take_required(cast(Token.Type) close, p.reporter).span);
-            return make!Array(span, [next]);
-        }
-        else if (p.lexer.current.type == cast(Token.Type) close) {
-            return make!List(span.merge(p.lexer.take().span), [wrap(next)]);
-        }
+        if (p.lexer.matches(Token.Comma))
+            p.lexer.skip_all(Token.Comma);
+        else if (p.lexer.matches(close))
+            break;
         else {
-            scope(exit) p.lexer.advance();
             p.reporter.error(
                 SyntaxError.SequenceMissingClosingDelimiter,
                 span.start,
-                "List not closed",
-                AstNode.List,
+                "List not closed"
             );
-            return make!Invalid(span.merge(p.lexer.current.span));
+
+            span = span.merge(fast_forward(p));
+            
+            return make!Invalid(span);
         }
     }
-    return make!List(span.merge(p.lexer.take().span));
+
+    span = span.merge(p.lexer.take_required(close, p.reporter).span);
+    return make!List(span, members);
 }
 
 AstNode* parse_block(ref Parser p) {
@@ -410,39 +443,28 @@ AstNode* parse_var_expr(ref Parser p) {
 AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
     auto span = first.span;
 
-    auto name_expr = AstNode.none;
-    auto type_expr = AstNode.none;
-    auto value_expr = AstNode.none;
-    if (p.lexer.skip(Token.Colon)) {
-        name_expr = first;
-        if (p.lexer.skip(Token.Equals)) {
-            value_expr = parse_primary(p);
-            span = span.merge(value_expr.span);
-        }
-        else {
-            // var_expr : Expression (":" Expression)?
-            type_expr = parse_primary(p);
-            span = span.merge(type_expr.span);
+    // @cleanup: this needs to become an error
+    assert(first.type == AstNode.Name);
+    auto name = first;
+    p.lexer.take_required(Token.Colon, p.reporter);
 
-            if (p.lexer.skip(Token.Equals)) {
-                // var_expr : Expression (":" Expression ("=" Expression)?)?
-                value_expr = parse_expression(p);
-                span = span.merge(value_expr.span);
-            }
-        }
-    }
-    else if (p.lexer.skip(Token.Equals)) {
-        // var_expr : Expression ("=" Expression)?
-        name_expr = first;
-        value_expr = parse_expression(p);
-        span = span.merge(value_expr.span);
+    auto value = AstNode.none;
+    auto type = AstNode.none;
+    if (p.lexer.skip(Token.Equals)) {
+        value = parse_expression(p);
+        span = span.merge(value.span);
     }
     else {
-        // var_expr : Expression
-        value_expr = first;
+        type = parse_primary(p);
+        
+        if (p.lexer.skip(Token.Equals)) {
+            value = parse_expression(p);
+            span = span.merge(value.span);
+        }
+        else span = span.merge(type.span);
     }
 
-    return make!VarExpression(span, name_expr, type_expr, value_expr);
+    return make!VarExpression(span, name, type, value);
 }
 
 /// Function := Expression '=>' Expression ;

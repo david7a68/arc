@@ -46,5 +46,6 @@ enum SyntaxError {
     TokenExpectMismatch,
     TokenNotAnExpression,
     SequenceMissingClosingDelimiter,
+    SequenceMissingSeparator,
     DefineMissingTypeSpec,
 }

@@ -10,7 +10,7 @@ stmt = (def | label | break | return | continue | expr) ';'
     expr = operand | label | var_expr;
         label = '\'' name ;
         
-        var_expr = name (':' primary? ('=' expr)?)? ;
+        var_expr = name ':' ((primary ('=' expr)?) | ('=' expr));
 
         operand = primary | unary | binary | if | loop | labeled;
 
@@ -25,7 +25,15 @@ stmt = (def | label | break | return | continue | expr) ';'
                     | path
                     ;
 
-                list = list_open ','* (var_expr ',')* list_close ;
+                list = list_open ','* (list_member ',')* list_close ;
+                    list_member = operand
+                                | list_repeat
+                                | name ':' primary
+                                | name '=' operand
+                                | name ':' primary '=' operand
+                                | name ':' list_repeat
+                                ;
+                        list_repeat = operand '...' operand
 
                 vector = list_open primary '..' list_close ;
 
