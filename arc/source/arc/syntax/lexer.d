@@ -131,6 +131,12 @@ struct Lexer {
         return current.type == t;
     }
 
+    bool matches_one(Token.Type[] t...) {
+        foreach (type; t)
+            if (type == current.type) return true;
+        return false;
+    }
+
     bool skip(Token.Type t) {
         if (matches(t)) {
             advance();

@@ -4,7 +4,7 @@ import arc.hash: Key;
 import arc.syntax.location: Span;
 
 struct AstNode {
-    enum Type {
+    enum Type : ubyte {
         Invalid,
         None,
         Name,
@@ -45,7 +45,7 @@ struct AstNode {
         Labeled,
     }
 
-    alias type this;
+    alias Type this;
 
     Type type;
     Span span;
@@ -78,9 +78,7 @@ struct AstNode {
     static AstNode* none() { return cast(AstNode*) &none_value; }
 }
 
-AstNode* make(T, Args...)(Span span, Args args) {
-    return cast(AstNode*) new T(span, args);
-}
+pragma(msg, AstNode.sizeof);
 
 struct SimpleNode(AstNode.Type node_type) {
     AstNode self;

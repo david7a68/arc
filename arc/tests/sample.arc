@@ -1,11 +1,3 @@
-// module arc::syntax::parser
-
-// import arc::syntax::ast
-// import arc::syntax::lexer
-// import arc::syntax::location::{SpannedText, Span}}
-// import arc::syntax::reporter::SyntaxReporter
-// import arc::stringtable::StringTable
-
 def Parser := [
     lexer: Lexer
     table: *StringTable
@@ -17,7 +9,7 @@ def Parser::new := (source: SpannedText, table: *StringTable, error: *SyntaxRepo
     p.lexer.read()
 }
 
-def Parser::consume := (self, Token::Type t) => {
+def Parser::consume := (self, t: Token::Type) => {
     if type != self.current.type { return false }
 
     self.advance()
@@ -26,13 +18,13 @@ def Parser::consume := (self, Token::Type t) => {
 
 def Parser::empty := (self) => self.current.type == Token::Eof
 
-def matches := (meta::Type T) => (t: T, T[] types) => {
+def matches := (T: meta::Type) => (t: T, types: T[]) => {
     i := 0
-    loop if i < types.length {
+    loop { if i < types.length {
         if types[i] == t { return true }
     } else {
         break
-    }
+    }}
     return false
 }
 
@@ -66,9 +58,11 @@ def def_ := (p: *Parser) => {
     p.consume(Token::Def)
 
     name := name(p)
-    loop if p.lexer.current.type == Token::ColonColon {
+    loop { if p.lexer.current.type == Token::ColonColon {
         name = path(p, name)
-    }
+    } else {
+        break
+    }}
 
     type := AstNode.none
     if p.consume(Token::Colon) == false {

@@ -1,9 +1,4 @@
 import std.stdio;
-// import arc.syntax.lexer;
-// import arc.syntax.parser;
-// import arc.syntax.syntax_reporter;
-// import arc.output.ast_printer;
-// import arc.syntax.location;
 
 void main(string[] args) {
     import std.file: readText;
@@ -29,11 +24,15 @@ void print_ast(string filename, string text) {
     auto error = new SyntaxReporter(source);
     auto parser = Parser(source.span, &table, error);
 
-    
     auto printer = new AstPrinter(source.span);
     while (!parser.empty) {
         auto s = parser.parse_statement();
         printer.print(s);
+
+        import arc.syntax.flat_ast: flatten;
+        writeln(parser.count);
+        writeln(flatten(parser.count, s));
+        parser.count = 0;
     }
     assert(parser.empty);
     writeln(printer.data);
