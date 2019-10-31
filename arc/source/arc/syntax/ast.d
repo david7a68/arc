@@ -72,9 +72,6 @@ struct AstNode {
                 return children.length;
         }
     }
-
-    static immutable none_value = AstNode(AstNode.None, Span());
-    static AstNode* none() { return cast(AstNode*) &none_value; }
 }
 
 pragma(msg, AstNode.sizeof);

@@ -32,8 +32,10 @@ struct Parser {
     }
 
     AstNode* make(T: None)() {
+        static immutable none_value = AstNode(AstNode.None, Span());
+        
         count++;
-        return AstNode.none;
+        return cast(AstNode*) &none_value;
     }
 }
 
@@ -133,16 +135,17 @@ bool is_stat_token(Token.Type t) {
 
 /// def = 'def' name ':' primary? '=' expr ;
 AstNode* parse_def(ref Parser p) {
-    auto span = p.lexer.current.span;
-    p.lexer.skip_required(Token.Def, p.reporter);
+    auto span = p.lexer.take_required(Token.Def, p.reporter).span;
     
     auto name = parse_name(p);
     while (p.lexer.matches(Token.ColonColon))
         name = parse_path(p, name);
     
-    auto type = AstNode.none;
+    AstNode* type;
     if (p.lexer.skip(Token.Colon)) {
-        if (!p.lexer.matches(Token.Equals))
+        if (p.lexer.matches(Token.Equals))
+            type = p.make!None;
+        else
             type = parse_primary(p);
     }
     else {
@@ -163,20 +166,23 @@ AstNode* parse_def(ref Parser p) {
 }
 
 AstNode* ctrl_flow(T, Token.Type keyword, bool with_value)(ref Parser p) {
-    auto span = p.lexer.current.span;
-    p.lexer.skip_required(keyword, p.reporter);
+    auto span = p.lexer.take_required(keyword, p.reporter).span;
     scope(exit) p.lexer.skip_required(Token.Semicolon, p.reporter);
 
-    auto label = p.make!None;
+    AstNode* label;
     if (p.lexer.matches(Token.Label)) {
         label = p.make!Label(p.lexer.current.span, p.lexer.current.key);
         p.lexer.advance();
     }
+    else label = p.make!None;
 
     static if (with_value) {
-        auto value = p.make!None;
+        AstNode* value;
         if (!p.lexer.matches(Token.Semicolon))
             value = parse_expression(p);
+        else
+            value = p.make!None;
+
         return p.make!T(span, [label, value]);
     }
     else {
@@ -282,11 +288,15 @@ AstNode* parse_expression(ref Parser p, Infix.Precedence prec = Infix.Precedence
     return expr;
 }
 
+bool can_start_expression(Token.Type t) {
+    return prefix_parslets[t] !is &parse_null_prefix;
+}
+
 AstNode* parse_label(ref Parser p) {
     auto token = p.lexer.take();
     auto label = p.make!Label(token.span, token.key);
 
-    if (prefix_parslets[p.lexer.current.type] !is &parse_null_prefix) {
+    if (can_start_expression(p.lexer.current.type)) {
         auto expr = parse_expression(p);
         return p.make!Labeled(label.span.merge(expr.span), label, expr);
     }
@@ -301,24 +311,19 @@ AstNode* parse_primary(ref Parser p) {
 /// Name := ('_' | $a-zA-Z)* ;
 AstNode* parse_name(ref Parser p) {
     auto t = p.lexer.take_required(Token.Name, p.reporter);
-
-    if (t.type == Token.Name)
-        return p.make!Name(t.span, t.key);
-    else
-        return p.make!Invalid(t.span);
+    return p.make!Name(t.span, t.key);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
 AstNode* parse_integer(ref Parser p) {
     import std.conv: to;
 
-    scope(exit) p.lexer.advance();
-    return p.make!Integer(p.lexer.current.span, p.lexer.current.span.text.to!ulong);
+    auto t = p.lexer.take_required(Token.Integer, p.reporter);
+    return p.make!Integer(t.span, t.span.text.to!ulong);
 }
 
 AstNode* parse_char(ref Parser p) {
-    scope(exit) p.lexer.advance();
-    auto t = p.lexer.take;
+    auto t = p.lexer.take_required(Token.Char, p.reporter);
     return p.make!Char(t.span, t.key);
 }
 
@@ -331,18 +336,15 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
 
         if (!p.lexer.matches_one(Token.Comma, Token.Semicolon, close)) {
             int levels = 0;
-            loop: while (!p.empty && levels >= 0) {
+            while (!p.empty && levels >= 0) {
                 if (p.lexer.matches(Token.Semicolon))
-                    break loop;
+                    return span;
                 else if (levels == 0 && p.lexer.matches(Token.Comma))
-                    break loop;
+                    return span;
                 else if (p.lexer.matches_one(Token.Lparen, Token.Lbracket))
                     levels++;
-                else if (p.lexer.matches_one(Token.Rparen, Token.Rbracket)) {
+                else if (p.lexer.matches_one(Token.Rparen, Token.Rbracket))
                     levels--;
-                    // allow parse_seq to handle the closing delimiter
-                    if (levels < 0) break;
-                }
 
                 span = span.merge(p.lexer.take().span);
             }
@@ -353,13 +355,12 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
     static parse_member(ref Parser p) {
         auto first = parse_expression(p, Infix.Logic);
 
-        AstNode* name = p.make!None;
-        AstNode* type = p.make!None;
-        AstNode* value = p.make!None;
+        AstNode* name, type, value;
         auto span = () {
             if (first.type == AstNode.Name) {
                 if (p.lexer.skip(Token.Equals)) {
                     name = first;
+                    type = p.make!None;
                     value = parse_expression(p);
                     return name.span.merge(value.span);
                 }
@@ -371,77 +372,24 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
                         value = parse_expression(p);
                         return name.span.merge(value.span);
                     }
-                    else return name.span.merge(type.span);
+                    else {
+                        value = p.make!None;
+                        return name.span.merge(type.span);
+                    }
                 }
             }
-            else {
-                name = p.make!None;
-                type = p.make!None;
-            }
+
+            name = p.make!None;
+            type = p.make!None;
             value = first;
             return value.span;
         } ();
 
+        assert(name && type && value);
         return p.make!ListMember(span, name, type, value);
     }
     
-    p.lexer.push_eol_type(Token.Comma);
-    auto span = p.lexer.take_required(open, p.reporter).span.span;
-    AstNode*[] members;
-
-    p.lexer.skip_all(Token.Comma);
-    while(!p.empty && !p.lexer.matches(close)) {
-        auto member = parse_member(p);
-
-        if (p.lexer.matches(Token.Comma)) {
-            members ~= member;
-            span = span.merge(member.span);
-            p.lexer.skip_all(Token.Comma);
-        }
-        else if (p.lexer.matches(close)) {
-            members ~= member;
-            span = span.merge(member.span);
-            break;
-        }
-        else if (prefix_parslets[p.lexer.current.type] != &parse_null_prefix) {
-            p.reporter.error(
-                SyntaxError.SequenceMissingSeparator,
-                span.start + span.length,
-                "List is missing comma"
-            );
-
-            members ~= p.make!Invalid(member.span.merge(fast_forward(p)));
-            span = span.merge(member.span);
-            p.lexer.skip_all(Token.Comma);
-
-            if (p.lexer.matches(close)) break;
-            else if (prefix_parslets[p.lexer.current.type] == &parse_null_prefix) {
-                p.reporter.error(
-                    SyntaxError.SequenceMissingClosingDelimiter,
-                    span.start,
-                    "List not closed"
-                );
-
-                p.lexer.pop_eol_type();
-                
-                return p.make!Invalid(span);
-            }
-        }
-        else {
-            p.reporter.error(
-                SyntaxError.SequenceMissingClosingDelimiter,
-                span.start,
-                "List not closed"
-            );
-
-            p.lexer.pop_eol_type();
-            span = span.merge(fast_forward(p));
-            
-            return p.make!Invalid(span);
-        }
-    }
-
-    if (p.empty) {
+    static report_not_closed(ref Parser p, Span span) {
         p.reporter.error(
             SyntaxError.SequenceMissingClosingDelimiter,
             span.start,
@@ -450,9 +398,43 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
 
         p.lexer.pop_eol_type();
         span = span.merge(fast_forward(p));
-        
         return p.make!Invalid(span);
     }
+
+    p.lexer.push_eol_type(Token.Comma);
+    Span span = p.lexer.take_required(open, p.reporter).span;
+    AstNode*[] members;
+
+    p.lexer.skip_all(Token.Comma);
+    while(!p.empty && !p.lexer.matches(close)) {
+        auto member = parse_member(p);
+
+        if (p.lexer.matches(Token.Comma)) {
+            p.lexer.skip_all(Token.Comma);
+        }
+        else if (can_start_expression(p.lexer.current.type)) {
+            p.reporter.error(
+                SyntaxError.SequenceMissingSeparator,
+                span.start + span.length,
+                "List is missing comma"
+            );
+
+            member = p.make!Invalid(member.span.merge(fast_forward(p)));
+            p.lexer.skip_all(Token.Comma);
+
+            if (!p.lexer.matches(close) && !can_start_expression(p.lexer.current.type))
+                return report_not_closed(p, span);
+        }
+        else if (!p.lexer.matches(close)) {
+            return report_not_closed(p, span);
+        }
+
+        members ~= member;
+        span = span.merge(member.span);
+    }
+
+    if (p.empty)
+        return report_not_closed(p, span);
 
     p.lexer.pop_eol_type();
     span = span.merge(p.lexer.take_required(close, p.reporter).span);
@@ -460,10 +442,8 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
 }
 
 AstNode* parse_block(ref Parser p) {
-    auto span = p.lexer.current.span.span;
     p.lexer.push_eol_type(Token.Semicolon);
-    p.lexer.skip_required(Token.Lbrace, p.reporter);
-
+    Span span = p.lexer.take_required(Token.Lbrace, p.reporter).span;
     p.lexer.skip_all(Token.Semicolon);
     
     AstNode*[] members;
@@ -553,8 +533,7 @@ AstNode* parse_binary(T, int prec, bool skip = true)(ref Parser p, AstNode* lhs)
 }
 
 AstNode* parse_if(ref Parser p) {
-    Span span = p.lexer.current.span;
-    p.lexer.skip_required(Token.If, p.reporter);
+    Span span = p.lexer.take_required(Token.If, p.reporter).span;
 
     auto cond = parse_expression(p);
     auto body = parse_block(p);
@@ -570,8 +549,7 @@ AstNode* parse_if(ref Parser p) {
 }
 
 AstNode* parse_loop(ref Parser p) {
-    auto span = p.lexer.current.span;
-    p.lexer.skip_required(Token.Loop, p.reporter);
+    Span span = p.lexer.take_required(Token.Loop, p.reporter).span;
     auto body = parse_block(p);
     return p.make!Loop(span.merge(body.span), body);
 }
