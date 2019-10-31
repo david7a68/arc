@@ -96,8 +96,12 @@ struct AstPrinter {
         case If:
             write_named_children(n, "Cond: ", "Body: ", "Else: ");
             break;
+        case Return:
         case Break:
             write_named_children(n, "Label: ", "Value: ");
+            break;
+        case Continue:
+            write_named_children(n, "Label: ");
             break;
         default:
             write_children(n);

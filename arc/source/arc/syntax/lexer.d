@@ -127,10 +127,6 @@ struct Lexer {
         return current;
     }
 
-    bool matches(Token.Type t) {
-        return current.type == t;
-    }
-
     bool matches_one(Token.Type[] t...) {
         foreach (type; t)
             if (type == current.type) return true;
@@ -138,7 +134,7 @@ struct Lexer {
     }
 
     bool skip(Token.Type t) {
-        if (matches(t)) {
+        if (current.type == t) {
             advance();
             return true;
         }
