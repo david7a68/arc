@@ -175,7 +175,6 @@ AstNode*[] diff(AstNode* root, Match match) {
     ).length == 0);
 }
 
-/*
 @("parser:var_expr1") unittest {
     mixin(parser_init("parser:var_expr2", "a : b()", "var_expr"));
     assert(diff(tree, Match(AstNode.VarExpression, [
@@ -187,7 +186,7 @@ AstNode*[] diff(AstNode* root, Match match) {
         Match(AstNode.None),
     ])).length == 0);
 }
-*/
+
 @("parser:var_expr2") unittest {
     mixin(parser_init("parser:var_expr3", "a:b=c", "var_expr"));
     assert(diff(tree, Match(AstNode.VarExpression, [
@@ -277,45 +276,16 @@ AstNode*[] diff(AstNode* root, Match match) {
     assert(parser.reporter.errors.length == 2);
 }
 
-@("parser:list4") unittest {
+@("parser:list5") unittest {
     mixin(parser_init("parser:list4", "[a, [b]", "expression", false));
     assert(parser.reporter.has_error(SyntaxError.SequenceMissingClosingDelimiter));
     assert(parser.reporter.errors.length == 1);
 }
 
-@("parser:list5") unittest {
+@("parser:list6") unittest {
     mixin(parser_init("parser:list4", "[[a) some * [other[]] _ stuff,]", "expression", false));
     assert(parser.reporter.has_error(SyntaxError.SequenceMissingClosingDelimiter));
     assert(parser.reporter.errors.length == 1);
-}
-
-@("parser:array") unittest {
-    {
-        mixin(parser_init("parser:array", "[T..4]", "expression"));
-        assert(diff(tree, Match(AstNode.List, [
-            Match(AstNode.ListMember, [
-                Match(AstNode.None),
-                Match(AstNode.ListRepeat, [
-                    Match(AstNode.Name),
-                    Match(AstNode.Integer),
-                ]),
-                Match(AstNode.None),
-            ])
-        ])).length == 0);
-    }
-    {
-        mixin(parser_init("parser:array", "[a: T..4]", "expression"));
-        assert(diff(tree, Match(AstNode.List, [
-            Match(AstNode.ListMember, [
-                Match(AstNode.Name),
-                Match(AstNode.ListRepeat, [
-                    Match(AstNode.Name),
-                    Match(AstNode.Integer),
-                ]),
-                Match(AstNode.None),
-            ]),
-        ])).length == 0);
-    }
 }
 
 @("parser:function") unittest {
@@ -329,30 +299,30 @@ AstNode*[] diff(AstNode* root, Match match) {
     ])).length == 0);
 }
 
-// @("parser:call") unittest {
-//     mixin(parser_init("parser:call", "[][()]", "expression"));
-//     assert(diff(tree, Match(AstNode.Call, [
-//         Match(AstNode.List),
-//         Match(AstNode.List, [
-//             Match(AstNode.ListMember, [
-//                 Match(AstNode.None),
-//                 Match(AstNode.None),
-//                 Match(AstNode.List),
-//             ])
-//         ])
-//     ])).length == 0);
-// }
+@("parser:call") unittest {
+    mixin(parser_init("parser:call", "[][()]", "expression"));
+    assert(diff(tree, Match(AstNode.Call, [
+        Match(AstNode.List),
+        Match(AstNode.List, [
+            Match(AstNode.ListMember, [
+                Match(AstNode.None),
+                Match(AstNode.None),
+                Match(AstNode.List),
+            ])
+        ])
+    ])).length == 0);
+}
 
-// @("parser:dot") unittest {
-//     mixin(parser_init("parser:dot", "a().c", "expression"));
-//     assert(diff(tree, Match(AstNode.Call, [
-//         Match(AstNode.Call, [
-//             Match(AstNode.Name),
-//             Match(AstNode.List)
-//         ]),
-//         Match(AstNode.Name),
-//     ])).length == 0);
-// }
+@("parser:dot") unittest {
+    mixin(parser_init("parser:dot", "a().c", "expression"));
+    assert(diff(tree, Match(AstNode.Call, [
+        Match(AstNode.Call, [
+            Match(AstNode.Name),
+            Match(AstNode.List)
+        ]),
+        Match(AstNode.Name),
+    ])).length == 0);
+}
 
 @("parser:negate") unittest {
     mixin(parser_init("parser:negate", "-3", "expression"));

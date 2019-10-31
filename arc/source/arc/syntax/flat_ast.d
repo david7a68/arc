@@ -61,11 +61,6 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
                         index++;
                         flatten_3(child.children, buffer, index);
                     }
-                    else {
-                        buffer[index] = FlatAstNode(AstNode.ListRepeat, child.span, index);
-                        index++;
-                        flatten_2(child.children, buffer, index);
-                    }
                     buffer[last_child_index].next = index;
                 }
                 buffer[last_child_index].next = last_child_index;

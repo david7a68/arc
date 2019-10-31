@@ -141,7 +141,11 @@ AstNode* parse_def(ref Parser p) {
         name = parse_path(p, name);
     
     auto type = AstNode.none;
-    if (!p.lexer.skip(Token.Colon)) {
+    if (p.lexer.skip(Token.Colon)) {
+        if (!p.lexer.matches(Token.Equals))
+            type = parse_primary(p);
+    }
+    else {
         p.reporter.error(
             SyntaxError.DefineMissingTypeSpec,
             span.start,
@@ -150,10 +154,7 @@ AstNode* parse_def(ref Parser p) {
         );
         type = p.make!Invalid(Span(0, 0));
     }
-    else if (!p.lexer.matches(Token.Equals)) {
-        type = parse_primary(p);
-    }
-    
+
     p.lexer.skip_required(Token.Equals, p.reporter);
     auto value = parse_expression(p);
     p.lexer.skip_required(Token.Semicolon, p.reporter);
@@ -356,12 +357,7 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
         AstNode* type = p.make!None;
         AstNode* value = p.make!None;
         auto span = () {
-            if (p.lexer.skip(Token.DotDot)) {
-                auto count = parse_expression(p);
-                type = p.make!ListRepeat(first.span.merge(count.span), first, count);
-                return type.span;
-            }
-            else if (first.type == AstNode.Name) {
+            if (first.type == AstNode.Name) {
                 if (p.lexer.skip(Token.Equals)) {
                     name = first;
                     value = parse_expression(p);
@@ -375,31 +371,17 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
                         value = parse_expression(p);
                         return name.span.merge(value.span);
                     }
-                    else if (p.lexer.skip(Token.DotDot)) {
-                        auto count = parse_expression(p);
-                        type = p.make!ListRepeat(first.span.merge(count.span), first, count);
-                        return type.span;
-                    }
                     else return name.span.merge(type.span);
                 }
             }
             else {
                 name = p.make!None;
+                type = p.make!None;
             }
             value = first;
             return value.span;
         } ();
 
-        if (prefix_parslets[p.lexer.current.type] != &parse_null_prefix) {
-            p.reporter.error(
-                SyntaxError.SequenceMissingSeparator,
-                span.start + span.length,
-                "List is missing comma"
-            );
-
-            span = span.merge(fast_forward(p));
-            return p.make!Invalid(span);
-        }
         return p.make!ListMember(span, name, type, value);
     }
     
@@ -410,13 +392,41 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
     p.lexer.skip_all(Token.Comma);
     while(!p.empty && !p.lexer.matches(close)) {
         auto member = parse_member(p);
-        members ~= member;
-        span = span.merge(member.span);
 
-        if (p.lexer.matches(Token.Comma))
+        if (p.lexer.matches(Token.Comma)) {
+            members ~= member;
+            span = span.merge(member.span);
             p.lexer.skip_all(Token.Comma);
-        else if (p.lexer.matches(close))
+        }
+        else if (p.lexer.matches(close)) {
+            members ~= member;
+            span = span.merge(member.span);
             break;
+        }
+        else if (prefix_parslets[p.lexer.current.type] != &parse_null_prefix) {
+            p.reporter.error(
+                SyntaxError.SequenceMissingSeparator,
+                span.start + span.length,
+                "List is missing comma"
+            );
+
+            members ~= p.make!Invalid(member.span.merge(fast_forward(p)));
+            span = span.merge(member.span);
+            p.lexer.skip_all(Token.Comma);
+
+            if (p.lexer.matches(close)) break;
+            else if (prefix_parslets[p.lexer.current.type] == &parse_null_prefix) {
+                p.reporter.error(
+                    SyntaxError.SequenceMissingClosingDelimiter,
+                    span.start,
+                    "List not closed"
+                );
+
+                p.lexer.pop_eol_type();
+                
+                return p.make!Invalid(span);
+            }
+        }
         else {
             p.reporter.error(
                 SyntaxError.SequenceMissingClosingDelimiter,
@@ -429,6 +439,19 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
             
             return p.make!Invalid(span);
         }
+    }
+
+    if (p.empty) {
+        p.reporter.error(
+            SyntaxError.SequenceMissingClosingDelimiter,
+            span.start,
+            "List not closed"
+        );
+
+        p.lexer.pop_eol_type();
+        span = span.merge(fast_forward(p));
+        
+        return p.make!Invalid(span);
     }
 
     p.lexer.pop_eol_type();

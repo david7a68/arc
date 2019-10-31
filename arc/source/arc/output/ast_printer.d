@@ -81,9 +81,6 @@ struct AstPrinter {
         case ListMember:
             write_named_children(n, "Name: ", "Type: ", "Value: ");
             break;
-        case ListRepeat:
-            write_named_children(n, "Type: ", "Count: ");
-            break;
         case Function:
             write_named_children(n, "Params: ", "Body: ");
             break;

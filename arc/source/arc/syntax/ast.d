@@ -12,7 +12,6 @@ struct AstNode {
         Char,
         List,
         ListMember,
-        ListRepeat,
         Block,
         Function,
         Negate,
@@ -173,7 +172,6 @@ alias Integer           = ValueNode!(AstNode.Integer, ulong, "value");
 alias Char              = ValueNode!(AstNode.Char, Key, "key");
 alias List              = SeqNode!(AstNode.List);
 alias ListMember        = AggregateNode!(AstNode.ListMember, ["name", "type", "value"]);
-alias ListRepeat        = AggregateNode!(AstNode.ListRepeat, ["type", "count"]);
 alias Block             = SeqNode!(AstNode.Block);
 alias Function          = AggregateNode!(AstNode.Function, ["params", "body"]);
 alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);

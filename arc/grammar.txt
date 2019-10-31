@@ -18,7 +18,6 @@ stmt = (def | label | break | return | continue | expr) ';'
                     | integer
                     | char
                     | list
-                    | vector
                     | block
                     | function
                     | call
@@ -27,15 +26,10 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 list = list_open ','* (list_member ',')* list_close ;
                     list_member = operand
-                                | list_repeat
                                 | name ':' primary
                                 | name '=' operand
                                 | name ':' primary '=' operand
-                                | name ':' list_repeat
                                 ;
-                        list_repeat = operand '...' operand
-
-                vector = list_open primary '..' list_close ;
 
                 block = '{' smt* '}' ;
 
