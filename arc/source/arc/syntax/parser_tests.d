@@ -297,9 +297,10 @@ AstNode*[] diff(AstNode* root, Match match) {
 }
 
 @("parser:function") unittest {
-    mixin(parser_init("parser:func", "nah => blah * bleh", "expression"));
+    mixin(parser_init("parser:func", "nah -> blah * bleh", "expression"));
     assert(diff(tree, Match(AstNode.Function, [
         Match(AstNode.Name),
+        Match(AstNode.None),
         Match(AstNode.Multiply, [
             Match(AstNode.Name),
             Match(AstNode.Name),

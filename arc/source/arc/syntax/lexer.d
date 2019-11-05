@@ -361,7 +361,7 @@ unittest { // Test empty lexer with whitespace
 }
 
 unittest {
-    mixin(init_scan("()[],.;=>129400_81anb_wo283'some_label"));
+    mixin(init_scan("()[],.;->129400_81anb_wo283'some_label"));
 
     bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
         auto tok = scan_type(cursor, end);
@@ -375,7 +375,7 @@ unittest {
     assert(test_scan(Token.Comma,       ",", 5));
     assert(test_scan(Token.Dot,         ".", 6));
     assert(test_scan(Token.Semicolon,   ";", 7));
-    assert(test_scan(Token.FatRarrow,   "=>", 9));
+    assert(test_scan(Token.Rarrow,      "->", 9));
     assert(test_scan(Token.Integer,     "129400_81", 18));
     assert(test_scan(Token.Name,        "anb_wo283", 27));
     assert(test_scan(Token.Label,       "'some_label", 38));
