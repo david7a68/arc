@@ -41,6 +41,9 @@ struct AstNode {
         Return,
         Continue,
         Labeled,
+        TypeList,
+        TypeListMember,
+        FunctionType
     }
 
     alias Type this;
@@ -197,3 +200,6 @@ alias Break             = AggregateNode!(AstNode.Break, ["label", "value"]);
 alias Return            = AggregateNode!(AstNode.Return, ["label", "value"]);
 alias Continue          = AggregateNode!(AstNode.Continue, ["label"]);
 alias Labeled           = AggregateNode!(AstNode.Labeled, ["label", "expression"]);
+alias TypeList          = SeqNode!(AstNode.TypeList);
+alias TypeListMember    = AggregateNode!(AstNode.TypeListMember, ["name", "type"]);
+alias FunctionType      = AggregateNode!(AstNode.FunctionType, ["params", "return_type"]);

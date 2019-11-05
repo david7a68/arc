@@ -22,8 +22,18 @@ def float3_multiply := (v: float3, s: float) -> {
     return result
 }
 
-// def float3x3_multiply := (m33: float3x3, v: float3) -> float3 {
-def float3x3_multiply := (m33: float3x3, v: float3) -> {
+def float3x3_multiply : (float3x3, float) -> float3x3 = (m33, v) -> {
+    result : float3x3
+    
+    i := 0
+    loop {if (i < m33.length) {
+        result[i] = m33[i] * v
+    } else { break }}
+
+    return result
+}
+
+def float3x3_multiply := (m33: float3x3, v: float3) -> float3 {
     return [
         m33[0] * v[0] + m33[1] * v[1] + m33[2] * v[2]
         m33[3] * v[0] + m33[4] * v[1] + m33[5] * v[2]

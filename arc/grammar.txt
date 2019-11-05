@@ -1,5 +1,5 @@
 stmt = (def | label | break | return | continue | expr) ';'
-    def = 'def' name ':' primary? '=' expr ;
+    def = 'def' name ':' type? '=' expr ;
 
     break = 'break' label? expr? ;
 
@@ -7,10 +7,23 @@ stmt = (def | label | break | return | continue | expr) ';'
 
     continue = 'continue' label? ;
 
+    type = name
+         | type_list
+         | call
+         | function_type
+         ;
+
+        type_list = list_open ','* (list_member ',')* list_close ;
+            type_list_member = type
+                             | name ':' type
+                             ;
+
+        function_type = type '->' type ;
+
     expr = operand | label | var_expr;
         label = '\'' name ;
         
-        var_expr = name ':' ((primary ('=' expr)?) | ('=' expr));
+        var_expr = name ':' ((type ('=' expr)?) | ('=' expr));
 
         operand = primary | unary | binary | if | loop | labeled;
 
@@ -25,9 +38,9 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 list = list_open ','* (list_member ',')* list_close ;
                     list_member = operand
-                                | name ':' primary
+                                | name ':' type
                                 | name '=' operand
-                                | name ':' primary '=' operand
+                                | name ':' type '=' operand
                                 ;
 
                 block = '{' smt* '}' ;
