@@ -21,7 +21,6 @@ stmt = (def | label | break | return | continue | expr) ';'
                     | block
                     | function
                     | call
-                    | path
                     ;
 
                 list = list_open ','* (list_member ',')* list_close ;
@@ -33,14 +32,10 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 block = '{' smt* '}' ;
 
-                function = primary '=>' expr ;
+                function = primary '->' expr block? ;
 
-                call = (list | name | path) '.'? (list | name | path)
+                call = (list | name) '.'? (list | name)
                     | call '.'? call
-                    ;
-
-                path = (name | list | call) '::' (name | list | call)
-                    | path '::' path
                     ;
 
             unary = negate

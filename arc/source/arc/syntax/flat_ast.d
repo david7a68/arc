@@ -14,12 +14,6 @@ struct FlatAstNode {
     }
 }
 
-pragma(msg, FlatAstNode.sizeof);
-
-bool has_children(FlatAstNode[] nodes, uint index) {
-    return nodes[index].next == index;
-}
-
 import arc.syntax.ast: AstNode;
 FlatAstNode[] flatten(uint count, AstNode* root) {
     auto buffer = new FlatAstNode[](count);
@@ -102,7 +96,6 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
         case Divide:
         case Power:
         case Call:
-        case Path:
             buffer[index] = FlatAstNode(root.type, root.span, index);
             index++;
             flatten_2(root.children, buffer, index);

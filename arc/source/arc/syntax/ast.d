@@ -32,7 +32,6 @@ struct AstNode {
         Divide,
         Power,
         Call,
-        Path,
         VarExpression,
         Define,
         If,
@@ -170,7 +169,7 @@ alias Char              = ValueNode!(AstNode.Char, Key, "key");
 alias List              = SeqNode!(AstNode.List);
 alias ListMember        = AggregateNode!(AstNode.ListMember, ["name", "type", "value"]);
 alias Block             = SeqNode!(AstNode.Block);
-alias Function          = AggregateNode!(AstNode.Function, ["params", "body"]);
+alias Function          = AggregateNode!(AstNode.Function, ["params", "return_type", "body"]);
 alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);
 alias Pointer           = AggregateNode!(AstNode.Pointer, ["operand"]);
 alias GetRef            = AggregateNode!(AstNode.GetRef, ["operand"]);
@@ -189,7 +188,6 @@ alias Multiply          = AggregateNode!(AstNode.Multiply, ["lhs", "rhs"]);
 alias Divide            = AggregateNode!(AstNode.Divide, ["lhs", "rhs"]);
 alias Power             = AggregateNode!(AstNode.Power, ["lhs", "rhs"]);
 alias Call              = AggregateNode!(AstNode.Call, ["target", "arguments"]);
-alias Path              = AggregateNode!(AstNode.Path, ["base", "name"]);
 alias VarExpression     = AggregateNode!(AstNode.VarExpression, ["name", "type", "value"]);
 alias Define            = AggregateNode!(AstNode.Define, ["name", "type", "value"]);
 alias If                = AggregateNode!(AstNode.If, ["condition", "body", "else_"]);

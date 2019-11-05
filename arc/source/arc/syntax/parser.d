@@ -137,8 +137,6 @@ AstNode* parse_def(ref Parser p) {
     auto span = p.lexer.take_required(Token.Def, p.reporter).span;
     
     auto name = parse_name(p);
-    while (p.lexer.current.type == Token.ColonColon)
-        name = parse_path(p, name);
     
     AstNode* type;
     if (p.lexer.skip(Token.Colon)) {
@@ -156,8 +154,10 @@ AstNode* parse_def(ref Parser p) {
         type = p.make!Invalid(Span(0, 0));
     }
 
-    p.lexer.skip_required(Token.Equals, p.reporter);
-    auto value = parse_expression(p);
+    auto value = p.lexer.skip(Token.Equals) ?
+                 parse_expression(p) :
+                 p.make!None;
+
     p.lexer.skip_required(Token.Semicolon, p.reporter);
 
     return p.make!Define(span.merge(value.span), name, type, value);
@@ -260,12 +260,11 @@ immutable Infix[256] infix_parslets = () {
     p[Token.And]            = Infix(Infix.Logic,        &parse_binary!(And, Infix.Logic + 1));
     p[Token.Or]             = Infix(Infix.Logic,        &parse_binary!(Or, Infix.Logic + 1));
     
-    p[Token.FatRArrow]      = Infix(Infix.Primary,      &parse_function);
+    p[Token.Rarrow]         = Infix(Infix.Primary,      &parse_function);
     p[Token.Lparen]         = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1, false));
     p[Token.Lbracket]       = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1, false));
     p[Token.Dot]            = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1));
     p[Token.Colon]          = Infix(Infix.Assignment,   &parse_var_expr2);
-    p[Token.ColonColon]     = Infix(Infix.Primary,      &parse_path);
     return p;
 } ();
 
@@ -363,7 +362,6 @@ AstNode* parse_seq(Token.Type open, Token.Type close)(ref Parser p) {
                         p.make!None;
 
         auto span = name.span.merge(type.span).merge(value.span);
-        assert(name && type && value);
         return p.make!ListMember(span, name, type, value);
     }
     
@@ -480,16 +478,18 @@ AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
 
 /// Function := Expression '=>' Expression ;
 AstNode* parse_function(ref Parser p, AstNode* params) {
-    p.lexer.skip_required(Token.FatRArrow, p.reporter);
-    auto body = parse_expression(p);
-    return p.make!Function(params.span.merge(body.span), params, body);
-}
+    p.lexer.skip_required(Token.Rarrow, p.reporter);
+    auto first = parse_expression(p);
 
-AstNode* parse_path(ref Parser p, AstNode* lhs) {
-    assert(matches(lhs.type, AstNode.Name, AstNode.List, AstNode.Call, AstNode.Path));
-    p.lexer.skip_required(Token.ColonColon, p.reporter);
-    auto rhs = prefix_parslets[p.lexer.current.type](p);
-    return p.make!Path(lhs.span.merge(rhs.span), lhs, rhs);
+    auto type = p.lexer.current.type == Token.Lbrace ?
+                first :
+                p.make!None;
+
+    auto body = p.lexer.current.type == Token.Lbrace ?
+                parse_block(p) :
+                first;
+
+    return p.make!Function(params.span.merge(body.span), params,type, body);
 }
 
 /// Unary := <op> Expression

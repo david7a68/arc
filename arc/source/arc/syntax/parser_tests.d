@@ -332,27 +332,6 @@ AstNode*[] diff(AstNode* root, Match match) {
     ])).length == 0);
 }
 
-@("parser:path") unittest {
-    import arc.stringtable: StringTable;
-
-    mixin(parser_init("parser:path", "a::b::c::d", "expression"));
-    assert(diff(tree, Match(AstNode.Path, [
-        Match(AstNode.Path, [
-            Match(AstNode.Path, [
-                Match(AstNode.Name),
-                Match(AstNode.Name),
-            ]),
-            Match(AstNode.Name),
-        ]),
-        Match(AstNode.Name)
-    ])).length == 0);
-
-    assert(tree.children[0].children[0].children[0].key == StringTable.digest("a"));
-    assert(tree.children[0].children[0].children[1].key == StringTable.digest("b"));
-    assert(tree.children[0].children[1].key == StringTable.digest("c"));
-    assert(tree.children[1].key == StringTable.digest("d"));
-}
-
 @("parser:negate") unittest {
     mixin(parser_init("parser:negate", "-3", "expression"));
     assert(diff(tree, Match(AstNode.Negate, [Match(AstNode.Integer)])).length == 0);

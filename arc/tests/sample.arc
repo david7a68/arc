@@ -4,21 +4,19 @@ def Parser := [
     error: *SyntaxReporter
 ]
 
-def Parser::new := (source: SpannedText, table: *StringTable, error: *SyntaxReporter) => {
-    p := [Lexer::new(source, table), table, error]
-    p.lexer.read()
+def make_parser := (source: SpannedText, table: *StringTable, error: *SyntaxReporter) => {
+    p := [make_lexer(source, table), table, error]
+    read(p.lexer)
 }
 
-def Parser::consume := (self, t: Token::Type) => {
-    if type != self.current.type { return false }
+def skip := (p: *Parser, t: TokenType) => {
+    if type != p.current.type { return false }
 
-    self.advance()
+    advance(p.lexer)
     return true
 }
 
-def Parser::empty := (self) => self.current.type == Token::Eof
-
-def matches := (T: meta::Type) => (t: T, types: T[]) => {
+def matches := (T: Type) => (t: T, types: T[]) => {
     i := 0
     loop { if i < types.length {
         if types[i] == t { return true }
@@ -35,45 +33,45 @@ def matches := (T: meta::Type) => (t: T, types: T[]) => {
 
 
 def statement := (p: *Parser) => {
-    p.lexer.push_eol_type(Token::Semicolon)
+    push_eol_type(p.lexer, Tok_Semicolon)
     type := p.lexer.current.type
 
-    s := if type == Token::Def {
+    s := if type == Tok_Def {
         def_(p)
-    } else if type == Token::Break {
+    } else if type == Tok_Break {
         break_(p)
-    } else if type == Token::Return {
+    } else if type == Tok_Return {
         return_(p)
-    } else if type == Token::Continue {
+    } else if type == Tok_Continue {
         continue_(p)
     } else expression(p)
 
-    p.consume(Token::Semicolon)
-    p.lexer.pop_eol_type()
+    consume(p, Tok_Semicolon)
+    pop_eol_type(p.lexer)
     s
 }
 
 def def_ := (p: *Parser) => {
     span := p.lexer.current.span
-    p.consume(Token::Def)
+    consume(p, Tok_Def)
 
     name := name(p)
-    loop { if p.lexer.current.type == Token::ColonColon {
+    loop { if p.lexer.current.type == Tok_ColonColon {
         name = path(p, name)
     } else {
         break
     }}
 
     type := AstNode.none
-    if p.consume(Token::Colon) == false {
-        p.error.definition_missing_colon(span.merge(name.span), p.current.span)
-        type := make_invalid(Span::new(0, 0))
-    } else if p.lexer.current.type != Token::Equals {
+    if p.consume(Tok_Colon) == false {
+        p.error.definition_missing_colon(merge(span, name.span), p.current.span)
+        type := make_invalid(new_span(0, 0))
+    } else if p.lexer.current.type != Tok_Equals {
         type = primary(p)
     }
 
-    p.consume(Token::Equals)
+    consume(p, Tok_Equals)
     value := expression(p)
 
-    make_n_ary(AstNode::Define, span.merge(value.span), name, type, value)
+    make_n_ary(Ast_Define, merge(span, value.span), name, type, value)
 }

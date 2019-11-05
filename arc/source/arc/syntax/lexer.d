@@ -31,7 +31,7 @@ struct Token {
         Equals = '=',
         Less = '<', Greater = '>',
         LessEqual, GreaterEqual, EqualEqual, BangEqual,
-        FatRArrow, ColonColon, Label, DotDot,
+        Rarrow, ColonColon, Label, DotDot,
 
         And, Or,
         If, Else, Loop, Break, Return, Continue,
@@ -250,9 +250,13 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '+':
         case '*':
         case '^':
-        case '-':
         case '&':
             return make_token(cast(Token.Type) *cursor, 1);
+        case '-':
+            cursor++;
+            if (cursor != end && *cursor == '>')
+                return make_token(Token.Rarrow, 1);
+            return make_token(Token.Minus, 0);
         case '.':
             cursor++;
             if (cursor <= end && *cursor == '.')
@@ -273,9 +277,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             else return make_token(Token.Slash, 0);
         case '=':
             cursor++;
-            if (cursor != end && *cursor == '>') // advance only by one
-                return make_token(Token.FatRArrow, 1);
-            else if (cursor != end && *cursor == '=')
+            if (cursor != end && *cursor == '=')
                 return make_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Equals, 0);
@@ -373,7 +375,7 @@ unittest {
     assert(test_scan(Token.Comma,       ",", 5));
     assert(test_scan(Token.Dot,         ".", 6));
     assert(test_scan(Token.Semicolon,   ";", 7));
-    assert(test_scan(Token.FatRArrow,   "=>", 9));
+    assert(test_scan(Token.FatRarrow,   "=>", 9));
     assert(test_scan(Token.Integer,     "129400_81", 18));
     assert(test_scan(Token.Name,        "anb_wo283", 27));
     assert(test_scan(Token.Label,       "'some_label", 38));

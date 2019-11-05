@@ -82,7 +82,7 @@ struct AstPrinter {
             write_named_children(n, "Name: ", "Type: ", "Value: ");
             break;
         case Function:
-            write_named_children(n, "Params: ", "Body: ");
+            write_named_children(n, "Params: ", "Return Type: ", "Body: ");
             break;
         case Call:
             write_named_children(n, "Target: ", "Arguments: ");
