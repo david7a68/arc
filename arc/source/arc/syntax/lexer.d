@@ -303,8 +303,13 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             cursor++;
             if (cursor == end)
                 return make_token(Token.Invalid, 0);
-            else if (*cursor == '\\')
-                return make_token(Token.Char, 2 + 1);
+            else if (*cursor == '\\') {
+                cursor += 2;
+
+                if (*cursor == '\'')
+                    return make_token(Token.Char, 1);
+                return make_token(Token.Invalid, 0);
+            }
             else {
                 cursor++;
 
@@ -342,7 +347,7 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             return make_token(Token.Name, 0);
         case '0': .. case '9':
             cursor++;
-            while (('0' <= *cursor && *cursor <= '9') || *cursor == '_')
+            while (cursor < end && (('0' <= *cursor && *cursor <= '9') || *cursor == '_'))
                 cursor++;
             return make_token(Token.Integer, 0);
         default:
