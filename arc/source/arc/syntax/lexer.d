@@ -206,6 +206,9 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
                 } while (scan.type == Token.Eol);
         }
     }
+    else while (scan.type == Token.Eol)
+        scan = scan_type(cursor, end);
+
     return scan;
 }
 

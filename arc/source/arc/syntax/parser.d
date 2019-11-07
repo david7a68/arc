@@ -364,7 +364,17 @@ AstNode* parse_label(bool with_expr)(ref Parser p) {
     static if (with_expr) {
         if (can_start_expression(p.lexer.current.type)) {
             auto expr = parse_expression(p);
-            return p.make!Labeled(label.span.merge(expr.span), label, expr);
+
+            switch (expr.type) {
+                case AstNode.If:
+                case AstNode.Loop:
+                case AstNode.Block:
+                case AstNode.Function:
+                    return p.make!Labeled(label.span.merge(expr.span), label, expr);
+                default:
+                    assert(false, "bad label expression");
+            }
+
         }
     }
 
