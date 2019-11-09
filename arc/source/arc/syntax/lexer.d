@@ -118,17 +118,20 @@ struct Lexer {
         eol_type_stack.removeBack();
     }
 
+    /// Take the current token from the lexer, and advance it by one token.
     Token take() {
         scope(exit) advance();
         return current;
     }
 
+    /// Check if the lexer's current token matches one of the types in $(D t).
     bool matches_one(Token.Type[] t...) {
         foreach (type; t)
             if (type == current.type) return true;
         return false;
     }
 
+    /// Skip a token of type $(D t), return true if successful.
     bool skip(Token.Type t) {
         if (current.type == t) {
             advance();
@@ -137,6 +140,7 @@ struct Lexer {
         return false;
     }
 
+    /// Skip all continuous repeating occurences of token $(D t).
     void skip_all(Token.Type t) {
         while (skip(t)) continue;
     }
@@ -161,6 +165,26 @@ struct Lexer {
 
 struct ScanResult { Token.Type type; const(char)[] text; }
 
+/**
+ * Scans a character buffer from $(D cursor) to $(D end), producing a tuple of the
+ * type and slice of text of the first token it encounters. This scanner makes use
+ * of $(D previous) and $(D eol_type) to automatically insert end-of-line
+ * delimiters if:
+ *
+ *  - The current token is an closing brace, an end of line token, or an end of file
+ *     token
+ *  - And the previous token was one of:
+ *    - )
+ *    - ]
+ *    - }
+ *    - Name
+ *    - Integer
+ *    - Label
+ *    - Char
+ *    - Break
+ *    - Continue
+ *    - Return
+ */
 ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
     const start = cursor;
     auto scan = scan_type(cursor, end);
@@ -181,6 +205,8 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
             case Integer:
             case Label:
             case Char:
+            // We can test for these keywords because the previous token has
+            // already been processed for all keywords.
             case Break:
             case Continue:
             case Return:
@@ -199,9 +225,9 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
 
 /**
  * Scans a character buffer from `cursor` to `end`, producing a tuple of the 
- * type of the first token, and its length. The scanner does not distinguish
- * between tokens of the same character class, such as keywords and identifiers,
- * leaving that up to a higher-level scanner.
+ * type of the first token, and the text covered. The scanner does not
+ * distinguish between tokens of the same character class, such as keywords and
+ * identifiers, leaving that up to a higher-level scanner.
  * 
  * Returns: (type: Token.Type, text: const(char)[])
  */
