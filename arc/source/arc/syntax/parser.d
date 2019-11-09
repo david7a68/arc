@@ -89,6 +89,17 @@ debug bool matches(T)(T t, T[] types...) {
 }
 
 
+AstNode* parse_module(ref Parser p) {
+    p.lexer.push_eol_type(Token.Semicolon);
+
+    AstNode*[] statements;
+    while (!p.empty)
+        statements ~= parse_statement(p);
+
+    p.lexer.pop_eol_type();
+    return p.make!Module(p.lexer.source, statements);
+}
+
 //-----------------------------------//
 //            Statements             //
 //-----------------------------------//
@@ -105,8 +116,6 @@ stmt = (def | label | break | return | continue | expr) ';'
 */
 
 AstNode* parse_statement(ref Parser p) {
-    p.lexer.push_eol_type(Token.Semicolon);
-    
     auto s = () {
         switch (p.lexer.current.type) {
         case Token.Def:       return parse_def(p);
@@ -119,7 +128,6 @@ AstNode* parse_statement(ref Parser p) {
             return e;
         }
     } ();
-    p.lexer.pop_eol_type();
     return s;
 }
 
@@ -526,14 +534,6 @@ AstNode* parse_block(ref Parser p) {
     p.lexer.pop_eol_type();
     span = span.merge(p.lexer.take_required(Token.Rbrace, p.reporter).span);
     return p.make!Block(span, members);
-}
-
-/**
- * var_expr : Expression ((":" (('=' Expression) | (Expression ("=" Expression)?)) |
- *                        ("=" Expression))?
- */
-AstNode* parse_var_expr(ref Parser p) {
-    return parse_var_expr2(p, parse_primary(p));
 }
 
 AstNode* parse_var_expr2(ref Parser p, AstNode* first) {

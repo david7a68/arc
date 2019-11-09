@@ -7,6 +7,7 @@ struct AstNode {
     enum Type : ubyte {
         Invalid,
         None,
+        Module,
         Name,
         Integer,
         Char,
@@ -166,6 +167,7 @@ struct SeqNode(AstNode.Type node_type) {
 
 alias Invalid           = SimpleNode!(AstNode.Invalid);
 alias None              = SimpleNode!(AstNode.None);
+alias Module            = SeqNode!(AstNode.Module);
 alias Name              = ValueNode!(AstNode.Name, Key, "key");
 alias Integer           = ValueNode!(AstNode.Integer, ulong, "value");
 alias Char              = ValueNode!(AstNode.Char, Key, "key");

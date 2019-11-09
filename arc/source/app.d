@@ -3,11 +3,13 @@ import std.stdio;
 void main(string[] args) {
     import std.file: readText;
 
+    // test();
+
 	if (args.length == 3 && args[1] == "-f")
 	   print_ast(args[2], readText(args[2]));
 	else if (args.length == 3 && args[1] == "-i")
 	   print_ast("console", args[2]);
-	// print_ast("", readText("sample.arc"));
+    else assert(false);
 }
 
 void print_ast(string filename, string text) {
@@ -28,14 +30,29 @@ void print_ast(string filename, string text) {
     while (!parser.empty) {
         auto s = parser.parse_statement();
         printer.print(s);
-
-        import arc.syntax.flat_ast: flatten;
-        writeln(parser.count);
-        writeln(flatten(parser.count, s));
-        parser.count = 0;
     }
     assert(parser.empty);
     writeln(printer.data);
     writeln("errors: ", parser.reporter.errors);
     printer.reset();
+}
+
+void test() {
+    import arc.syntax.tests.long_parser: text, types;
+    import arc.syntax.tests.parser: parse;
+    import arc.syntax.parser: parse_module;
+    import arc.syntax.flat_ast: flatten;
+    
+    auto result = parse!parse_module(cast(const(char)[]) text);
+    auto flat_tree = flatten(result.count, result.tree);
+
+    import std.range: zip;
+    int i;
+    foreach (pair; zip(flat_tree, types)) {
+        i++;
+        if (pair[0].type != pair[1]) {
+            writeln(i);
+            break;
+        }
+    }
 }

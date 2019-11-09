@@ -31,6 +31,12 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
             buffer[index] = FlatAstNode(root.type, root.span, index);
             index++;
             break;
+        case Module:
+            buffer[index] = FlatAstNode(root.type, root.span, index);
+            index++;
+            foreach (child; root.children)
+                flatten_node(child, buffer, index);
+            break;
         case Name:
         case Char:
         case Label:
@@ -44,24 +50,9 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
             index++;
             break;
         case List:
-            buffer[index] = FlatAstNode(List, root.span, index);
-            index++;
-            if (root.children.length > 0) {
-                uint last_child_index;
-                foreach (child; root.children) {
-                    last_child_index = index;
-                    if (child.type == AstNode.ListMember) {
-                        buffer[index] = FlatAstNode(AstNode.ListMember, child.span, index);
-                        index++;
-                        flatten_3(child.children, buffer, index);
-                    }
-                    buffer[last_child_index].next = index;
-                }
-                buffer[last_child_index].next = last_child_index;
-            }
-            break;
+        case TypeList:
         case Block:
-            buffer[index] = FlatAstNode(Block, root.span, index);
+            buffer[index] = FlatAstNode(root.type, root.span, index);
             index++;
             if (root.children.length > 0) {
                 uint last_child_index;
@@ -70,8 +61,20 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
                     flatten_node_set_next(child, buffer, index);
                     buffer[last_child_index].next = index;
                 }
-                buffer[last_child_index].next =last_child_index;
+                buffer[last_child_index].next = last_child_index;
             }
+            break;
+        case ListMember:
+        case TypeListMember:
+            buffer[index] = FlatAstNode(root.type, root.span, index);
+            index++;
+            uint last_child_index;
+            foreach (child; root.children) {
+                last_child_index = index;
+                flatten_node_set_next(child, buffer, index);
+                buffer[last_child_index].next = index;
+            }
+            buffer[last_child_index].next = last_child_index;
             break;
         case Negate:
         case Pointer:
@@ -81,6 +84,10 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
             flatten_node(root.children[0], buffer, index);
             break;
         case Function:
+            buffer[index] = FlatAstNode(root.type, root.span, index);
+            index++;
+            flatten_3(root.children, buffer, index);
+            break;
         case Assign:
         case Less:
         case LessEqual:
@@ -96,6 +103,7 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
         case Divide:
         case Power:
         case Call:
+        case FunctionType:
             buffer[index] = FlatAstNode(root.type, root.span, index);
             index++;
             flatten_2(root.children, buffer, index);
@@ -104,9 +112,7 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
         case Define:
             buffer[index] = FlatAstNode(root.type, root.span, index);
             index++;
-            buffer[index] = FlatAstNode(Name, root.children[0].span, index + 1);
-            index++;
-            flatten_2(root.children[1 .. $], buffer, index);
+            flatten_3(root.children, buffer, index);
             break;
         case If:
             buffer[index] = FlatAstNode(If, root.span, index);
@@ -132,9 +138,10 @@ void flatten_node(AstNode* root, FlatAstNode[] buffer, ref uint index) {
         case Labeled:
             buffer[index] = FlatAstNode(Labeled, root.span, index);
             index++;
-            flatten_node(root.children[0], buffer, index);
+            flatten_2(root.children, buffer, index);
             break;
         default:
+            import std.stdio; writeln(root.type);
             assert(false, "unfinished");
     }
 }

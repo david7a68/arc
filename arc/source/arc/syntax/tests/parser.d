@@ -7,6 +7,7 @@ import arc.syntax.parser;
 struct ParseResult {
     AstNode* tree;
     SyntaxReporter errors;
+    uint count;
 }
 
 ParseResult parse(alias parse_fn)(const(char)[] text) {
@@ -20,7 +21,7 @@ ParseResult parse(alias parse_fn)(const(char)[] text) {
     auto error = new SyntaxReporter(source);
     auto parser = Parser(source.span, &table, error);
     
-    return ParseResult(parse_fn(parser), error);
+    return ParseResult(parse_fn(parser), error, parser.count);
 }
 
 AstNode.Type[] check_tree(AstNode* tree, AstNode.Type[] types) {
@@ -91,7 +92,7 @@ alias test_expression = test_parse!parse_expression;
                 None,
         ]) == []);
 
-        assert(test_statement("break 'here\n", [
+        assert(test_statement("break 'here\n;", [
             Break,
                 Label,
                 None
@@ -441,16 +442,9 @@ alias test_expression = test_parse!parse_expression;
 
 @("parser:loop") unittest {
     with (AstNode.Type) {
-        // assert(test_expression("loop \n{}", [
-        //     Loop,
-        //         Block,
-        // ]) == []);
-        import unit_threaded;
-        test_expression("loop\n{}", [
-            Loop, Block
-        ]).should == [];
-
-        import std.stdio;
-        writeln(parse!parse_expression("loop\n{}").tree);
+        assert(test_expression("loop \n{}", [
+            Loop,
+                Block,
+        ]) == []);
     }
 }

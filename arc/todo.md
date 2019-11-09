@@ -29,7 +29,6 @@
       - [ ] Tested
   - [x] Automatic delimiter (comma, semicolon) insertion
     - [x] Tested
-  - [ ] Profiled
 - [x] Syntactical analysis
   - [x] AST classes
   - [x] Syntax reporter
@@ -68,4 +67,3 @@
       - [x] Def declarations
   - [ ] Semantic Definitions
     - [ ] Partial tuple initialization
-    - [ ] Dependency carrying functions, operator carrying tuples
