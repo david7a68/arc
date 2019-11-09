@@ -118,10 +118,6 @@ struct Lexer {
         eol_type_stack.removeBack();
     }
 
-    Token.Type eol_type() {
-        return eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
-    }
-
     Token take() {
         scope(exit) advance();
         return current;
@@ -147,7 +143,8 @@ struct Lexer {
 
     /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
-        auto scan = scan_token(source_text, end_of_text, current.type, eol_type());
+        auto eol_type = eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
+        auto scan = scan_token(source_text, end_of_text, current.type, eol_type);
 
         Key key;
         if (scan.type == Token.Name) {
@@ -160,18 +157,6 @@ struct Lexer {
 
         current = Token(scan.type, source.get_span(scan.text), key);
     }
-}
-
-unittest {
-    StringTable t;
-    auto l = Lexer(SpannedText(0, 4, "a\r\n\n"), &t);
-    l.push_eol_type(Token.Comma);
-    l.ready();
-    assert(l.current.type == Token.Name);
-    l.advance();
-    assert(l.current.type == Token.Comma);
-    l.advance();
-    assert(l.current.type == Token.Eof);
 }
 
 struct ScanResult { Token.Type type; const(char)[] text; }
@@ -355,60 +340,5 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
             return make_token(Token.Integer, 0);
         default:
             return make_token(Token.Invalid, 1);
-    }
-}
-
-unittest { // Test empty lexer
-    mixin(init_scan(""));
-    assert(scan_type(cursor, end).type == Token.Eof);
-}
-
-unittest { // Test empty lexer with whitespace
-    mixin(init_scan("  \t\t\t\t    "));
-    assert(scan_type(cursor, end).type == Token.Eof);
-}
-
-unittest {
-    mixin(init_scan("()[],.;->129400_81anb_wo283'some_label"));
-
-    bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
-        auto tok = scan_type(cursor, end);
-        return (tok.type == t) && (tok.text == text) && (cursor == start + cursor_pos);
-    }
-
-    assert(test_scan(Token.Lparen,      "(", 1));
-    assert(test_scan(Token.Rparen,      ")", 2));
-    assert(test_scan(Token.Lbracket,    "[", 3));
-    assert(test_scan(Token.Rbracket,    "]", 4));
-    assert(test_scan(Token.Comma,       ",", 5));
-    assert(test_scan(Token.Dot,         ".", 6));
-    assert(test_scan(Token.Semicolon,   ";", 7));
-    assert(test_scan(Token.Rarrow,      "->", 9));
-    assert(test_scan(Token.Integer,     "129400_81", 18));
-    assert(test_scan(Token.Name,        "anb_wo283", 27));
-    assert(test_scan(Token.Label,       "'some_label", 38));
-
-    // Keywords are not preocessed at scan_type level
-    assert(scan_type(cursor, end).type == Token.Eof);
-}
-
-unittest {
-    mixin(init_scan("{
-} else break
-//    return false"));
-    // this may cause an assertion error
-    while (scan_type(cursor, end).type != Token.Eof) continue;
-}
-
-version(unittest) {
-    string init_scan(string test_string) {
-        import std.format: format;
-
-        return "
-            const test_string = \"%s\";
-            const(char)* start = test_string.ptr;
-            const(char)* cursor = start;
-            const char* end = cursor + test_string.length;
-        ".format(test_string);
     }
 }

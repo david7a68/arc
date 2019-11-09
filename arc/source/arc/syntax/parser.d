@@ -81,13 +81,6 @@ void skip_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter) {
     lexer.advance();
 }
 
-debug bool matches(T)(T t, T[] types...) {
-    foreach (type; types) {
-        if (t == type) return true;
-    }
-    return false;
-}
-
 
 AstNode* parse_module(ref Parser p) {
     p.lexer.push_eol_type(Token.Semicolon);
@@ -131,7 +124,7 @@ AstNode* parse_statement(ref Parser p) {
     return s;
 }
 
-bool is_stat_token(Token.Type t) {
+bool can_start_statement(Token.Type t) {
     auto is_keyword = () {
         switch (t) with (Token.Type) {
             case If:
@@ -389,10 +382,6 @@ AstNode* parse_label(bool with_expr)(ref Parser p) {
     return label;
 }
 
-AstNode* parse_primary(ref Parser p) {
-    return parse_expression(p, Infix.Primary);
-}
-
 /// Name := ('_' | $a-zA-Z)* ;
 AstNode* parse_name(ref Parser p) {
     auto t = p.lexer.take_required(Token.Name, p.reporter);
@@ -518,7 +507,7 @@ AstNode* parse_block(ref Parser p) {
         members ~= parse_statement(p);
         p.lexer.skip_all(Token.Semicolon);
 
-        if (!is_stat_token(p.lexer.current.type) && p.lexer.current.type != Token.Rbrace) {
+        if (!can_start_statement(p.lexer.current.type) && p.lexer.current.type != Token.Rbrace) {
             scope(exit) p.lexer.advance();
             p.lexer.pop_eol_type();
             p.reporter.error(
@@ -559,13 +548,20 @@ AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
     return p.make!VarExpression(span, name, type, value);
 }
 
-/// Function := Expression '=>' Expression ;
-AstNode* parse_function(ref Parser p, AstNode* params) {
+/// Function := Expression '->' Expression ;
+AstNode* parse_function(ref Parser p, AstNode* params) {    
+    static passthrough_check(alias fn)(AstNode* node) {
+        if (!fn(node.type))
+            assert(false, "#Cleanup: This needs to become an error");
+        
+        return node;
+    }
+
     p.lexer.skip_required(Token.Rarrow, p.reporter);
     auto first = parse_expression(p);
 
     auto type = p.lexer.current.type == Token.Lbrace ?
-                passthrough_check_is_type_expr(first) :
+                passthrough_check!is_type_expr(first) :
                 p.make!None;
 
     auto body = p.lexer.current.type == Token.Lbrace ?
@@ -578,7 +574,7 @@ AstNode* parse_function(ref Parser p, AstNode* params) {
 /// Unary := <op> Expression
 AstNode* parse_unary(T)(ref Parser p) {
     const start = p.lexer.take().span;
-    auto expr = parse_primary(p);
+    auto expr = parse_expression(p, Infix.Primary);
     return p.make!T(start.merge(expr.span), expr);
 }
 
@@ -628,31 +624,40 @@ type = name
     function_type = type '->' type ;
 */
 
-Prefix get_type_prefix_parselet(Token.Type t) {
-    switch (t) with (Token.Type) {
-        case Name:
-            return &parse_name;
-        case Lparen:
-            return &parse_seq!(Lparen, Rparen, parse_type_list_member, TypeList);
-        case Lbracket:
-            return &parse_seq!(Lbracket, Rbracket, parse_type_list_member, TypeList);
-        default:
-            return &parse_null_prefix;
+AstNode* parse_type(ref Parser p, Infix.Precedence prec = Infix.Assignment) {
+    static Prefix get_type_prefix_parselet(Token.Type t) {
+        switch (t) with (Token.Type) {
+            case Name:
+                return &parse_name;
+            case Lparen:
+                return &parse_seq!(Lparen, Rparen, parse_type_list_member, TypeList);
+            case Lbracket:
+                return &parse_seq!(Lbracket, Rbracket, parse_type_list_member, TypeList);
+            default:
+                return &parse_null_prefix;
+        }
     }
-}
 
-Infix get_type_infix_parselet(Token.Type t) {
-    switch (t) with (Token.Type) {
-        case Rarrow:
-            return Infix(Infix.Primary, &parse_function_type);
-        case Dot:
-            return Infix(Infix.Primary, &parse_binary!(Call, Infix.Primary + 1));
-        case Lparen:
-        case Lbracket:
-            return Infix(Infix.Primary, &parse_binary!(Call, Infix.Primary + 1, false));
-        default:
-            return Infix();
+    static Infix get_type_infix_parselet(Token.Type t) {
+        switch (t) with (Token.Type) {
+            case Rarrow:
+                return Infix(Infix.Primary, &parse_function_type);
+            case Dot:
+                return Infix(Infix.Primary, &parse_binary!(Call, Infix.Primary + 1));
+            case Lparen:
+            case Lbracket:
+                return Infix(Infix.Primary, &parse_binary!(Call, Infix.Primary + 1, false));
+            default:
+                return Infix();
+        }
     }
+
+    auto expr = get_type_prefix_parselet(p.lexer.current.type)(p);
+
+    while (prec <= get_type_infix_parselet(p.lexer.current.type).precedence)
+        expr = get_type_infix_parselet(p.lexer.current.type).parselet(p, expr);
+
+    return expr;
 }
 
 bool is_type_expr(AstNode.Type t) {
@@ -665,23 +670,6 @@ bool is_type_expr(AstNode.Type t) {
         default:
             return false;
     }
-}
-
-AstNode* passthrough_check_is_type_expr(AstNode* node) {
-    if (!is_type_expr(node.type)) {
-        assert(false, "@Cleanup: This needs to become an error");
-    }
-
-    return node;
-}
-
-AstNode* parse_type(ref Parser p, Infix.Precedence prec = Infix.Assignment) {
-    auto expr = get_type_prefix_parselet(p.lexer.current.type)(p);
-
-    while (prec <= get_type_infix_parselet(p.lexer.current.type).precedence)
-        expr = get_type_infix_parselet(p.lexer.current.type).parselet(p, expr);
-
-    return expr;
 }
 
 AstNode* parse_type_list_member(ref Parser p) {
