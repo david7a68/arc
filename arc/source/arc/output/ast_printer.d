@@ -75,11 +75,15 @@ struct AstPrinter {
             write_children(n);
             break;
         case List:
+        case TypeList:
             put_length();
             write_children(n, true);
             break;
         case ListMember:
             write_named_children(n, "Name: ", "Type: ", "Value: ");
+            break;
+        case TypeListMember:
+            write_named_children(n, "Name: ", "Type: ");
             break;
         case Function:
             write_named_children(n, "Params: ", "Return Type: ", "Body: ");

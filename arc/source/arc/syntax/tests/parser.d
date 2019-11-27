@@ -160,26 +160,6 @@ alias test_expression = test_parse!parse_expression;
     }
 }
 
-@("parser:continue") unittest {
-    with (AstNode.Type) {
-        assert(test_statement("continue;", [
-            Continue,
-                None
-        ]) == []);
-
-        assert(test_statement("continue 'here;", [
-            Continue,
-                Label
-        ]) == []);
-
-        assert(test_statement("{continue}", [
-            Block,
-                Continue,
-                    None
-        ]) == []);
-    }
-}
-
 @("parser:type") unittest {
     with (AstNode.Type) {
         assert(test_type("a -> b", [
@@ -229,11 +209,15 @@ alias test_expression = test_parse!parse_expression;
                     None
         ]) == []);
 
-        assert(test_expression("'l a -> { return 'l a * a }", [
+        assert(test_expression("'l (a) -> { return 'l a * a }", [
             Labeled,
                 Label,
                 Function,
-                    Name,
+                    List,
+                        ListMember,
+                            None,
+                            None,
+                            Name,
                     None,
                     Block,
                         Return,
@@ -325,18 +309,26 @@ alias test_expression = test_parse!parse_expression;
 
 @("parser:function") unittest {
     with (AstNode.Type) {
-        assert(test_expression("a -> b * c", [
+        assert(test_expression("(a) -> b * c", [
             Function,
-                Name,
+                List,
+                    ListMember,
+                        None,
+                        None,
+                        Name,
                 None,
                 Multiply,
                     Name,
                     Name,
         ]) == []);
 
-        assert(test_expression("a -> r {}", [
+        assert(test_expression("(a) -> r {}", [
             Function,
-                Name,
+                List,
+                    ListMember,
+                        None,
+                        None,
+                        Name,
                 Name,
                 Block
         ]) == []);

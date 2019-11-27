@@ -34,7 +34,7 @@ struct Token {
         Rarrow, ColonColon, Label, DotDot,
 
         And, Or,
-        If, Else, Loop, Break, Return, Continue,
+        If, Else, Loop, Break, Return,
         Def,
     }
 
@@ -63,7 +63,6 @@ shared static this() {
     keywords[StringTable.digest("loop")] = Token.Loop;
     keywords[StringTable.digest("break")] = Token.Break;
     keywords[StringTable.digest("return")] = Token.Return;
-    keywords[StringTable.digest("continue")] = Token.Continue;
     keywords[StringTable.digest("def")] = Token.Def;
 }
 
@@ -182,7 +181,6 @@ struct ScanResult { Token.Type type; const(char)[] text; }
  *    - Label
  *    - Char
  *    - Break
- *    - Continue
  *    - Return
  */
 ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
@@ -208,7 +206,6 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
             // We can test for these keywords because the previous token has
             // already been processed for all keywords.
             case Break:
-            case Continue:
             case Return:
                 return ScanResult(eol_type, scan.text);
             default:

@@ -447,16 +447,3 @@ AstNode.Type[] types = () {
 
     assert(test_parse!parse_module(cast(const(char)[]) text, types) == []);
 }
-
-@("long parser flatten") unittest {
-    import arc.syntax.tests.parser: parse;
-    import arc.syntax.parser: parse_module;
-    import arc.syntax.flat_ast: flatten;
-    
-    auto result = parse!parse_module(cast(const(char)[]) text);
-    auto flat_tree = flatten(result.count, result.tree);
-
-    import std.range: zip;
-    foreach (pair; zip(flat_tree, types))
-        assert(pair[0].type == pair[1]);
-}

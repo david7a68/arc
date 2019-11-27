@@ -98,23 +98,20 @@ AstNode* parse_module(ref Parser p) {
 //-----------------------------------//
 
 /*
-stmt = (def | label | break | return | continue | expr) ';'
+stmt = (def | label | break | return | expr) ';'
     def = 'def' name ':' type? '=' expr ;
 
     break = 'break' label? expr? ;
 
     return = 'return' label? expr? ;
-
-    continue = 'continue' label? ;
 */
 
 AstNode* parse_statement(ref Parser p) {
     auto s = () {
         switch (p.lexer.current.type) {
         case Token.Def:       return parse_def(p);
-        case Token.Break:     return parse_ctrl_flow!(Break, Token.Break, true)(p);
-        case Token.Return:    return parse_ctrl_flow!(Return, Token.Return, true)(p);
-        case Token.Continue:  return parse_ctrl_flow!(Continue, Token.Continue, false)(p);
+        case Token.Break:     return parse_ctrl_flow!(Break, Token.Break)(p);
+        case Token.Return:    return parse_ctrl_flow!(Return, Token.Return)(p);
         default:
             auto e = parse_expression(p);
             p.lexer.skip_required(Token.Semicolon, p.reporter);
@@ -133,7 +130,6 @@ bool can_start_statement(Token.Type t) {
             case Break:
             case Return:
             case Def:
-            case Continue:
                 return true;
             default:
                 return false;
@@ -147,7 +143,7 @@ bool can_start_statement(Token.Type t) {
 AstNode* parse_def(ref Parser p) {
     auto span = p.lexer.take_required(Token.Def, p.reporter).span;
     
-    auto name = parse_name(p);
+    auto name = parse_simple!(Token.Name, Name)(p);
     
     AstNode* type;
     if (p.lexer.skip(Token.Colon)) {
@@ -174,7 +170,7 @@ AstNode* parse_def(ref Parser p) {
     return p.make!Define(span.merge(value.span), name, type, value);
 }
 
-AstNode* parse_ctrl_flow(T, Token.Type keyword, bool with_value)(ref Parser p) {
+AstNode* parse_ctrl_flow(T, Token.Type keyword)(ref Parser p) {
     auto span = p.lexer.take_required(keyword, p.reporter).span;
     scope(exit) p.lexer.skip_required(Token.Semicolon, p.reporter);
 
@@ -182,15 +178,10 @@ AstNode* parse_ctrl_flow(T, Token.Type keyword, bool with_value)(ref Parser p) {
                  parse_label!false(p) :
                  p.make!None();
 
-    static if (with_value) {
-        auto value = p.lexer.current.type != Token.Semicolon ?
-                     parse_expression(p) :
-                     p.make!None;
-        return p.make!T(span, [label, value]);
-    }
-    else {
-        return p.make!T(span, label);
-    }
+    auto value = p.lexer.current.type != Token.Semicolon ?
+                    parse_expression(p) :
+                    p.make!None;
+    return p.make!T(span, [label, value]);
 }
 
 
@@ -270,9 +261,9 @@ alias Prefix = AstNode* function(ref Parser);
 /// List of functions for parsing tokens that can start expressions
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p       = &parse_null_prefix;
-    p[Token.Name]       = &parse_name;
+    p[Token.Name]       = &parse_simple!(Token.Name, Name);
     p[Token.Integer]    = &parse_integer;
-    p[Token.Char]       = &parse_char;
+    p[Token.Char]       = &parse_simple!(Token.Char, Char);
     p[Token.Lparen]     = &parse_seq!(Token.Lparen, Token.Rparen, parse_list_member, List);
     p[Token.Lbracket]   = &parse_seq!(Token.Lbracket, Token.Rbracket, parse_list_member, List);
     p[Token.Lbrace]     = &parse_block;
@@ -307,7 +298,7 @@ struct Infix {
         Sum,
         Product,
         Power,
-        Call,
+        // Call,
         Primary,
     }
 
@@ -383,9 +374,10 @@ AstNode* parse_label(bool with_expr)(ref Parser p) {
 }
 
 /// Name := ('_' | $a-zA-Z)* ;
-AstNode* parse_name(ref Parser p) {
-    auto t = p.lexer.take_required(Token.Name, p.reporter);
-    return p.make!Name(t.span, t.key);
+/// Char := '\'' a-zA-Z... '\'' ;
+AstNode* parse_simple(Token.Type ttype, T)(ref Parser p) {
+    auto t = p.lexer.take_required(ttype, p.reporter);
+    return p.make!T(t.span, t.key);
 }
 
 /// Integer := NonZeroDigit ('_' | Digit)* ;
@@ -396,13 +388,8 @@ AstNode* parse_integer(ref Parser p) {
     return p.make!Integer(t.span, t.span.text.to!ulong);
 }
 
-AstNode* parse_char(ref Parser p) {
-    auto t = p.lexer.take_required(Token.Char, p.reporter);
-    return p.make!Char(t.span, t.key);
-}
-
 AstNode* parse_list_member(ref Parser p) {
-    auto first = parse_expression(p, Infix.Logic);
+    auto first = parse_expression(p, Infix.Logic); // @suppress(dscanner.suspicious.unmodified)
 
     const is_name = first.type == AstNode.Name;
     auto name = is_name && p.lexer.matches_one(Token.Equals, Token.Colon) ?
@@ -557,6 +544,10 @@ AstNode* parse_function(ref Parser p, AstNode* params) {
         return node;
     }
 
+    if (params.type != AstNode.List) {
+        assert(false);
+    }
+
     p.lexer.skip_required(Token.Rarrow, p.reporter);
     auto first = parse_expression(p);
 
@@ -628,7 +619,7 @@ AstNode* parse_type(ref Parser p, Infix.Precedence prec = Infix.Assignment) {
     static Prefix get_type_prefix_parselet(Token.Type t) {
         switch (t) with (Token.Type) {
             case Name:
-                return &parse_name;
+                return &parse_simple!(Token.Name, arc.syntax.ast.Name);
             case Lparen:
                 return &parse_seq!(Lparen, Rparen, parse_type_list_member, TypeList);
             case Lbracket:
@@ -673,7 +664,7 @@ bool is_type_expr(AstNode.Type t) {
 }
 
 AstNode* parse_type_list_member(ref Parser p) {
-    auto first = parse_type(p);
+    auto first = parse_type(p); // @suppress(dscanner.suspicious.unmodified)
 
     auto name = first.type == AstNode.Name && p.lexer.current.type == Token.Colon ?
                 first :

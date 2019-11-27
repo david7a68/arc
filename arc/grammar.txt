@@ -5,15 +5,13 @@ stmt = (def | label | break | return | continue | expr) ';'
 
     return = 'return' label? expr? ;
 
-    continue = 'continue' label? ;
-
     type = name
          | type_list
          | call
          | function_type
          ;
 
-        type_list = list_open ','* (list_member ',')* list_close ;
+        type_list = list_open ','* (type_list_member ',')* list_close ;
             type_list_member = type
                              | name ':' type
                              ;
@@ -45,7 +43,7 @@ stmt = (def | label | break | return | continue | expr) ';'
 
                 block = '{' smt* '}' ;
 
-                function = primary '->' expr block? ;
+                function = list '->' expr block? ;
 
                 call = (list | name) '.'? (list | name)
                     | call '.'? call
