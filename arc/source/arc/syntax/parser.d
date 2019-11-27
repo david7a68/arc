@@ -74,7 +74,7 @@ Token take_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter, uint
     if (lexer.current.type == t)
         return lexer.take();
     
-    expect_mismatch(reporter, t, lexer.current, __LINE__);
+    expect_mismatch(reporter, t, lexer.current, debug_line);
     lexer.advance();
     return Token();
 }
