@@ -1,6 +1,6 @@
 module arc.syntax.tests.lexer;
 
-import arc.syntax.lexer: Token, Lexer, scan_type;
+import arc.syntax.lexer: Token, Lexer, scan_type, scan_token;
 import arc.stringtable: StringTable;
 import arc.syntax.location: SpannedText;
 
@@ -15,29 +15,17 @@ string init_scan(string test_string) {
     ".format(test_string);
 }
 
-unittest {
-    StringTable t;
-    auto l = Lexer(SpannedText(0, 4, "a\r\n\n"), &t);
-    l.push_eol_type(Token.Comma);
-    l.ready();
-    assert(l.current.type == Token.Name);
-    l.advance();
-    assert(l.current.type == Token.Comma);
-    l.advance();
-    assert(l.current.type == Token.Eof);
-}
-
-unittest { // Test empty lexer
+@("lexer:empty") unittest {
     mixin(init_scan(""));
     assert(scan_type(cursor, end).type == Token.Eof);
 }
 
-unittest { // Test empty lexer with whitespace
+@("lexer:whitespace") unittest {
     mixin(init_scan("  \t\t\t\t    "));
     assert(scan_type(cursor, end).type == Token.Eof);
 }
 
-unittest {
+@("lexer:compact_analysis") unittest {
     mixin(init_scan("()[],.;->129400_81anb_wo283'some_label"));
 
     bool test_scan(Token.Type t, const char[] text, size_t cursor_pos) {
@@ -67,4 +55,16 @@ unittest {
 //    return false"));
     // this may cause an assertion error
     while (scan_type(cursor, end).type != Token.Eof) continue;
+}
+
+@("lexer:deduplicate_comma") unittest {
+    mixin(init_scan(",,,,,,,"));
+    assert(scan_token(cursor, end, Token.Invalid, Token.Comma).type == Token.Comma);
+    assert(scan_token(cursor, end, Token.Comma, Token.Comma).type == Token.Eof);
+}
+
+@("lexer:deduplicate_semicolon") unittest {
+    mixin(init_scan(";;;;;;;"));
+    assert(scan_token(cursor, end, Token.Invalid, Token.Semicolon).type == Token.Semicolon);
+    assert(scan_token(cursor, end, Token.Semicolon, Token.Semicolon).type == Token.Eof);
 }

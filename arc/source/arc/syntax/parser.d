@@ -175,12 +175,13 @@ AstNode* parse_ctrl_flow(T, Token.Type keyword)(ref Parser p) {
     scope(exit) p.lexer.skip_required(Token.Semicolon, p.reporter);
 
     auto label = p.lexer.current.type == Token.Label ?
-                 parse_label!false(p) :
+                 parse_raw_label(p) :
                  p.make!None();
 
     auto value = p.lexer.current.type != Token.Semicolon ?
-                    parse_expression(p) :
-                    p.make!None;
+                 parse_expression(p) :
+                 p.make!None;
+    
     return p.make!T(span, [label, value]);
 }
 
@@ -267,7 +268,7 @@ immutable Prefix[256] prefix_parslets = () {
     p[Token.Lparen]     = &parse_seq!(Token.Lparen, Token.Rparen, parse_list_member, List);
     p[Token.Lbracket]   = &parse_seq!(Token.Lbracket, Token.Rbracket, parse_list_member, List);
     p[Token.Lbrace]     = &parse_block;
-    p[Token.Label]      = &parse_label!true;
+    p[Token.Label]      = &parse_label;
     p[Token.If]         = &parse_if;
     p[Token.Loop]       = &parse_loop;
     p[Token.Minus]      = &parse_unary!Negate;
@@ -332,7 +333,7 @@ immutable Infix[256] infix_parslets = () {
     p[Token.Lparen]         = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1, false));
     p[Token.Lbracket]       = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1, false));
     p[Token.Dot]            = Infix(Infix.Primary,      &parse_binary!(Call, Infix.Primary + 1));
-    p[Token.Colon]          = Infix(Infix.Assignment,   &parse_var_expr2);
+    p[Token.Colon]          = Infix(Infix.Assignment,   &parse_var_expr);
     return p;
 } ();
 
@@ -349,24 +350,25 @@ bool can_start_expression(Token.Type t) {
     return prefix_parslets[t] !is &parse_null_prefix;
 }
 
-AstNode* parse_label(bool with_expr)(ref Parser p) {
+AstNode* parse_raw_label(ref Parser p) {
     auto token = p.lexer.take();
-    auto label = p.make!Label(token.span, token.key);
+    return p.make!Label(token.span, token.key);
+}
 
-    static if (with_expr) {
-        if (can_start_expression(p.lexer.current.type)) {
-            auto expr = parse_expression(p);
+AstNode* parse_label(ref Parser p) {
+    auto label = parse_raw_label(p);
 
-            switch (expr.type) {
-                case AstNode.If:
-                case AstNode.Loop:
-                case AstNode.Block:
-                case AstNode.Function:
-                    return p.make!Labeled(label.span.merge(expr.span), label, expr);
-                default:
-                    assert(false, "bad label expression");
-            }
+    if (can_start_expression(p.lexer.current.type)) {
+        auto expr = parse_expression(p);
 
+        switch (expr.type) {
+            case AstNode.If:
+            case AstNode.Loop:
+            case AstNode.Block:
+            case AstNode.Function:
+                return p.make!Labeled(label.span.merge(expr.span), label, expr);
+            default:
+                assert(false, "bad label expression");
         }
     }
 
@@ -448,12 +450,12 @@ AstNode* parse_seq(Token.Type open, Token.Type close, alias parse_member, ListTy
     Span span = p.lexer.take_required(open, p.reporter).span;
     AstNode*[] members;
 
-    p.lexer.skip_all(Token.Comma);
+    p.lexer.skip(Token.Comma);
     while(!p.empty && p.lexer.current.type != close) {
         auto member = parse_member(p);
 
         if (p.lexer.current.type == Token.Comma) {
-            p.lexer.skip_all(Token.Comma);
+            p.lexer.skip(Token.Comma);
         }
         else if (can_start_expression(p.lexer.current.type)) {
             p.reporter.error(
@@ -463,7 +465,7 @@ AstNode* parse_seq(Token.Type open, Token.Type close, alias parse_member, ListTy
             );
 
             member = p.make!Invalid(member.span.merge(fast_forward(p)));
-            p.lexer.skip_all(Token.Comma);
+            p.lexer.skip(Token.Comma);
 
             if (p.lexer.current.type != close && !can_start_expression(p.lexer.current.type))
                 return report_not_closed(p, span);
@@ -487,12 +489,12 @@ AstNode* parse_seq(Token.Type open, Token.Type close, alias parse_member, ListTy
 AstNode* parse_block(ref Parser p) {
     p.lexer.push_eol_type(Token.Semicolon);
     Span span = p.lexer.take_required(Token.Lbrace, p.reporter).span;
-    p.lexer.skip_all(Token.Semicolon);
+    p.lexer.skip(Token.Semicolon);
     
     AstNode*[] members;
     while (p.lexer.current.type != Token.Rbrace) {
         members ~= parse_statement(p);
-        p.lexer.skip_all(Token.Semicolon);
+        p.lexer.skip(Token.Semicolon);
 
         if (!can_start_statement(p.lexer.current.type) && p.lexer.current.type != Token.Rbrace) {
             scope(exit) p.lexer.advance();
@@ -512,7 +514,7 @@ AstNode* parse_block(ref Parser p) {
     return p.make!Block(span, members);
 }
 
-AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
+AstNode* parse_var_expr(ref Parser p, AstNode* first) {
     // @cleanup: this needs to become an error
     assert(first.type == AstNode.Name);
     auto name = first;
@@ -537,11 +539,17 @@ AstNode* parse_var_expr2(ref Parser p, AstNode* first) {
 
 /// Function := Expression '->' Expression ;
 AstNode* parse_function(ref Parser p, AstNode* params) {    
-    static passthrough_check(alias fn)(AstNode* node) {
-        if (!fn(node.type))
-            assert(false, "#Cleanup: This needs to become an error");
-        
-        return node;
+    static passthrough_check(AstNode* node) {
+        // is_type_expression
+        switch (node.type) with (AstNode.Type) {
+            case Name:
+            case TypeList:
+            case Call:
+            case FunctionType:
+                return node;
+            default:
+                assert(false, "@Cleanup: This needs to become an error");
+        }
     }
 
     if (params.type != AstNode.List) {
@@ -552,7 +560,7 @@ AstNode* parse_function(ref Parser p, AstNode* params) {
     auto first = parse_expression(p);
 
     auto type = p.lexer.current.type == Token.Lbrace ?
-                passthrough_check!is_type_expr(first) :
+                passthrough_check(first) :
                 p.make!None;
 
     auto body = p.lexer.current.type == Token.Lbrace ?
@@ -651,18 +659,6 @@ AstNode* parse_type(ref Parser p, Infix.Precedence prec = Infix.Assignment) {
     return expr;
 }
 
-bool is_type_expr(AstNode.Type t) {
-    switch (t) with (AstNode.Type) {
-        case Name:
-        case TypeList:
-        case Call:
-        case FunctionType:
-            return true;
-        default:
-            return false;
-    }
-}
-
 AstNode* parse_type_list_member(ref Parser p) {
     auto first = parse_type(p); // @suppress(dscanner.suspicious.unmodified)
 
@@ -681,7 +677,8 @@ AstNode* parse_type_list_member(ref Parser p) {
 }
 
 AstNode* parse_function_type(ref Parser p, AstNode* params) {
-    assert(is_type_expr(params.type));
+    assert(params.type == AstNode.TypeList);
+    // @Cleanup: turn this into an error (Function parameters must be contained within parentheses)
 
     p.lexer.skip_required(Token.Rarrow, p.reporter);
 

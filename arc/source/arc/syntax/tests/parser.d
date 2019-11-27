@@ -162,9 +162,12 @@ alias test_expression = test_parse!parse_expression;
 
 @("parser:type") unittest {
     with (AstNode.Type) {
-        assert(test_type("a -> b", [
+        assert(test_type("(a) -> b", [
             FunctionType,
-                Name,
+                TypeList,
+                    TypeListMember,
+                        None,
+                        Name,
                 Name,
         ]) == []);
 

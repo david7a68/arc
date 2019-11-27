@@ -139,11 +139,6 @@ struct Lexer {
         return false;
     }
 
-    /// Skip all continuous repeating occurences of token $(D t).
-    void skip_all(Token.Type t) {
-        while (skip(t)) continue;
-    }
-
     /// Scan a new token, automatically inserting end-of-line tokens as needed
     void advance() {
         auto eol_type = eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
@@ -214,8 +209,21 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
                 } while (scan.type == Token.Eol);
         }
     }
-    else while (scan.type == Token.Eol)
+    else if (scan.type == Token.Eol) {
+        do {
         scan = scan_type(cursor, end);
+        } while (scan.type == Token.Eol);
+    }
+    else if (scan.type == previous && previous == Token.Comma) {
+        do {
+        scan = scan_type(cursor, end);
+        } while (scan.type == Token.Comma);
+    }
+    else if (scan.type == previous && previous == Token.Semicolon) {
+        do {
+        scan = scan_type(cursor, end);
+        } while (scan.type == Token.Semicolon);
+    }
 
     return scan;
 }

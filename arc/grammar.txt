@@ -1,3 +1,6 @@
+',' = ','*
+';' = ';'*
+
 stmt = (def | label | break | return | continue | expr) ';'
     def = 'def' name ':' type? '=' expr ;
 
@@ -16,7 +19,7 @@ stmt = (def | label | break | return | continue | expr) ';'
                              | name ':' type
                              ;
 
-        function_type = type '->' type ;
+        function_type = type_list '->' type ;
 
     expr = operand | label | var_expr;
         label = '\'' name ;
@@ -41,7 +44,7 @@ stmt = (def | label | break | return | continue | expr) ';'
                                 | name ':' type '=' operand
                                 ;
 
-                block = '{' smt* '}' ;
+                block = '{' stmt* '}' ;
 
                 function = list '->' expr block? ;
 
@@ -73,6 +76,7 @@ stmt = (def | label | break | return | continue | expr) ';'
                 | '<='
                 | '>='
                 | '=='
+                | '!='
                 | 'and'
                 | 'or'
                 ;
