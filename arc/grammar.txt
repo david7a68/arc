@@ -12,6 +12,7 @@ stmt = (def | label | break | return | continue | expr) ';'
          | type_list
          | call
          | function_type
+         | pointer
          ;
 
         type_list = list_open ','* (type_list_member ',')* list_close ;

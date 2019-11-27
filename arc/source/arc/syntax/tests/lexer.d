@@ -68,3 +68,19 @@ unittest {
     assert(scan_token(cursor, end, Token.Invalid, Token.Semicolon).type == Token.Semicolon);
     assert(scan_token(cursor, end, Token.Semicolon, Token.Semicolon).type == Token.Eof);
 }
+
+@("lexer:insert_semicolon") unittest {
+    mixin(init_scan("[]\n"));
+    assert(scan_token(cursor, end, Token.Invalid, Token.Semicolon).type == Token.Lbracket);
+    assert(scan_token(cursor, end, Token.Lbracket, Token.Semicolon).type == Token.Rbracket);
+    assert(scan_token(cursor, end, Token.Rbracket, Token.Semicolon).type == Token.Semicolon);
+    assert(scan_token(cursor, end, Token.Semicolon, Token.Semicolon).type == Token.Eof);
+}
+
+unittest {
+    mixin(init_scan("[]\ndef"));
+    assert(scan_token(cursor, end, Token.Invalid, Token.Semicolon).type == Token.Lbracket);
+    assert(scan_token(cursor, end, Token.Lbracket, Token.Semicolon).type == Token.Rbracket);
+    assert(scan_token(cursor, end, Token.Rbracket, Token.Semicolon).type == Token.Semicolon);
+    assert(scan_token(cursor, end, Token.Semicolon, Token.Semicolon).type == Token.Name); // scan_token doesn't do keyword recognition
+}

@@ -1,22 +1,22 @@
-def Parser := [
+def Parser : [
     lexer: Lexer
     table: *StringTable
     error: *SyntaxReporter
 ]
 
-def make_parser := (source: SpannedText, table: *StringTable, error: *SyntaxReporter) => {
+def make_parser := (source: SpannedText, table: *StringTable, error: *SyntaxReporter) -> {
     p := [make_lexer(source, table), table, error]
     read(p.lexer)
 }
 
-def skip := (p: *Parser, t: TokenType) => {
+def skip := (p: *Parser, t: TokenType) -> {
     if type != p.current.type { return false }
 
     advance(p.lexer)
     return true
 }
 
-def matches := (T: Type) => (t: T, types: T[]) => {
+def matches := (T: Type) -> (t: T, types: T[]) -> {
     i := 0
     loop { if i < types.length {
         if types[i] == t { return true }
@@ -32,7 +32,7 @@ def matches := (T: Type) => (t: T, types: T[]) => {
 //-----------------------------------//
 
 
-def statement := (p: *Parser) => {
+def statement := (p: *Parser) -> {
     push_eol_type(p.lexer, Tok_Semicolon)
     type := p.lexer.current.type
 
@@ -51,7 +51,7 @@ def statement := (p: *Parser) => {
     s
 }
 
-def def_ := (p: *Parser) => {
+def def_ := (p: *Parser) -> {
     span := p.lexer.current.span
     consume(p, Tok_Def)
 

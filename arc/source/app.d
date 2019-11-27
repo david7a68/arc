@@ -14,7 +14,7 @@ void main(string[] args) {
 
 void print_ast(string filename, string text) {
     import arc.stringtable: StringTable;
-    import arc.syntax.parser: Parser, parse_statement;
+    import arc.syntax.parser: Parser, parse_module;
     import arc.syntax.reporter: SyntaxReporter;
     import arc.output.ast_printer: AstPrinter;
     import arc.syntax.location: SourceMap;
@@ -27,10 +27,7 @@ void print_ast(string filename, string text) {
     auto parser = Parser(source.span, &table, error);
 
     auto printer = new AstPrinter(source.span);
-    while (!parser.empty) {
-        auto s = parser.parse_statement();
-        printer.print(s);
-    }
+    printer.print(parser.parse_module());
     assert(parser.empty);
     writeln(printer.data);
     writeln("errors: ", parser.reporter.errors);
@@ -38,21 +35,4 @@ void print_ast(string filename, string text) {
 }
 
 void test() {
-    import arc.syntax.tests.long_parser: text, types;
-    import arc.syntax.tests.parser: parse;
-    import arc.syntax.parser: parse_module;
-    import arc.syntax.flat_ast: flatten;
-    
-    auto result = parse!parse_module(cast(const(char)[]) text);
-    auto flat_tree = flatten(result.count, result.tree);
-
-    import std.range: zip;
-    int i;
-    foreach (pair; zip(flat_tree, types)) {
-        i++;
-        if (pair[0].type != pair[1]) {
-            writeln(i);
-            break;
-        }
-    }
 }

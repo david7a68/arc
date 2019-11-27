@@ -42,14 +42,26 @@ struct Parser {
 /**
  * Utility function. This raises an error if a token does not match its expected type.
  */
-void expect_mismatch(SyntaxReporter reporter, Token.Type expected, Token encountered) {
-    reporter.error(
-        SyntaxError.TokenExpectMismatch,
-        encountered.span.start,
-        "A token of type %s was expected, but a %s was encountered instead.",
-        expected,
-        encountered.type
-    );
+void expect_mismatch(SyntaxReporter reporter, Token.Type expected, Token encountered, uint debug_line = __LINE__) {
+    debug {
+        reporter.error(
+            SyntaxError.TokenExpectMismatch,
+            encountered.span.start,
+            "A token of type %s was expected, but a %s was encountered instead.\n Called from line %s.",
+            expected,
+            encountered.type,
+            debug_line
+        );
+    }
+    else {
+        reporter.error(
+            SyntaxError.TokenExpectMismatch,
+            encountered.span.start,
+            "A token of type %s was expected, but a %s was encountered instead.",
+            expected,
+            encountered.type
+        );
+    }
 }
 
 /**
@@ -58,11 +70,11 @@ void expect_mismatch(SyntaxReporter reporter, Token.Type expected, Token encount
  * This function is here in parser.d instead of lexer.d because it requires
  * access to a SyntaxReporter.
  */
-Token take_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter) {
+Token take_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter, uint debug_line = __LINE__) {
     if (lexer.current.type == t)
         return lexer.take();
     
-    expect_mismatch(reporter, t, lexer.current);
+    expect_mismatch(reporter, t, lexer.current, __LINE__);
     lexer.advance();
     return Token();
 }
@@ -73,11 +85,11 @@ Token take_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter) {
  * This function is here in parser.d instead of lexer.d because it requires
  * access to a SyntaxReporter
  */
-void skip_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter) {
+void skip_required(ref Lexer lexer, Token.Type t, SyntaxReporter reporter, uint debug_line = __LINE__) {
     if (lexer.skip(t))
         return;
     
-    expect_mismatch(reporter, t, lexer.current);
+    expect_mismatch(reporter, t, lexer.current, debug_line);
     lexer.advance();
 }
 
@@ -449,29 +461,29 @@ AstNode* parse_seq(Token.Type open, Token.Type close, alias parse_member, ListTy
     p.lexer.push_eol_type(Token.Comma);
     Span span = p.lexer.take_required(open, p.reporter).span;
     AstNode*[] members;
-
+    
     p.lexer.skip(Token.Comma);
-    while(!p.empty && p.lexer.current.type != close) {
+    loop: while(!p.empty && p.lexer.current.type != close) {
         auto member = parse_member(p);
 
-        if (p.lexer.current.type == Token.Comma) {
-            p.lexer.skip(Token.Comma);
+        if (p.lexer.skip(Token.Comma)) {
+            if (p.lexer.current.type == close)
+                break loop;
         }
-        else if (can_start_expression(p.lexer.current.type)) {
-            p.reporter.error(
-                SyntaxError.SequenceMissingSeparator,
-                span.start + span.length,
-                "List is missing comma"
-            );
+        else {
+            if (can_start_expression(p.lexer.current.type)) {
+                    p.reporter.error(
+                    SyntaxError.SequenceMissingSeparator,
+                    span.start + span.length,
+                    "List is missing comma"
+                );
 
-            member = p.make!Invalid(member.span.merge(fast_forward(p)));
-            p.lexer.skip(Token.Comma);
+                member = p.make!Invalid(member.span.merge(fast_forward(p)));
+                p.lexer.skip(Token.Comma);
+            }
 
             if (p.lexer.current.type != close && !can_start_expression(p.lexer.current.type))
                 return report_not_closed(p, span);
-        }
-        else if (p.lexer.current.type != close) {
-            return report_not_closed(p, span);
         }
 
         members ~= member;
@@ -613,6 +625,7 @@ type = name
      | type_list
      | call
      | function_type
+     | pointer
      ;
 
     type_list = list_open ','* (list_member ',')* list_close ;
@@ -632,6 +645,8 @@ AstNode* parse_type(ref Parser p, Infix.Precedence prec = Infix.Assignment) {
                 return &parse_seq!(Lparen, Rparen, parse_type_list_member, TypeList);
             case Lbracket:
                 return &parse_seq!(Lbracket, Rbracket, parse_type_list_member, TypeList);
+            case Star:
+                return &parse_unary!Pointer;
             default:
                 return &parse_null_prefix;
         }
