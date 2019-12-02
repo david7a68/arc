@@ -1,32 +1,9 @@
 module arc.syntax.tests.parser;
 
 import arc.syntax.ast: AstNode;
-import arc.syntax.reporter: SyntaxReporter;
 import arc.syntax.parser;
 
-struct ParseResult {
-    AstNode* tree;
-    SyntaxReporter errors;
-    uint count;
-}
-
-ParseResult parse(alias parse_fn)(const(char)[] text) {
-    import arc.stringtable: StringTable;
-    import arc.syntax.location: SourceMap;
-
-    static StringTable table;
-    SourceMap sources;
-    
-    auto source = sources.put("", text);
-    auto error = new SyntaxReporter();
-    error.reset(source);
-
-    auto parser = Parser(source.span, &table, error);
-    
-    return ParseResult(parse_fn(parser), error, parser.count);
-}
-
-AstNode.Type[] check_tree(AstNode* tree, AstNode.Type[] types) {
+AstNode.Type[] test_parse(alias fn)(const(char)[] text, AstNode.Type[] types) {
     bool check_subtree(AstNode* subtree, ref AstNode.Type[] types) {
         if (subtree is null)
             return types.length == 0;
@@ -42,13 +19,23 @@ AstNode.Type[] check_tree(AstNode* tree, AstNode.Type[] types) {
 
         return true;
     }
+    
+    import arc.stringtable: StringTable;
+    import arc.syntax.location: SourceMap;
+    import arc.syntax.reporter: SyntaxReporter;
+
+    static StringTable table;
+    SourceMap sources;
+    
+    auto source = sources.put("", text);
+    auto error = new SyntaxReporter();
+    error.reset(source);
+
+    auto parser = Parser(source.span, &table, error);
+    auto tree = fn(parser);
 
     check_subtree(tree, types);
     return types;
-}
-
-AstNode.Type[] test_parse(alias fn)(const(char)[] text, AstNode.Type[] types) {
-    return check_tree(parse!fn(text).tree, types);
 }
 
 alias test_statement = test_parse!parse_statement;
