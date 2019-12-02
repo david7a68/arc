@@ -18,7 +18,9 @@ ParseResult parse(alias parse_fn)(const(char)[] text) {
     SourceMap sources;
     
     auto source = sources.put("", text);
-    auto error = new SyntaxReporter(source);
+    auto error = new SyntaxReporter();
+    error.reset(source);
+
     auto parser = Parser(source.span, &table, error);
     
     return ParseResult(parse_fn(parser), error, parser.count);

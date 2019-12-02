@@ -130,7 +130,7 @@ struct SourceMap {
         return put(name, new const(char)[](source_length));
     }
 
-    Source put(string name, const(char)[] text) {
+    Source put(const(char)[] name, const(char)[] text) {
         CharPos start = sources.length > 0 ? sources[$-1].end : 0;
 
         if (start + text.length > uint.max)

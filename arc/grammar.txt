@@ -1,5 +1,5 @@
-',' = ','*
-';' = ';'*
+',' = ','+ // comma deduplication implemented in lexer
+';' = ';'+ // semicolon deduplication implemented in lexer
 
 stmt = (def | label | break | return | continue | expr) ';'
     def = 'def' name ':' type? '=' expr ;

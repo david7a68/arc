@@ -7,7 +7,10 @@ class SyntaxReporter {
     Source source;
     SyntaxError[] errors;
 
-    this(Source source) { this.source = source; }
+    void reset(Source source) {
+        this.source = source;
+        errors = [];
+    }
 
     void error(A...)(SyntaxError error, CharPos loc, string format, A args) {
         import std.stdio: writeln, writefln;

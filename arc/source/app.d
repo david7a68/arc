@@ -1,38 +1,41 @@
 import std.stdio;
 
+import arc.compiler: CompilerOptions, CompilerContext, ExecutionMode;
+CompilerOptions options;
+
+auto handle_mode(string option) {
+    import std.uni: icmp;
+
+    if (icmp(option, "immediate") == 0)
+        options.execution_mode = ExecutionMode.Immediate;
+    else if (icmp(option, "file") == 0)
+        options.execution_mode = ExecutionMode.File;
+    else
+        assert(false);
+}
+
 void main(string[] args) {
-    import std.file: readText;
+    import std.getopt: getopt, defaultGetoptPrinter;
 
-    // test();
-
-	if (args.length == 3 && args[1] == "-f")
-	   print_ast(args[2], readText(args[2]));
-	else if (args.length == 3 && args[1] == "-i")
-	   print_ast("console", args[2]);
-    else assert(false);
-}
-
-void print_ast(string filename, string text) {
-    import arc.stringtable: StringTable;
-    import arc.syntax.parser: Parser, parse_module;
-    import arc.syntax.reporter: SyntaxReporter;
-    import arc.output.ast_printer: AstPrinter;
-    import arc.syntax.location: SourceMap;
+    auto help = getopt(args,
+        "dump_ast", &options.dump_ast,
+        "immediate", &handle_mode,
+        "file", &handle_mode,
+    );
     
+    if (help.helpWanted) {
+        defaultGetoptPrinter("Some information about the program.", help.options);
+        return;
+    }
+    
+    const is_file_mode = options.execution_mode == ExecutionMode.File;
+    if ((is_file_mode && args.length > 1) || (!is_file_mode && args.length == 1)) {
+        options.first_file = is_file_mode ? args[1] : "";
 
-    StringTable table;
-    SourceMap sources;
-    auto source = sources.put(filename, text);
-    auto error = new SyntaxReporter(source);
-    auto parser = Parser(source.span, &table, error);
+        auto ctx = CompilerContext(options);
+        ctx.execute();
+        return;
+    }
 
-    auto printer = new AstPrinter(source.span);
-    printer.print(parser.parse_module());
-    assert(parser.empty);
-    writeln(printer.data);
-    writeln("errors: ", parser.reporter.errors);
-    printer.reset();
-}
-
-void test() {
+    assert(false, "unexpected arguments");
 }
