@@ -1,6 +1,5 @@
-import std.stdio;
+import arc.compiler;
 
-import arc.compiler: CompilerOptions, CompilerContext, ExecutionMode;
 CompilerOptions options;
 
 auto handle_mode(string option) {
@@ -18,9 +17,9 @@ void main(string[] args) {
     import std.getopt: getopt, defaultGetoptPrinter;
 
     auto help = getopt(args,
-        "dump_ast", &options.dump_ast,
         "immediate", &handle_mode,
         "file", &handle_mode,
+        "pass", &options.final_pass,
     );
     
     if (help.helpWanted) {

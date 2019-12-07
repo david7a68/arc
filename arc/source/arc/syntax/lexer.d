@@ -149,7 +149,7 @@ struct Lexer {
             key = table.insert(scan.text);
             scan.type = keywords.get(key, Token.Name);
         }
-        else if (scan.type == Token.Label || scan.type == Token.Char) {
+        else if (scan.type == Token.Label || scan.type == Token.Char || scan.type == Token.Integer) {
             key = table.insert(scan.text);
         }
 

@@ -275,7 +275,7 @@ alias Prefix = AstNode* function(ref Parser);
 immutable Prefix[256] prefix_parslets = () {
     Prefix[256] p       = &parse_null_prefix;
     p[Token.Name]       = &parse_simple!(Token.Name, Name);
-    p[Token.Integer]    = &parse_integer;
+    p[Token.Integer]    = &parse_simple!(Token.Integer, Integer);
     p[Token.Char]       = &parse_simple!(Token.Char, Char);
     p[Token.Lparen]     = &parse_seq!(Token.Lparen, Token.Rparen, parse_list_member, List);
     p[Token.Lbracket]   = &parse_seq!(Token.Lbracket, Token.Rbracket, parse_list_member, List);
@@ -389,17 +389,10 @@ AstNode* parse_label(ref Parser p) {
 
 /// Name := ('_' | $a-zA-Z)* ;
 /// Char := '\'' a-zA-Z... '\'' ;
+/// Integer := 0-9_ ;
 AstNode* parse_simple(Token.Type ttype, T)(ref Parser p) {
     auto t = p.lexer.take_required(ttype, p.reporter);
     return p.make!T(t.span, t.key);
-}
-
-/// Integer := NonZeroDigit ('_' | Digit)* ;
-AstNode* parse_integer(ref Parser p) {
-    import std.conv: to;
-
-    auto t = p.lexer.take_required(Token.Integer, p.reporter);
-    return p.make!Integer(t.span, t.span.text.to!ulong);
 }
 
 AstNode* parse_list_member(ref Parser p) {

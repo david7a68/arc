@@ -54,7 +54,6 @@ struct AstNode {
 
     union {
         Key key;
-        ulong value;
         AstNode*[] children;
     }
 
@@ -169,7 +168,7 @@ alias Invalid           = SimpleNode!(AstNode.Invalid);
 alias None              = SimpleNode!(AstNode.None);
 alias Module            = SeqNode!(AstNode.Module);
 alias Name              = ValueNode!(AstNode.Name, Key, "key");
-alias Integer           = ValueNode!(AstNode.Integer, ulong, "value");
+alias Integer           = ValueNode!(AstNode.Integer, Key, "key");
 alias Char              = ValueNode!(AstNode.Char, Key, "key");
 alias List              = SeqNode!(AstNode.List);
 alias ListMember        = AggregateNode!(AstNode.ListMember, ["name", "type", "value"]);

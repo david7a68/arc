@@ -1,7 +1,7 @@
 module arc.output.ast_printer;
 
 import arc.syntax.ast;
-import arc.syntax.location: SpannedText;
+import arc.stringtable: StringTable;
 
 /**
  * AstVisitor that generates a string representation of the syntax tree.
@@ -43,11 +43,11 @@ struct AstPrinter {
 
     Array!IndentType stack;
     Appender!(char[]) str;
-    SpannedText text;
+    StringTable* strings;
 
-    this(SpannedText text) {
+    this(StringTable* strings) {
         str = appender!(char[]);
-        this.text = text;
+        this.strings = strings;
     }
 
     const(char)[] data() {
@@ -66,11 +66,11 @@ struct AstPrinter {
         }
 
         str.put(prefix);
-        str.put(repr(text, n));
+        str.put(repr(strings, n));
         switch (n.type) with (AstNode.Type) {
         case Invalid:
             str.put(" \"");
-            str.put(text.get_text(n.span));
+            str.put(strings.lookup(n.key));
             str.put("\"");
             write_children(n);
             break;
@@ -150,17 +150,17 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SpannedText text, AstNode* node) {
+const(char)[] repr(StringTable *strings, AstNode* node) {
     import std.conv: to;
 
     switch (node.type) with (AstNode.Type) {
         case Name:
-            return "Name(\"" ~ text.get_text(node.span) ~ "\")";
+            return "Name(\"" ~ strings.lookup(node.key) ~ "\")";
         case Label:
-            return "Label: " ~ text.get_text(node.span);
+            return "Label: " ~ strings.lookup(node.key);
         case Integer:
         case Char:
-            return text.get_text(node.span);
+            return strings.lookup(node.key);
         default:
             return node.type.to!string;
     }

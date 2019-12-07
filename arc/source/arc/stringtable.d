@@ -13,6 +13,10 @@ struct StringTable {
         return key;
     }
 
+    const(char)[] lookup(Key key) {
+        return table.get(key, []);
+    }
+
     static Key digest(const(char)[] text) {
         import arc.hash: digest;
         
