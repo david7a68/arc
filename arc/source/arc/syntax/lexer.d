@@ -1,199 +1,144 @@
 module arc.syntax.lexer;
 
-import arc.stringtable: StringTable;
-import arc.syntax.location: SpannedText;
-import arc.hash: Key;
+import arc.hash: Key, digest;
+import arc.syntax.location: Span, SpannedText;
 
-
-/**
- * A Token is the smallest discrete unit that represents useful information in
- * an Arc program.
- *
- * Note that this token representation does not know where it came from. That is
- * the responsibility of higher-level modules to keep track of.
- */
 struct Token {
-    /**
-     * Every token has a type, which informs the parser how it needs to process
-     * the token into a useful representation of an analyzed piece of code
-     * called an abstract syntax tree (AST).
-     */
     enum Type: ubyte {
-        Invalid, Eof, Eol = '\n',
+        Invalid, Done, Eol = '\n',
+
+        Lparen = '(', Rparen = ')', Lbracket = '[', Rbracket = ']', Lbrace = '{', Rbrace = '}',
+        Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
+        Ampersand = '&', Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
+        Equals = '=', Less = '<', Greater = '>', Bang = '!',
+        LessEqual = 128, GreaterEqual, EqualEqual, BangEqual,
+        Rarrow, ColonColon, Label, DotDot,
+        
         Name, Integer, Char,
 
-        Lparen = '(', Rparen = ')',
-        Lbracket = '[', Rbracket = ']',
-        Lbrace = '{', Rbrace = '}',
-        Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
-        Ampersand = '&',
-        Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
-        Equals = '=',
-        Less = '<', Greater = '>',
-        LessEqual, GreaterEqual, EqualEqual, BangEqual,
-        Rarrow, ColonColon, Label, DotDot,
-
         And, Or,
-        If, Else, Loop, Break, Return,
+        If, Else, Loop, Break, Return, Continue,
         Def,
     }
 
     alias Type this;
 
-    /// The type classification of the token
     Type type;
-    
-    ///
-    SpannedText span;
-    
-    /// The unique key that identifies a string. This member is unused if the
-    /// token is not an name
+    Span span;
     Key key;
 }
 
-
-/// Hashmap of reserved keywords and their corresponding token types
-immutable Token.Type[Key] keywords;
-
-shared static this() {
-    keywords[StringTable.digest("and")] = Token.And;
-    keywords[StringTable.digest("or")] = Token.Or;
-    keywords[StringTable.digest("if")] = Token.If;
-    keywords[StringTable.digest("else")] = Token.Else;
-    keywords[StringTable.digest("loop")] = Token.Loop;
-    keywords[StringTable.digest("break")] = Token.Break;
-    keywords[StringTable.digest("return")] = Token.Return;
-    keywords[StringTable.digest("def")] = Token.Def;
+bool matches_one(Token.Type type, const Token.Type[] types...) {
+    foreach (t; types)
+        if (type == t)
+            return true;
+    return false;
 }
 
-
-/**
- * Input: Contiguous memory region containing arbitrary data.
- * Output: Sequence of classified sections of the arbitrary data.
- */
 struct Lexer {
     import std.container.array: Array;
 
-    /// A pointer to the current character in the source text
-    const(char)* source_text;
-    /// A pointer to the end of the source text
-    const(char)* end_of_text;
-    ///
-    StringTable* table;
-    ///
-    SpannedText source;
+    const(char)* cursor;
+    const(char)* end;
+    /// The span of text that this lexer is working on.
+    SpannedText span;
 
-    /// The ID with which the source text may be referred to
-    /// The most recently analyzed token
     Token current;
 
-    /**
-     * Stores a stack of delimiters that will be automatically inserted after
-     * any of: ) ] <NAME> <INTEGER>
-     */
-    Array!(Token.Type) eol_type_stack;
+    Array!(Token.Type) eol_stack;
 
-    this(SpannedText source, StringTable* table) {
-        source_text = source.text.ptr;
-        end_of_text = source.text.ptr + source.length;
-        this.table = table;
-        this.source = source;
-
-        eol_type_stack.clear();
+    this(SpannedText span) {
+        cursor = span.text.ptr;
+        end = cursor + span.text.length;
+        this.span = span;
     }
 
-    /// Advances the lexer so that `current` is the first-read token.
-    void ready() {
-        advance();
+    bool empty() {
+        return current.type == Token.Done;
     }
 
-    /// Push a token onto the automatic-delimiter-insertion stack
-    void push_eol_type(Token.Type t) {
-        eol_type_stack.insertBack(t);
+    void advance() {
+        const eol_type = eol_stack.length > 0 ? eol_stack.back : Token.Invalid;
+        auto scan = scan_token(&cursor, end, current.type, eol_type);
+        
+        Key key;
+        if (scan.type == Token.Label)
+            key = digest(scan.text);
+        else if (scan.type == Token.Name) {
+            key = digest(scan.text);
+            scan.type = keywords.get(key, Token.Name);
+        }
+
+        current = Token(scan.type, span.get_span(scan.text).span, key);
     }
 
-    /// Pop a token from the automatic-delimiter-insertion stack
-    void pop_eol_type() {
-        eol_type_stack.removeBack();
+    void push_eol_delimiter(Token.Type t) {
+        eol_stack.insertBack(t);
     }
 
-    /// Take the current token from the lexer, and advance it by one token.
+    void pop_eol_delimiter() {
+        eol_stack.removeBack();
+    }
+
+    alias drop = advance;
+
     Token take() {
         scope(exit) advance();
         return current;
     }
 
-    /// Check if the lexer's current token matches one of the types in $(D t).
-    bool matches_one(Token.Type[] t...) {
-        foreach (type; t)
-            if (type == current.type) return true;
-        return false;
-    }
-
-    /// Skip a token of type $(D t), return true if successful.
     bool skip(Token.Type t) {
-        if (current.type == t) {
-            advance();
-            return true;
-        }
-        return false;
+        if (current.type != t)
+            return false;
+        
+        advance();
+        return true;
     }
 
-    /// Scan a new token, automatically inserting end-of-line tokens as needed
-    void advance() {
-        auto eol_type = eol_type_stack.length > 0 ? eol_type_stack.back : Token.Invalid;
-        auto scan = scan_token(source_text, end_of_text, current.type, eol_type);
-
-        Key key;
-        if (scan.type == Token.Name) {
-            key = table.insert(scan.text);
-            scan.type = keywords.get(key, Token.Name);
-        }
-        else if (scan.type == Token.Label || scan.type == Token.Char || scan.type == Token.Integer) {
-            key = table.insert(scan.text);
-        }
-
-        current = Token(scan.type, source.get_span(scan.text), key);
+    bool matches_one(Token.Type[] types...) {
+        foreach (type; types)
+            if (current.type == type)
+                return true;
+        return false;
     }
 }
 
-struct ScanResult { Token.Type type; const(char)[] text; }
+Lexer scan_tokens(SpannedText span) {
+    auto l = Lexer(span);
+    l.advance();
+    return l;
+}
 
-/**
- * Scans a character buffer from $(D cursor) to $(D end), producing a tuple of the
- * type and slice of text of the first token it encounters. This scanner makes use
- * of $(D previous) and $(D eol_type) to automatically insert end-of-line
- * delimiters if:
- *
- *  - The current token is an closing brace, an end of line token, or an end of file
- *     token
- *  - And the previous token was one of:
- *    - )
- *    - ]
- *    - }
- *    - Name
- *    - Integer
- *    - Label
- *    - Char
- *    - Break
- *    - Return
- */
-ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
-    const start = cursor;
+/// Hashmap of reserved keywords and their corresponding token types
+immutable Token.Type[Key] keywords;
+
+shared static this() {
+    keywords[digest("and")] = Token.And;
+    keywords[digest("or")] = Token.Or;
+    keywords[digest("if")] = Token.If;
+    keywords[digest("else")] = Token.Else;
+    keywords[digest("loop")] = Token.Loop;
+    keywords[digest("break")] = Token.Break;
+    keywords[digest("return")] = Token.Return;
+    keywords[digest("continue")] = Token.Continue;
+    keywords[digest("def")] = Token.Def;
+}
+
+struct ScanResult {
+    Token.Type type;
+    const(char)[] text;
+}
+
+ScanResult scan_token(const(char)** cursor, const char* end, Token.Type previous, Token.Type eol_type) {
+    static immutable end_of_section_tokens = [Token.Rbrace, Token.Eol, Token.Done, Token.Break, Token.Return, Token.Continue, Token.If, Token.Else, Token.Loop];
+
+    const start = *cursor;
     auto scan = scan_type(cursor, end);
-
-    bool is_rbrace;
-    if (scan.type == Token.Rbrace) {
-        // rewind the scanner so that we don't replace the Rbrace with eol_type
-        cursor = start;
-        is_rbrace = true;
-    }
-
-    if ((is_rbrace || scan.type == Token.Eol || scan.type == Token.Eof) && eol_type != Token.Invalid) {
+    if (scan.type.matches_one(end_of_section_tokens) && eol_type != Token.Invalid) {
         switch (previous) with (Token.Type) {
+            case Rbrace:
             case Rparen:
             case Rbracket:
-            case Rbrace:
             case Name:
             case Integer:
             case Label:
@@ -202,7 +147,12 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
             // already been processed for all keywords.
             case Break:
             case Return:
-                return ScanResult(eol_type, scan.text);
+            case Continue:
+                *cursor = start;
+                return ScanResult(eol_type, scan.text[0..0]);
+            case Done:
+                assert(scan.type == Token.Done);
+                return ScanResult(Token.Invalid, scan.text[0..0]);
             default:
                 do {
                     scan = scan_type(cursor, end);
@@ -211,50 +161,37 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
     }
     else if (scan.type == Token.Eol) {
         do {
-        scan = scan_type(cursor, end);
+            scan = scan_type(cursor, end);
         } while (scan.type == Token.Eol);
     }
-    else if (scan.type == previous && previous == Token.Comma) {
+    else if (scan.type == previous && (previous == Token.Comma || previous == Token.Semicolon)) {
         do {
-        scan = scan_type(cursor, end);
-        } while (scan.type == Token.Comma);
-    }
-    else if (scan.type == previous && previous == Token.Semicolon) {
-        do {
-        scan = scan_type(cursor, end);
-        } while (scan.type == Token.Semicolon);
+            scan = scan_type(cursor, end);
+        } while (scan.type == previous);
     }
 
     return scan;
 }
 
-/**
- * Scans a character buffer from `cursor` to `end`, producing a tuple of the 
- * type of the first token, and the text covered. The scanner does not
- * distinguish between tokens of the same character class, such as keywords and
- * identifiers, leaving that up to a higher-level scanner.
- * 
- * Returns: (type: Token.Type, text: const(char)[])
- */
-ScanResult scan_type(ref const(char)* cursor, const char* end) {
-    auto start = cursor;
+ScanResult scan_type(const(char)** cursor, const char* end) {
+    auto start = *cursor;
 
     auto make_token(Token.Type t, int advance_n) {
-        cursor += advance_n;
-        assert(cursor <= end);
-        return ScanResult(t, start[0 .. cursor - start]);
+        *cursor += advance_n;
+        assert(*cursor <= end);
+        return ScanResult(t, start[0 .. *cursor - start]);
     }
 
     switch_start:
-    if (cursor >= end)
-        return ScanResult(Token.Eof, (end - 1)[0 .. 0]); 
+    if (*cursor >= end)
+        return ScanResult(Token.Done, (*cursor)[0 .. 0]); 
 
     // @Optimize A character-table driven approach may be more performant.
-    switch (*cursor) {
+    switch (**cursor) {
         case ' ':
         case '\t':
         case '\r':
-            cursor++;
+            (*cursor)++;
             start++;
             goto switch_start;
         case '\n':
@@ -270,79 +207,81 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '*':
         case '^':
         case '&':
-            return make_token(cast(Token.Type) *cursor, 1);
+            return make_token(cast(Token.Type) **cursor, 1);
         case '-':
-            cursor++;
-            if (cursor != end && *cursor == '>')
+            (*cursor)++;
+            if (*cursor != end && **cursor == '>')
                 return make_token(Token.Rarrow, 1);
             return make_token(Token.Minus, 0);
         case '.':
-            cursor++;
-            if (cursor <= end && *cursor == '.')
+            (*cursor)++;
+            if (*cursor <= end && **cursor == '.')
                 return make_token(Token.DotDot, 1);
             return make_token(Token.Dot, 0);
         case ':':
-            cursor++;
-            if (cursor <= end && *cursor == ':')
+            (*cursor)++;
+            if (*cursor <= end && **cursor == ':')
                 return make_token(Token.ColonColon, 1);
             else
                 return make_token(Token.Colon, 0);
         case '/':
-            cursor++;
-            if (cursor <= end && *cursor == '/') {
-                while (*cursor != '\n') cursor++;
+            (*cursor)++;
+            if (*cursor <= end && **cursor == '/') {
+                while (**cursor != '\n') (*cursor)++;
                 goto switch_start;
             }
             else return make_token(Token.Slash, 0);
         case '=':
-            cursor++;
-            if (cursor != end && *cursor == '=')
+            (*cursor)++;
+            if (*cursor != end && **cursor == '=')
                 return make_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Equals, 0);
         case '<':
-            cursor++;
-            if (cursor != end && *cursor == '=')
+            (*cursor)++;
+            if (*cursor != end && **cursor == '=')
                 return make_token(Token.LessEqual, 1);
             else
                 return make_token(Token.Less, 0);
         case '>':
-            cursor++;
-            if (cursor != end && *cursor == '=')
+            (*cursor)++;
+            if (*cursor != end && **cursor == '=')
                 return make_token(Token.GreaterEqual, 1);
             else
                 return make_token(Token.Greater, 0);
         case '!':
-            cursor++;
-            if (cursor != end && *cursor == '=')
+            (*cursor)++;
+            if (*cursor != end && **cursor == '=')
                 return make_token(Token.BangEqual, 1);
             else
-                return make_token(Token.Invalid, 0);
+                return make_token(Token.Bang, 0);
         case '\'':
-            cursor++;
-            if (cursor == end)
+            (*cursor)++;
+            if (*cursor == end)
                 return make_token(Token.Invalid, 0);
-            else if (*cursor == '\\') {
-                cursor += 2;
+            else if (**cursor == '\\') {
+                *cursor += 2;
 
-                if (*cursor == '\'')
+                if (**cursor == '\'')
                     return make_token(Token.Char, 1);
+                
+                while (*cursor != end && **cursor != '\'')
+                    cursor++;
+                
                 return make_token(Token.Invalid, 0);
             }
             else {
-                cursor++;
+                (*cursor)++;
 
-                if (cursor == end)
-                    return make_token(Token.Invalid, 0);
-                else if (*cursor == '\'')
+                if (**cursor == '\'')
                     return make_token(Token.Char, 1);
                 else {
-                    char_loop: if (cursor < end) switch (*cursor) {
+                    char_loop: if (*cursor < end) switch (**cursor) {
                         case 'a': .. case 'z':
                         case 'A': .. case 'Z':
                         case '0': .. case '9':
                         case '_':
-                            cursor++;
+                            (*cursor)++;
                             goto char_loop;
                         default:
                     }
@@ -353,21 +292,21 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
-            cursor++;
-            loop_start: if (cursor < end) switch (*cursor) {
+            (*cursor)++;
+            loop_start: if (*cursor < end) switch (**cursor) {
                 case 'a': .. case 'z':
                 case 'A': .. case 'Z':
                 case '0': .. case '9':
                 case '_':
-                    cursor++;
+                    (*cursor)++;
                     goto loop_start;
                 default:
             }
             return make_token(Token.Name, 0);
         case '0': .. case '9':
-            cursor++;
-            while (cursor < end && (('0' <= *cursor && *cursor <= '9') || *cursor == '_'))
-                cursor++;
+            (*cursor)++;
+            while (*cursor < end && (('0' <= **cursor && **cursor <= '9') || **cursor == '_'))
+                (*cursor)++;
             return make_token(Token.Integer, 0);
         default:
             return make_token(Token.Invalid, 1);

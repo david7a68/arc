@@ -31,12 +31,10 @@ struct CompilerContext {
 
     StringTable strings;
     SourceMap sources;
-    SyntaxReporter syntax_errors;
     CompilerOptions options;
 
     this(CompilerOptions options) {
         this.options = options;
-        syntax_errors = new SyntaxReporter();
     }
 
     void execute() {
@@ -60,7 +58,7 @@ struct CompilerContext {
         auto syntax = parse(source);
 
         if (options.final_pass == TerminalCompilerPass.parse) {
-            dump_ast(syntax);
+            dump_ast(source, syntax);
             return;
         }
 
@@ -68,11 +66,12 @@ struct CompilerContext {
         auto symbols = build_symbol_tree(syntax);
 
         if (options.final_pass == TerminalCompilerPass.build_symbols) {
-            import std.stdio: writeln;
-            import arc.output.symbol_printer: SymbolPrinter;
-            auto printer = new SymbolPrinter(&strings);
-            printer.print(symbols);
-            writeln(printer.data);
+            dump_symbols(symbols);
+            return;
+        }
+
+        if (options.final_pass == TerminalCompilerPass.all) {
+            dump_symbols(symbols);
             return;
         }
     }
@@ -85,16 +84,25 @@ struct CompilerContext {
     }
 
     import arc.syntax.ast: AstNode;
-    AstNode* parse(Source source) {
-        import arc.syntax.parser: Parser, parse_module;
+    AstNode parse(Source source) {
+        import arc.syntax.parser: ParseCtx, parse_module;
+        import arc.syntax.lexer: scan_tokens;
 
-        syntax_errors.reset(source);
-        auto parser = Parser(source.span, &strings, syntax_errors);
-        return parser.parse_module();
+        auto ctx = ParseCtx(source.span.scan_tokens, SyntaxReporter(source));
+        return parse_module(ctx);
+    }
+
+    void dump_ast(Source source, AstNode root) {
+        import std.stdio: writeln;
+        import arc.output.ast_printer: AstPrinter;
+
+        auto printer = new AstPrinter(source);
+        printer.print(root);
+        writeln(printer.data);
     }
 
     import arc.semantic.symbol: Symbol;
-    Symbol* build_symbol_tree(AstNode* syntax) {
+    Symbol* build_symbol_tree(AstNode syntax) {
         import arc.semantic.scope_builder: ScopeBuilder, build_symbol_tree;
 
         auto builder = ScopeBuilder(&this);
@@ -103,12 +111,12 @@ struct CompilerContext {
         return builder.module_scope;
     }
 
-    void dump_ast(AstNode* root) {
+    void dump_symbols(Symbol* symbol_tree) {
         import std.stdio: writeln;
-        import arc.output.ast_printer: AstPrinter;
+        import arc.output.symbol_printer: SymbolPrinter;
 
-        auto printer = new AstPrinter(&strings);
-        printer.print(root);
+        auto printer = new SymbolPrinter(&strings);
+        printer.print(symbol_tree);
         writeln(printer.data);
     }
 }

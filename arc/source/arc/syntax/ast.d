@@ -3,19 +3,28 @@ module arc.syntax.ast;
 import arc.hash: Key;
 import arc.syntax.location: Span;
 
-struct AstNode {
+abstract class AstNode {
     enum Type : ubyte {
         Invalid,
         None,
         Module,
+        // Statements
+        Define,
+        Variable,
+        If,
+        Loop,
+        Break,
+        Return,
+        Continue,
+        // Expressions
         Name,
         Integer,
         Char,
         List,
         ListMember,
         Block,
-        Function,
         Negate,
+        Falsify,
         Pointer,
         GetRef,
         Assign,
@@ -33,15 +42,10 @@ struct AstNode {
         Divide,
         Power,
         Call,
-        VarExpression,
-        Define,
-        If,
-        Loop,
-        Label,
-        Break,
-        Return,
-        Continue,
-        Labeled,
+        Function,
+        // Type expressions
+        InferredType,
+        PointerType,
         TypeList,
         TypeListMember,
         FunctionType
@@ -49,158 +53,333 @@ struct AstNode {
 
     alias Type this;
 
-    Type type;
-    Span span;
-
-    union {
-        Key key;
-        AstNode*[] children;
-    }
+    const Type type;
+    const Span span;
 
     this(Type type, Span span) {
         this.type = type;
         this.span = span;
     }
 
-    size_t num_children() {
-        switch (type) with (Type) {
-            case None:
-            case Name:
-            case Integer:
-            case Char:
-            case Label:
-                return 0;
-            default:
-                return children.length;
+    Key get_key() { return 0; }
+
+    AstNode[] get_children() { return []; }
+
+    static None none;
+}
+
+bool is_marker(AstNode.Type type) {
+    return type == AstNode.None || type == AstNode.InferredType;
+}
+
+final class None : AstNode {
+    this() {
+        super(AstNode.None, Span());
+    }
+}
+
+final class Invalid : AstNode {
+    this(Span span) {
+        super(AstNode.Invalid, span);
+    }
+}
+
+// ----------------------------------------------------------------------
+//    _____  _          _                                 _        
+//   / ____|| |        | |                               | |       
+//  | (___  | |_  __ _ | |_  ___  _ __ ___    ___  _ __  | |_  ___ 
+//   \___ \ | __|/ _` || __|/ _ \| '_ ` _ \  / _ \| '_ \ | __|/ __|
+//   ____) || |_| (_| || |_|  __/| | | | | ||  __/| | | || |_ \__ \
+//  |_____/  \__|\__,_| \__|\___||_| |_| |_| \___||_| |_| \__||___/
+//
+// ----------------------------------------------------------------------
+
+abstract class Statement : AstNode {
+    this(AstNode.Type type, Span span) {
+        super(type, span);
+    }
+}
+
+alias Module = StatementSeq!(AstNode.Module, AstNode);
+alias Block = StatementSeq!(AstNode.Block, Expression);
+
+final class StatementSeq(AstNode.Type node_type, ParentType) : ParentType {
+    AstNode[] statements;
+
+    this(Span span, AstNode[] statements) {
+        super(node_type, span);
+        this.statements = statements;
+    }
+
+    override AstNode[] get_children() { return statements; }
+}
+
+final class Define : Statement {
+    AstNode[3] parts;
+
+    this(Span span, AstNode name, AstNode type, AstNode value) {
+        super(AstNode.Define, span);
+        parts = [name, type, value];
+    }
+
+    override AstNode[] get_children() { return parts; }
+}
+
+final class Variable : Statement {
+    AstNode[3] parts;
+
+    this(Span span, AstNode name, AstNode type, AstNode value) {
+        super(AstNode.Variable, span);
+        parts = [name, type, value];
+    }
+
+    override AstNode[] get_children() { return parts; }
+}
+
+final class Assign : Statement {
+    AstNode[2] operands;
+
+    this(Span span, AstNode lhs, AstNode rhs) {
+        super(AstNode.Assign, span);
+        operands = [lhs, rhs];
+    }
+
+    override AstNode[] get_children() { return operands; }
+}
+
+final class If : Statement {
+    AstNode[3] parts;
+
+    this(Span span, AstNode condition, AstNode body, AstNode else_branch) {
+        super(AstNode.If, span);
+        parts = [condition, body, else_branch];
+    }
+
+    override AstNode[] get_children() { return parts; }
+}
+
+final class Break : Statement {
+    this(Span span) {
+        super(AstNode.Break, span);
+    }
+}
+
+final class Return : Statement {
+    AstNode[1] value;
+
+    this(Span span, AstNode return_value) {
+        super(AstNode.Return, span);
+        value[0] = return_value;
+    }
+
+    override AstNode[] get_children() { return value; }
+}
+
+final class Continue : Statement {
+    this(Span span) {
+        super(AstNode.Continue, span);
+    }
+}
+
+final class Loop : Statement {
+    AstNode[1] body;
+
+    this(Span span, AstNode body) {
+        super(AstNode.Loop, span);
+        this.body[0] = body;
+    }
+
+    override AstNode[] get_children() { return body; }
+}
+
+// ----------------------------------------------------------------------
+//   ______                                    _                    
+//  |  ____|                                  (_)                   
+//  | |__   __  __ _ __   _ __  ___  ___  ___  _   ___   _ __   ___ 
+//  |  __|  \ \/ /| '_ \ | '__|/ _ \/ __|/ __|| | / _ \ | '_ \ / __|
+//  | |____  >  < | |_) || |  |  __/\__ \\__ \| || (_) || | | |\__ \
+//  |______|/_/\_\| .__/ |_|   \___||___/|___/|_| \___/ |_| |_||___/
+//                | |                                               
+//                |_|                                               
+// ----------------------------------------------------------------------
+
+abstract class Expression : Statement {
+    this(AstNode.Type type, Span span) {
+        super(type, span);
+    }
+}
+
+alias Name = KeyNode!(AstNode.Name);
+alias Char = KeyNode!(AstNode.Char);
+alias Integer = KeyNode!(AstNode.Integer);
+
+final class KeyNode(AstNode.Type node_type, ParentType = Expression) : ParentType {
+    Key key;
+
+    this(Span span, Key string_key) {
+        super(node_type, span);
+        key = string_key;
+    }
+
+    override Key get_key() { return key; }
+}
+
+alias Negate = Unary!(AstNode.Negate);
+alias Falsify = Unary!(AstNode.Falsify);
+
+alias GetRef = Unary!(AstNode.GetRef);
+alias Pointer = Unary!(AstNode.Pointer);
+
+final class Unary(AstNode.Type node_type) : Expression {
+    AstNode[1] operand;
+
+    this(Span span, AstNode operand) {
+        super(node_type, span);
+        this.operand[0] = operand;
+    }
+
+    override AstNode[] get_children() { return operand; }
+}
+
+alias Less = Binary!(AstNode.Less);
+alias LessEqual = Binary!(AstNode.LessEqual);
+alias Greater = Binary!(AstNode.Greater);
+alias GreaterEqual = Binary!(AstNode.GreaterEqual);
+alias Equal = Binary!(AstNode.Equal);
+alias NotEqual = Binary!(AstNode.NotEqual);
+alias And = Binary!(AstNode.And);
+alias Or = Binary!(AstNode.Or);
+alias Add = Binary!(AstNode.Add);
+alias Subtract = Binary!(AstNode.Subtract);
+alias Multiply = Binary!(AstNode.Multiply);
+alias Divide = Binary!(AstNode.Divide);
+alias Power = Binary!(AstNode.Power);
+alias Call = Binary!(AstNode.Call);
+
+final class Binary(AstNode.Type node_type) : Expression {
+    AstNode[2] operands;
+
+    this(Span span, AstNode lhs, AstNode rhs) {
+        super(node_type, span);
+        operands = [lhs, rhs];
+    }
+
+    override AstNode[] get_children() { return operands; }
+}
+
+final class List : Expression {
+    static final class Member : AstNode {
+        AstNode[3] parts;
+
+        this(Span span, AstNode name, AstNode member_type, AstNode value) {
+            super(AstNode.ListMember, span);
+            parts = [name, member_type, value];
         }
+
+        override AstNode[] get_children() { return parts; }
+    }
+
+    AstNode[] members;
+
+    this(Span span, AstNode[] members) {
+        super(AstNode.List, span);
+        this.members = members;
+    }
+
+    override AstNode[] get_children() { return cast(AstNode[]) members; }
+}
+
+final class Function : Expression {
+    AstNode[3] parts;
+
+    this(Span span, AstNode name, AstNode return_type, AstNode body) {
+        super(AstNode.Function, span);
+        parts = [name, return_type, body];
+    }
+
+    override AstNode[] get_children() { return parts; }
+}
+
+// ----------------------------------------------------------------------
+//   _______                       
+//  |__   __|                      
+//     | | _   _  _ __    ___  ___ 
+//     | || | | || '_ \  / _ \/ __|
+//     | || |_| || |_) ||  __/\__ \
+//     |_| \__, || .__/  \___||___/
+//          __/ || |               
+//         |___/ |_|               
+// ----------------------------------------------------------------------
+
+abstract class TypeExpression : AstNode {
+    this(AstNode.Type type, Span span) {
+        super(type, span);
+    }
+
+    static TypeExpression inferred;
+}
+
+final class InferredType : TypeExpression {
+    this() {
+        super(AstNode.InferredType, Span());
     }
 }
 
-pragma(msg, AstNode.sizeof);
+final class PointerType : TypeExpression {
+    AstNode[1] target;
 
-struct SimpleNode(AstNode.Type node_type) {
-    AstNode self;
-
-    this(AstNode other) in (other.type == node_type) {
-        self = other;
+    this(Span span, AstNode target) {
+        super(AstNode.PointerType, span);
+        this.target[0] = target;
     }
 
-    this(Span span) {
-        self = AstNode(node_type, span);
-    }
-
-    Span span() { return self.span; }
-    AstNode.Type type() { return self.type; }
+    override AstNode[] get_children() { return target; }
 }
 
-struct ValueNode(AstNode.Type node_type, ValueType, string value_name) {
-    import std.format: format;
-    
-    AstNode self;
-    
-    this(AstNode other) in (other.type == node_type) {
-        self = other;
+final class TypeList : TypeExpression {
+    static final class Member : AstNode {
+        AstNode[2] parts;
+
+        this(Span span, AstNode name, AstNode type) {
+            super(AstNode.TypeListMember, span);
+            parts = [name, type];
+        }
+
+        override AstNode[] get_children() { return parts; }
     }
 
-    mixin("this(Span span, ValueType %s) {
-        self = AstNode(node_type, span);
-        self.%s = %s;
-    }".format(value_name, value_name, value_name));
+    AstNode[] members;
 
-    Span span() { return self.span; }
-    AstNode.Type type() { return self.type; }
+    this(Span span, AstNode[] members) {
+        super(AstNode.TypeList, span);
+        this.members = members;
+    }
 
-    mixin("ValueType %s() { return self.%s; }".format(value_name, value_name));
+    override AstNode[] get_children() { return cast(AstNode[]) members; }
 }
 
-struct AggregateNode(AstNode.Type node_type, string[] children_names) {
-    import std.format: format;
+final class FunctionType : TypeExpression {
+    AstNode[2] parts;
 
-    AstNode self;
-    
-    this(AstNode other) in (other.type == node_type) {
-        self = other;
+    this(Span span, AstNode parameters, AstNode return_type) {
+        super(AstNode.FunctionType, span);
+        parts = [parameters, return_type];
     }
 
-    this(Span span, AstNode*[] members) {
-        assert(members.length == children_names.length);
-        self = AstNode(node_type, span);
-        self.children = members;
-    }
-
-    mixin("this(Span span, %-(AstNode* %s, %)) {
-        self = AstNode(node_type, span);
-        self.children = [%-(%s, %)];
-    }".format(children_names, children_names));
-
-    Span span() { return self.span; }
-    AstNode.Type type() { return self.type; }
-    AstNode*[] children() { return self.children; }
-
-    static foreach (i, child; children_names) {
-        mixin("AstNode* %s() { return children[%s]; }".format(child, i));
-        mixin("void %s(AstNode* node) { children[%s] = node; }".format(child, i));
-    }
+    override AstNode[] get_children() { return parts; }
 }
 
-struct SeqNode(AstNode.Type node_type) {
-    AstNode self;
+// ----------------------------------------------------------------------
+//    _____  _          _    _         _______  _      _      
+//   / ____|| |        | |  (_)       |__   __|| |    (_)     
+//  | (___  | |_  __ _ | |_  _   ___     | |   | |__   _  ___ 
+//   \___ \ | __|/ _` || __|| | / __|    | |   | '_ \ | |/ __|
+//   ____) || |_| (_| || |_ | || (__     | |   | | | || |\__ \
+//  |_____/  \__|\__,_| \__||_| \___|    |_|   |_| |_||_||___/
+//
+// ----------------------------------------------------------------------
 
-    this(AstNode other) in (other.type == node_type) {
-        self = other;
-    }
-
-    this(Span span) {
-        self = AstNode(node_type, span);
-    }
-
-    this(Span span, AstNode*[] members) {
-        self = AstNode(node_type, span);
-        self.children = members;
-    }
-
-    Span span() { return self.span; }
-    AstNode.Type type() { return self.type; }
-    AstNode*[] members() { return self.children; }
+static this() {
+    AstNode.none = new None();
+    TypeExpression.inferred = new InferredType();
 }
-
-alias Invalid           = SimpleNode!(AstNode.Invalid);
-alias None              = SimpleNode!(AstNode.None);
-alias Module            = SeqNode!(AstNode.Module);
-alias Name              = ValueNode!(AstNode.Name, Key, "key");
-alias Integer           = ValueNode!(AstNode.Integer, Key, "key");
-alias Char              = ValueNode!(AstNode.Char, Key, "key");
-alias List              = SeqNode!(AstNode.List);
-alias ListMember        = AggregateNode!(AstNode.ListMember, ["name", "type", "value"]);
-alias Block             = SeqNode!(AstNode.Block);
-alias Function          = AggregateNode!(AstNode.Function, ["params", "return_type", "body"]);
-alias Negate            = AggregateNode!(AstNode.Negate, ["operand"]);
-alias Pointer           = AggregateNode!(AstNode.Pointer, ["operand"]);
-alias GetRef            = AggregateNode!(AstNode.GetRef, ["operand"]);
-alias Assign            = AggregateNode!(AstNode.Assign, ["lhs", "value"]);
-alias Less              = AggregateNode!(AstNode.Less, ["lhs", "rhs"]);
-alias LessEqual         = AggregateNode!(AstNode.LessEqual, ["lhs", "rhs"]);
-alias Greater           = AggregateNode!(AstNode.Greater, ["lhs", "rhs"]);
-alias GreaterEqual      = AggregateNode!(AstNode.GreaterEqual, ["lhs", "rhs"]);
-alias Equal             = AggregateNode!(AstNode.Equal, ["lhs", "rhs"]);
-alias NotEqual          = AggregateNode!(AstNode.NotEqual, ["lhs", "rhs"]);
-alias And               = AggregateNode!(AstNode.And, ["lhs", "rhs"]);
-alias Or                = AggregateNode!(AstNode.Or, ["lhs", "rhs"]);
-alias Add               = AggregateNode!(AstNode.Add, ["lhs", "rhs"]);
-alias Subtract          = AggregateNode!(AstNode.Subtract, ["lhs", "rhs"]);
-alias Multiply          = AggregateNode!(AstNode.Multiply, ["lhs", "rhs"]);
-alias Divide            = AggregateNode!(AstNode.Divide, ["lhs", "rhs"]);
-alias Power             = AggregateNode!(AstNode.Power, ["lhs", "rhs"]);
-alias Call              = AggregateNode!(AstNode.Call, ["target", "arguments"]);
-alias VarExpression     = AggregateNode!(AstNode.VarExpression, ["name", "type", "value"]);
-alias Define            = AggregateNode!(AstNode.Define, ["name", "type", "value"]);
-alias If                = AggregateNode!(AstNode.If, ["condition", "body", "else_"]);
-alias Loop              = AggregateNode!(AstNode.Loop, ["body"]);
-alias Label             = ValueNode!(AstNode.Label, Key, "key");
-alias Break             = AggregateNode!(AstNode.Break, ["label", "value"]);
-alias Return            = AggregateNode!(AstNode.Return, ["label", "value"]);
-alias Continue          = AggregateNode!(AstNode.Continue, ["label"]);
-alias Labeled           = AggregateNode!(AstNode.Labeled, ["label", "expression"]);
-alias TypeList          = SeqNode!(AstNode.TypeList);
-alias TypeListMember    = AggregateNode!(AstNode.TypeListMember, ["name", "type"]);
-alias FunctionType      = AggregateNode!(AstNode.FunctionType, ["params", "return_type"]);

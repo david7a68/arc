@@ -1,0 +1,87 @@
+',' = ','+ // comma deduplication implemented in lexer
+';' = ';'+ // semicolon deduplication implemented in lexer
+
+statement = def ';'
+          | break ';'
+          | return ';'
+          | continue ';'
+          | label ';'
+          | block ';'
+          | if ';'
+          | loop ';'
+          | expr ';'
+          ;
+
+    def = 'def' name ':' type? ((type ('=' expr)?) | ('=' expr)) ;
+    var = name ':' ((type ('=' expr)?) | ('=' expr)) ;
+
+    assign = (name | call) '=' expr ;
+
+    break = 'break' expr? ;
+    return = 'return' expr? ;
+    continue = 'continue' ;
+
+    block = '{' stmt* '}' ;
+
+    if = 'if' expr statement (else statement)? ;
+
+    loop = 'loop' block ;
+
+    expr = primary | unary | binary;
+
+        primary = name
+                | integer
+                | char
+                | list
+                | function
+                | call
+                ;
+
+            list = list_open ','* (list_member ',')* list_close ;
+                list_member = expr
+                            | name ':' type
+                            | name '=' expr
+                            | name ':' type '=' expr
+                            ;
+
+            function = list '->' expr block? ;
+
+            call = (list | name) '.'? (list | name)
+                 | call '.'? call
+                 ;
+
+        unary = '-' primary
+              | '*' primary
+              | '&' primary
+              ;
+
+        binary = expr op expr
+            op = '+'
+               | '-'
+               | '*'
+               | '/'
+               | '^'
+               | '%'
+               | '>'
+               | '<'
+               | '<='
+               | '>='
+               | '=='
+               | '!='
+               | 'and'
+               | 'or'
+               ;
+
+type = name
+     | call
+     | pointer_type
+     | type_list
+     | function_type
+     ;
+
+    type_list = list_open ','* (type_list_member ',')* list_close ;
+        type_list_member = type
+                         | name ':' type
+                         ;
+
+    function_type = type_list '->' type ;

@@ -27,7 +27,7 @@ struct Symbol {
     /// The parent symbol
     Symbol* parent;
     /// The syntax tree that this symbol was derived from
-    AstNode* syntax;
+    AstNode syntax;
 
     union {
         struct {

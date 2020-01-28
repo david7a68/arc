@@ -1,7 +1,7 @@
 module arc.output.ast_printer;
 
 import arc.syntax.ast;
-import arc.stringtable: StringTable;
+import arc.syntax.location: Source;
 
 /**
  * AstVisitor that generates a string representation of the syntax tree.
@@ -43,11 +43,11 @@ struct AstPrinter {
 
     Array!IndentType stack;
     Appender!(char[]) str;
-    StringTable* strings;
+    Source source;
 
-    this(StringTable* strings) {
+    this(Source source) {
         str = appender!(char[]);
-        this.strings = strings;
+        this.source = source;
     }
 
     const(char)[] data() {
@@ -58,19 +58,19 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode* n, string prefix = "") {
+    void print(AstNode n, string prefix = "") {
         void put_length() {
             str.put(" (");
-            str.put(n.num_children.to!string);
+            str.put(n.get_children().length.to!string);
             str.put(")");
         }
 
         str.put(prefix);
-        str.put(repr(strings, n));
+        str.put(repr(source, n));
         switch (n.type) with (AstNode.Type) {
         case Invalid:
             str.put(" \"");
-            str.put(strings.lookup(n.key));
+            str.put(source.get_text(n.span));
             str.put("\"");
             write_children(n);
             break;
@@ -91,48 +91,40 @@ struct AstPrinter {
         case Call:
             write_named_children(n, "Target: ", "Arguments: ");
             break;
-        case VarExpression:
-            write_named_children(n, "Pattern: ", "Type: ", "Value: ");
-            break;
         case Define:
             write_named_children(n, "Name: ", "Type: ", "Value: ");
+            break;
+        case Variable:
+            write_named_children(n, "Pattern: ", "Type: ", "Value: ");
             break;
         case If:
             write_named_children(n, "Cond: ", "Body: ", "Else: ");
             break;
         case Return:
-        case Break:
-            write_named_children(n, "Label: ", "Value: ");
-            break;
-        case Continue:
-            write_named_children(n, "Label: ");
+            write_named_children(n, "Value: ");
             break;
         default:
             write_children(n);
         }
     }
 
-    void write_children(AstNode* n, bool numbered = false) {
+    void write_children(AstNode n, bool numbered = false) {
         str.put("\n");
-        if (n.num_children > 0) {
-            foreach (i, child; n.children) {
-                write_child(child, i + 1 == n.num_children, numbered ? ("#" ~ i.to!string ~ " ") : "");
-            }
+        foreach (i, child; n.get_children()) {
+            write_child(child, i + 1 == n.get_children().length, numbered ? ("#" ~ i.to!string ~ " ") : "");
         }
     }
 
-    void write_named_children(AstNode* n, string[] names...) {
-        assert(n.num_children == names.length);
+    void write_named_children(AstNode n, string[] names...) {
+        assert(n.get_children().length == names.length);
         
         str.put("\n");
-        if (n.num_children > 0) {
-            foreach (i, child; n.children) {
-                write_child(child, i + 1 == n.num_children, names[i]);
-            }
+        foreach (i, child; n.get_children()) {
+            write_child(child, i + 1 == n.get_children().length, names[i]);
         }
     }
 
-    void write_child(AstNode* n, bool is_last_child, string prefix) {
+    void write_child(AstNode n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 
@@ -150,17 +142,15 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(StringTable *strings, AstNode* node) {
+const(char)[] repr(Source source, AstNode node) {
     import std.conv: to;
 
     switch (node.type) with (AstNode.Type) {
         case Name:
-            return "Name(\"" ~ strings.lookup(node.key) ~ "\")";
-        case Label:
-            return "Label: " ~ strings.lookup(node.key);
+            return "Name(\"" ~ source.get_text(node.span) ~ "\")";
         case Integer:
         case Char:
-            return strings.lookup(node.key);
+            return source.get_text(node.span);
         default:
             return node.type.to!string;
     }

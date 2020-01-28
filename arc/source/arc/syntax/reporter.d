@@ -3,37 +3,41 @@ module arc.syntax.reporter;
 import arc.hash: Key;
 import arc.syntax.location;
 
-class SyntaxReporter {
+struct SyntaxReporter {
     Source source;
+    bool silent;
     SyntaxError[] errors;
-
-    void reset(Source source) {
-        this.source = source;
-        errors = [];
-    }
 
     void error(A...)(SyntaxError error, CharPos loc, string format, A args) {
         import std.stdio: writeln, writefln;
-        writeln("Error:");
-        writefln(format, args);
-
-        auto err_coords = source.get_loc(loc);
-        writefln("At %s line %s column %s", source.name, err_coords.line, err_coords.column);
-        writeln();
+        
         errors ~= error;
+
+        if (!silent) {
+            writeln("Error:");
+            writefln(format, args);
+
+            auto err_coords = source.get_loc(loc);
+            writefln("At %s line %s column %s\n", source.name, err_coords.line, err_coords.column);
+        }
     }
 
     void error(A...)(SyntaxError error, string format, A args) {
         import std.stdio: writefln;
         
-        writefln(format, args);
         errors ~= error;
+
+        if (!silent) {
+            writefln(format, args);
+        }
     }
 
     void warn(A...)(string format, A args) {
         import std.stdio: writefln;
         
-        writefln(format, args);
+        if (!silent) {
+            writefln(format, args);
+        }
     }
 
     bool has_error(SyntaxError error) {
@@ -46,9 +50,7 @@ class SyntaxReporter {
 
 enum SyntaxError {
     NoError,
+    UnexpectedEndOfFile,
     TokenExpectMismatch,
     TokenNotAnExpression,
-    SequenceMissingClosingDelimiter,
-    SequenceMissingSeparator,
-    DefineMissingTypeSpec,
 }

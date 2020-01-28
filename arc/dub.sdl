@@ -10,9 +10,6 @@ configuration "executable" {
 }
 
 configuration "unittest" {
-    dependency "unit-threaded" version="*"
-    mainSourceFile "ut.d"
+    dependency "silly" version="~>1.0.0"
     excludedSourceFiles "source/app.d"
-    targetType "executable"
-    preBuildCommands "$DUB run --compiler=dmd unit-threaded -c gen_ut_main -- -f ut.d"
 }
