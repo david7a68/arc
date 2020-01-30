@@ -18,7 +18,7 @@ auto parse(string category)(const(char)[] text) {
     auto span = SpannedText(0, cast(uint) text.length, text);
     auto p = ParseCtx(
         Lexer(span),
-        SyntaxReporter(Source("test", span), false)
+        SyntaxReporter(Source("test", span), true)
     );
 
     static if (category == "statement")
@@ -41,7 +41,6 @@ bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
     }
 
     flatten(result.tree);
-    import std.stdio; writeln(flattened_tree);
 
     if (flattened_tree.length != types.length) {
         writefln(
@@ -145,14 +144,6 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
             Name,
             Name,
             Name
-    ));
-
-    with (AstNode.Type)
-    assert(type_equivalent("if a {}\n else {}".parse!"statement",
-        If,
-            Name,
-            Block,
-            Block,
     ));
 }
 

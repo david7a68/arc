@@ -75,8 +75,7 @@ AstNode parse_statement(ref ParseCtx ctx) {
             else if (first.type == AstNode.Call && ctx.tokens.current.type == Token.Equals) {
                 return parse_binary!(Assign, ExprPrecedence.Logic, true)(ctx, first);
             }
-            // else
-                return parse_infix(ctx, first);
+            return parse_infix(ctx, first);
     }
 }
 
@@ -236,20 +235,16 @@ AstNode parse_control_flow(NodeType, Token.Type ttype, bool with_value)(ref Pars
 // ----------------------------------------------------------------------
 
 PrefixParselet[] prefix_parselets = () {
-    PrefixParselet[256] parselets;
+    PrefixParselet[256] parselets = (ref ctx) {
+        ctx.errors.error(
+            SyntaxError.TokenNotAnExpression,
+            ctx.tokens.current.span.start,
+            "The token \"%s\" cannot start an expression.",
+            ctx.tokens.current.type
+        );
 
-    foreach (ref parselet; parselets) {
-        parselet = (ref ctx) {
-            ctx.errors.error(
-                SyntaxError.TokenNotAnExpression,
-                ctx.tokens.current.span.start,
-                "The token \"%s\" cannot start an expression.",
-                ctx.tokens.current.type
-            );
-
-            return new Invalid(Span(ctx.tokens.current.span.start, 0));
-        };
-    }
+        return new Invalid(Span(ctx.tokens.current.span.start, 0));
+    };
 
     parselets[Token.Done]       = (ref ctx) {
         ctx.errors.error(
@@ -260,13 +255,13 @@ PrefixParselet[] prefix_parselets = () {
         return new Invalid(ctx.tokens.current.span);
     };
 
-    parselets[Token.Name]       = &parse_key_type!(Name);
-    parselets[Token.Integer]    = &parse_key_type!(Integer);
-    parselets[Token.Char]       = &parse_key_type!(Char);
-    parselets[Token.Minus]      = &parse_unary!(Negate);
-    parselets[Token.Bang]       = &parse_unary!(Falsify);
-    parselets[Token.Ampersand]  = &parse_unary!(GetRef);
-    parselets[Token.Star]       = &parse_unary!(Pointer);
+    parselets[Token.Name]       = &parse_key_type!Name;
+    parselets[Token.Integer]    = &parse_key_type!Integer;
+    parselets[Token.Char]       = &parse_key_type!Char;
+    parselets[Token.Minus]      = &parse_unary!Negate;
+    parselets[Token.Bang]       = &parse_unary!Falsify;
+    parselets[Token.Ampersand]  = &parse_unary!GetRef;
+    parselets[Token.Star]       = &parse_unary!Pointer;
     parselets[Token.Lparen]     = &parse_seq!(List, parse_list_member, Token.Rparen);
     parselets[Token.Lbracket]   = &parse_seq!(List, parse_list_member, Token.Rbracket);
     parselets[Token.Lbrace]     = &parse_block;
@@ -277,27 +272,26 @@ PrefixParselet[] prefix_parselets = () {
 Infix[] infix_parselets = () {
     Infix[255] parselets;
 
-    static set(Node, Token.Type ttype, ExprPrecedence prec, bool left_assoc, bool skip_op)(ref Infix[255] parselets) {
+    static set(Node, Token.Type ttype, ExprPrecedence prec, bool left_assoc = true, bool skip_op = true)(ref Infix[255] parselets) {
         parselets[ttype] = Infix(prec, &parse_binary!(Node, left_assoc ? prec + 1 : prec, skip_op));
     }
 
-    set!(Less,          Token.Less,         ExprPrecedence.Compare,     true,   true)(parselets);
-    set!(LessEqual,     Token.LessEqual,    ExprPrecedence.Compare,     true,   true)(parselets);
-    set!(Greater,       Token.Greater,      ExprPrecedence.Compare,     true,   true)(parselets);
-    set!(GreaterEqual,  Token.GreaterEqual, ExprPrecedence.Compare,     true,   true)(parselets);
-    set!(Equal,         Token.EqualEqual,   ExprPrecedence.Equality,    true,   true)(parselets);
-    set!(NotEqual,      Token.BangEqual,    ExprPrecedence.Equality,    true,   true)(parselets);
-    set!(And,           Token.And,          ExprPrecedence.Logic,       true,   true)(parselets);
-    set!(Or,            Token.Or,           ExprPrecedence.Logic,       true,   true)(parselets);
-    set!(Add,           Token.Plus,         ExprPrecedence.Sum,         true,   true)(parselets);
-    set!(Subtract,      Token.Minus,        ExprPrecedence.Sum,         true,   true)(parselets);
-    set!(Multiply,      Token.Star,         ExprPrecedence.Product,     true,   true)(parselets);
-    set!(Divide,        Token.Slash,        ExprPrecedence.Product,     true,   true)(parselets);
-    set!(Power,         Token.Caret,        ExprPrecedence.Power,       false,  true)(parselets);
-    set!(Call,          Token.Dot,          ExprPrecedence.Call,        true,   true)(parselets);
-    set!(Call,          Token.Lparen,       ExprPrecedence.Call,        true,   false)(parselets);
-    set!(Call,          Token.Lbracket,     ExprPrecedence.Call,        true,   false)(parselets);
-
+    set!(Less,          Token.Less,         ExprPrecedence.Compare  )(parselets);
+    set!(LessEqual,     Token.LessEqual,    ExprPrecedence.Compare  )(parselets);
+    set!(Greater,       Token.Greater,      ExprPrecedence.Compare  )(parselets);
+    set!(GreaterEqual,  Token.GreaterEqual, ExprPrecedence.Compare  )(parselets);
+    set!(Equal,         Token.EqualEqual,   ExprPrecedence.Equality )(parselets);
+    set!(NotEqual,      Token.BangEqual,    ExprPrecedence.Equality )(parselets);
+    set!(And,           Token.And,          ExprPrecedence.Logic    )(parselets);
+    set!(Or,            Token.Or,           ExprPrecedence.Logic    )(parselets);
+    set!(Add,           Token.Plus,         ExprPrecedence.Sum      )(parselets);
+    set!(Subtract,      Token.Minus,        ExprPrecedence.Sum      )(parselets);
+    set!(Multiply,      Token.Star,         ExprPrecedence.Product  )(parselets);
+    set!(Divide,        Token.Slash,        ExprPrecedence.Product  )(parselets);
+    set!(Power,         Token.Caret,        ExprPrecedence.Power,   false)(parselets);
+    set!(Call,          Token.Dot,          ExprPrecedence.Call     )(parselets);
+    set!(Call,          Token.Lparen,       ExprPrecedence.Call,    true, false)(parselets);
+    set!(Call,          Token.Lbracket,     ExprPrecedence.Call,    true, false)(parselets);
     parselets[Token.Rarrow] = Infix(ExprPrecedence.Primary, &parse_function);
 
     return parselets;

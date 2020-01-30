@@ -3,8 +3,9 @@ module arc.syntax.tests.lexer;
 import arc.syntax.lexer: Lexer, Token;
 import arc.syntax.location: Span, SpannedText;
 
-Lexer scan_tokens(const(char)[] text) {
+Lexer scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
     auto l = Lexer(SpannedText(0, cast(uint) text.length, text));
+    l.push_eol_delimiter(delimiter);
     l.advance();
     return l;
 }
@@ -18,9 +19,8 @@ bool seq_equivalent(string expr, T)(Lexer lexer, T[] ts...) {
         lexer.advance();
     }
 
-    if (ts.length > 0)
+    if (ts.length > 0 || !lexer.empty)
         return false;
-    assert(lexer.empty);
     return true;
 }
 
@@ -36,32 +36,34 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
 }
 
 @("lexer:compact") unittest {
-    assert("()[],.;->1a_3'a".scan_tokens.token_equivalent(
-        Token(Token.Lparen,     Span(0, 1)),
-        Token(Token.Rparen,     Span(1, 1)),
-        Token(Token.Lbracket,   Span(2, 1)),
-        Token(Token.Rbracket,   Span(3, 1)),
-        Token(Token.Comma,      Span(4, 1)),
-        Token(Token.Dot,        Span(5, 1)),
-        Token(Token.Semicolon,  Span(6, 1)),
-        Token(Token.Rarrow,     Span(7, 2)),
-        Token(Token.Integer,    Span(9, 1)),
-        Token(Token.Name,       Span(10, 3)),
-        Token(Token.Label,      Span(13, 2)),
+    assert("()[]{},.;->1a_3'a".scan_tokens.type_equivalent(
+        Token.Lparen,
+        Token.Rparen,
+        Token.Lbracket,
+        Token.Rbracket,
+        Token.Lbrace,
+        Token.Rbrace,
+        Token.Comma,
+        Token.Dot,
+        Token.Semicolon,
+        Token.Rarrow,
+        Token.Integer,
+        Token.Name,
+        Token.Label,
     ));
 }
 
 @("lexer:keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.token_equivalent(
-        Token(Token.And,        Span(0, 3)),
-        Token(Token.Or,         Span(4, 2)),
-        Token(Token.If,         Span(7, 2)),
-        Token(Token.Else,       Span(10, 4)),
-        Token(Token.Loop,       Span(15, 4)),
-        Token(Token.Break,      Span(20, 5)),
-        Token(Token.Return,     Span(26, 6)),
-        Token(Token.Continue,   Span(33, 8)),
-        Token(Token.Def,        Span(42, 3)),
+        Token(Token.And,        Span(0, 3), 17648556366517412293UL),
+        Token(Token.Or,         Span(4, 2), 4116612837551264357UL),
+        Token(Token.If,         Span(7, 2), 10245967140023949179UL),
+        Token(Token.Else,       Span(10, 4), 15206279584842378246UL),
+        Token(Token.Loop,       Span(15, 4), 14974296207267515915UL),
+        Token(Token.Break,      Span(20, 5), 587566040553785743UL),
+        Token(Token.Return,     Span(26, 6), 17660342674565394361UL),
+        Token(Token.Continue,   Span(33, 8), 16371828708454923059UL),
+        Token(Token.Def,        Span(42, 3), 9791288970560527259UL)
     ));
 }
 
@@ -87,8 +89,7 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
 @("lexer:insert_delim") unittest {
     static test_tokens(string[] str...) {
         foreach (s; str) {
-            auto lexer = s.scan_tokens;
-            lexer.push_eol_delimiter(Token.Comma);
+            auto lexer = s.scan_tokens(Token.Comma);
             lexer.drop();
             assert(lexer.type_equivalent(Token.Comma), s);
         }
@@ -97,30 +98,7 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
     test_tokens(")", "]", "}", "a", "1", "'a", "'a'", "break", "return", "continue");
 }
 
-@("lexer:insert_keyword_delim") unittest {
-    // static test_tokens(string[] str...) {
-    //     foreach (s; str) {
-    //         auto lexer = ("a " ~ s).scan_tokens;
-    //         lexer.push_eol_delimiter(Token.Semicolon);
-    //         import std.stdio;
-    //         for (Token t = lexer.current; !lexer.empty; lexer.advance)
-    //             write(t, " ");
-    //         writeln();
-    //         // lexer.drop();
-    //         // assert(lexer.type_equivalent(Token.Semicolon), s);
-    //     }
-    // }
-
-    // test_tokens("}", "if", "else", "break", "continue", "return", "loop");
-
-    auto lexer = "a }".scan_tokens;
-    // lexer.push_eol_delimiter(Token.Semicolon);
-    
-    
-    import std.stdio;
-    for (Token t = lexer.current; !lexer.empty; lexer.advance())
-        write(t.type, " ");
-    writeln();
-    
-    // assert(lexer.type_equivalent(Token.Semicolon, Token.Rbrace));
+@("lexer:keyword_delim_error") unittest {
+    with (Token.Type)
+    assert("{return}".scan_tokens(Semicolon).type_equivalent(Lbrace, Return, Semicolon, Rbrace, Semicolon));
 }
