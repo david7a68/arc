@@ -24,7 +24,6 @@ auto parse(string category)(const(char)[] text) {
     static if (category == "statement")
         p.tokens.push_eol_delimiter(Token.Semicolon);
 
-    p.tokens.advance();
     mixin("return ParseResult(parse_" ~ category ~ "(p), p.errors);");
 }
 

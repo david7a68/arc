@@ -86,9 +86,9 @@ struct CompilerContext {
     import arc.syntax.ast: AstNode;
     AstNode parse(Source source) {
         import arc.syntax.parser: ParseCtx, parse_module;
-        import arc.syntax.lexer: scan_tokens;
+        import arc.syntax.lexer: Lexer;
 
-        auto ctx = ParseCtx(source.span.scan_tokens, SyntaxReporter(source));
+        auto ctx = ParseCtx(Lexer(source.span), SyntaxReporter(source));
         return parse_module(ctx);
     }
 

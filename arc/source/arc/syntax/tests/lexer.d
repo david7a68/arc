@@ -6,7 +6,6 @@ import arc.syntax.location: Span, SpannedText;
 Lexer scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
     auto l = Lexer(SpannedText(0, cast(uint) text.length, text));
     l.push_eol_delimiter(delimiter);
-    l.advance();
     return l;
 }
 
@@ -90,7 +89,7 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
     static test_tokens(string[] str...) {
         foreach (s; str) {
             auto lexer = s.scan_tokens(Token.Comma);
-            lexer.drop();
+            lexer.advance();
             assert(lexer.type_equivalent(Token.Comma), s);
         }
     }

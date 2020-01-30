@@ -54,6 +54,7 @@ struct Lexer {
         cursor = span.text.ptr;
         end = cursor + span.text.length;
         this.span = span;
+        advance();
     }
 
     bool empty() {
@@ -73,49 +74,6 @@ struct Lexer {
     void pop_eol_delimiter() {
         eol_stack.removeBack();
     }
-
-    alias drop = advance;
-
-    Token take() {
-        scope(exit) advance();
-        return current;
-    }
-
-    bool skip(Token.Type t) {
-        if (current.type != t)
-            return false;
-        
-        advance();
-        return true;
-    }
-
-    bool matches_one(Token.Type[] types...) {
-        foreach (type; types)
-            if (current.type == type)
-                return true;
-        return false;
-    }
-}
-
-Lexer scan_tokens(SpannedText span) {
-    auto l = Lexer(span);
-    l.advance();
-    return l;
-}
-
-/// Hashmap of reserved keywords and their corresponding token types
-immutable Token.Type[Key] keywords;
-
-shared static this() {
-    keywords[digest("and")] = Token.And;
-    keywords[digest("or")] = Token.Or;
-    keywords[digest("if")] = Token.If;
-    keywords[digest("else")] = Token.Else;
-    keywords[digest("loop")] = Token.Loop;
-    keywords[digest("break")] = Token.Break;
-    keywords[digest("return")] = Token.Return;
-    keywords[digest("continue")] = Token.Continue;
-    keywords[digest("def")] = Token.Def;
 }
 
 struct ScanResult {
@@ -169,6 +127,21 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
     }
 
     return scan;
+}
+
+/// Hashmap of reserved keywords and their corresponding token types
+immutable Token.Type[Key] keywords;
+
+shared static this() {
+    keywords[digest("and")] = Token.And;
+    keywords[digest("or")] = Token.Or;
+    keywords[digest("if")] = Token.If;
+    keywords[digest("else")] = Token.Else;
+    keywords[digest("loop")] = Token.Loop;
+    keywords[digest("break")] = Token.Break;
+    keywords[digest("return")] = Token.Return;
+    keywords[digest("continue")] = Token.Continue;
+    keywords[digest("def")] = Token.Def;
 }
 
 /**

@@ -2,7 +2,7 @@ module arc.syntax.parser;
 
 import arc.hash: Key;
 import arc.syntax.ast;
-import arc.syntax.lexer: Lexer, Token;
+import arc.syntax.lexer: Lexer, Token, matches_one;
 import arc.syntax.location: Span;
 import arc.syntax.reporter: SyntaxReporter, SyntaxError;
 
@@ -87,40 +87,6 @@ AstNode parse_type(ref ParseCtx ctx, ExprPrecedence precedence = ExprPrecedence.
 
 private:
 
-Token take_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
-    auto token = l.take();
-    if (token.type == t)
-        return token;
-    
-    reporter.error(
-        SyntaxError.TokenExpectMismatch,
-        l.current.span.start,
-        "The token %s does not match the expected token type %s",
-        l.span.get_text(l.current.span),
-        t
-    );
-    assert(false, "Error: Expect mismatch!");
-}
-
-void skip_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
-    if (l.skip(t))
-        return;
-    
-    reporter.error(
-        SyntaxError.TokenExpectMismatch,
-        l.current.span.start,
-        "The token %s does not match the expected token type %s",
-        l.span.get_text(l.current.span),
-        t
-    );
-    assert(false, "Error: Expect mismatch!");
-}
-
-alias PrefixParselet = AstNode function(ref ParseCtx ctx);
-alias InfixParselet = AstNode function(ref ParseCtx ctx, AstNode lhs);
-
-struct Infix { ExprPrecedence precedence; InfixParselet parselet; }
-
 // ----------------------------------------------------------------------
 //    _____  _          _                                 _        
 //   / ____|| |        | |                               | |       
@@ -151,7 +117,7 @@ AstNode parse_def(ref ParseCtx ctx) {
 }
 
 AstNode parse_var(ref ParseCtx ctx, AstNode lhs) {
-    ctx.tokens.drop();
+    ctx.tokens.advance();
 
     assert(lhs.type == AstNode.Name);
 
@@ -222,6 +188,11 @@ AstNode parse_control_flow(NodeType, Token.Type ttype, bool with_value)(ref Pars
 //                | |                                               
 //                |_|                                               
 // ----------------------------------------------------------------------
+
+alias PrefixParselet = AstNode function(ref ParseCtx ctx);
+alias InfixParselet = AstNode function(ref ParseCtx ctx, AstNode lhs);
+
+struct Infix { ExprPrecedence precedence; InfixParselet parselet; }
 
 PrefixParselet[] prefix_parselets = () {
     PrefixParselet[256] parselets = (ref ctx) {
@@ -301,7 +272,7 @@ auto parse_unary(NodeType)(ref ParseCtx ctx) {
 }
 
 AstNode parse_binary(NodeType, int precedence, bool skip_operator)(ref ParseCtx ctx, AstNode lhs) {
-    static if (skip_operator) ctx.tokens.drop();
+    static if (skip_operator) ctx.tokens.advance();
     auto rhs = parse_expression(ctx, cast(ExprPrecedence) precedence);
 
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid)
@@ -319,7 +290,7 @@ AstNode parse_seq(NodeType, alias parse_member, Token.Type close_delim)(ref Pars
     ctx.tokens.skip(Token.Comma);
 
     AstNode[] members;
-    while (!ctx.tokens.matches_one(close_delim, Token.Done)) {
+    while (!ctx.tokens.current.type.matches_one(close_delim, Token.Done)) {
         members ~= parse_member(ctx);
 
         ctx.tokens.skip(Token.Comma);
@@ -351,7 +322,7 @@ AstNode parse_list_member(ref ParseCtx ctx) {
     auto first = parse_expression(ctx, ExprPrecedence.Logic);
 
     const is_name = first.type == AstNode.Name;
-    AstNode name = is_name && ctx.tokens.matches_one(Token.Equals, Token.Colon) ?
+    AstNode name = is_name && ctx.tokens.current.type.matches_one(Token.Equals, Token.Colon) ?
                    first :
                    AstNode.none;
     
@@ -379,7 +350,7 @@ AstNode parse_block(ref ParseCtx ctx) {
     const open_span = ctx.tokens.take().span;
 
     AstNode[] statements;
-    while (!ctx.tokens.matches_one(Token.Done, Token.Rbrace)) {
+    while (!ctx.tokens.current.type.matches_one(Token.Done, Token.Rbrace)) {
         statements ~= parse_statement(ctx);
     }
 
@@ -410,7 +381,7 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
     // Yes, this does involve copying the delimiter array, but it's probably not
     // going to be very large, so we can get away with it for now.
     auto lookahead = ctx.tokens;
-    while (!lookahead.matches_one(Token.Done, Token.Comma, Token.Semicolon, Token.Lbrace))
+    while (!lookahead.current.type.matches_one(Token.Done, Token.Comma, Token.Semicolon, Token.Lbrace))
         lookahead.advance();
     
     const has_block = lookahead.current.type == Token.Lbrace;
@@ -519,4 +490,54 @@ AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
         ctx.free(lhs, return_type);
         return new Invalid(span);
     }
+}
+
+// ----------------------------------------------------------------------
+//   _    _  _    _  _  _  _    _            
+//  | |  | || |  (_)| |(_)| |  (_)           
+//  | |  | || |_  _ | | _ | |_  _   ___  ___ 
+//  | |  | || __|| || || || __|| | / _ \/ __|
+//  | |__| || |_ | || || || |_ | ||  __/\__ \
+//   \____/  \__||_||_||_| \__||_| \___||___/
+// ----------------------------------------------------------------------
+
+Token take(ref Lexer l) {
+    scope(exit) l.advance();
+    return l.current;
+}
+
+bool skip(ref Lexer l, Token.Type t) {
+    if (l.current.type != t)
+        return false;
+    l.advance();
+    return true;
+}
+
+Token take_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
+    auto token = l.take();
+    if (token.type == t)
+        return token;
+    
+    reporter.error(
+        SyntaxError.TokenExpectMismatch,
+        l.current.span.start,
+        "The token %s does not match the expected token type %s",
+        l.span.get_text(l.current.span),
+        t
+    );
+    assert(false, "Error: Expect mismatch!");
+}
+
+void skip_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
+    if (l.skip(t))
+        return;
+    
+    reporter.error(
+        SyntaxError.TokenExpectMismatch,
+        l.current.span.start,
+        "The token %s does not match the expected token type %s",
+        l.span.get_text(l.current.span),
+        t
+    );
+    assert(false, "Error: Expect mismatch!");
 }
