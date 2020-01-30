@@ -105,7 +105,7 @@ struct CompilerContext {
     Symbol* build_symbol_tree(AstNode syntax) {
         import arc.semantic.scope_builder: ScopeBuilder, build_symbol_tree;
 
-        auto builder = ScopeBuilder(&this);
+        auto builder = ScopeBuilder();
         builder.module_scope = builder.current_scope = new Symbol(Symbol.Scope);
         build_symbol_tree(builder, syntax);
         return builder.module_scope;
