@@ -10,7 +10,6 @@ abstract class AstNode {
         Module,
         // Statements
         Define,
-        Variable,
         If,
         Loop,
         Break,
@@ -43,6 +42,7 @@ abstract class AstNode {
         Power,
         Call,
         Function,
+        Variable,
         // Type expressions
         InferredType,
         PointerType,
@@ -123,28 +123,6 @@ final class Define : Statement {
     }
 
     override AstNode[] get_children() { return parts; }
-}
-
-final class Variable : Statement {
-    AstNode[3] parts;
-
-    this(Span span, AstNode name, AstNode type, AstNode value) {
-        super(AstNode.Variable, span);
-        parts = [name, type, value];
-    }
-
-    override AstNode[] get_children() { return parts; }
-}
-
-final class Assign : Statement {
-    AstNode[2] operands;
-
-    this(Span span, AstNode lhs, AstNode rhs) {
-        super(AstNode.Assign, span);
-        operands = [lhs, rhs];
-    }
-
-    override AstNode[] get_children() { return operands; }
 }
 
 final class If : Statement {
@@ -241,20 +219,21 @@ final class Unary(AstNode.Type node_type) : Expression {
     override AstNode[] get_children() { return operand; }
 }
 
-alias Less = Binary!(AstNode.Less);
-alias LessEqual = Binary!(AstNode.LessEqual);
-alias Greater = Binary!(AstNode.Greater);
-alias GreaterEqual = Binary!(AstNode.GreaterEqual);
-alias Equal = Binary!(AstNode.Equal);
-alias NotEqual = Binary!(AstNode.NotEqual);
-alias And = Binary!(AstNode.And);
-alias Or = Binary!(AstNode.Or);
-alias Add = Binary!(AstNode.Add);
-alias Subtract = Binary!(AstNode.Subtract);
-alias Multiply = Binary!(AstNode.Multiply);
-alias Divide = Binary!(AstNode.Divide);
-alias Power = Binary!(AstNode.Power);
-alias Call = Binary!(AstNode.Call);
+alias Assign        = Binary!(AstNode.Assign);
+alias Less          = Binary!(AstNode.Less);
+alias LessEqual     = Binary!(AstNode.LessEqual);
+alias Greater       = Binary!(AstNode.Greater);
+alias GreaterEqual  = Binary!(AstNode.GreaterEqual);
+alias Equal         = Binary!(AstNode.Equal);
+alias NotEqual      = Binary!(AstNode.NotEqual);
+alias And           = Binary!(AstNode.And);
+alias Or            = Binary!(AstNode.Or);
+alias Add           = Binary!(AstNode.Add);
+alias Subtract      = Binary!(AstNode.Subtract);
+alias Multiply      = Binary!(AstNode.Multiply);
+alias Divide        = Binary!(AstNode.Divide);
+alias Power         = Binary!(AstNode.Power);
+alias Call          = Binary!(AstNode.Call);
 
 final class Binary(AstNode.Type node_type) : Expression {
     AstNode[2] operands;
@@ -295,6 +274,17 @@ final class Function : Expression {
     this(Span span, AstNode name, AstNode return_type, AstNode body) {
         super(AstNode.Function, span);
         parts = [name, return_type, body];
+    }
+
+    override AstNode[] get_children() { return parts; }
+}
+
+final class Variable : Expression {
+    AstNode[3] parts;
+
+    this(Span span, AstNode name, AstNode type, AstNode value) {
+        super(AstNode.Variable, span);
+        parts = [name, type, value];
     }
 
     override AstNode[] get_children() { return parts; }

@@ -13,9 +13,6 @@ statement = def ';'
           ;
 
     def = 'def' name ':' type? ((type ('=' expr)?) | ('=' expr)) ;
-    var = name ':' ((type ('=' expr)?) | ('=' expr)) ;
-
-    assign = (name | call) '=' expr ;
 
     break = 'break' expr? ;
     return = 'return' expr? ;
@@ -35,6 +32,7 @@ statement = def ';'
                 | list
                 | function
                 | call
+                | var
                 ;
 
             list = list_open ','* (list_member ',')* list_close ;
@@ -49,6 +47,8 @@ statement = def ';'
             call = (list | name) '.'? (list | name)
                  | call '.'? call
                  ;
+
+            var = name ':' ((type ('=' expr)?) | ('=' expr)) ;
 
         unary = '-' primary
               | '*' primary
@@ -70,6 +70,7 @@ statement = def ';'
                | '!='
                | 'and'
                | 'or'
+               | '='
                ;
 
 type = name

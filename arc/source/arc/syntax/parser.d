@@ -8,6 +8,7 @@ import arc.syntax.reporter: SyntaxReporter, SyntaxError;
 
 enum ExprPrecedence {
     None,
+    Assign,
     Logic,
     Equality,
     Compare,
@@ -59,31 +60,19 @@ AstNode parse_statement(ref ParseCtx ctx) {
         case Token.Loop:
             return parse_loop(ctx);
         default:
-            scope(exit)
-                ctx.tokens.skip_required(Token.Semicolon, &ctx.errors);
-            
-            auto first = parse_expression(ctx, ExprPrecedence.Call);
-            // a : b ... c = d
-            if (first.type == AstNode.Name) {
-                // assert(false);
-                if (ctx.tokens.current.type == Token.Colon)
-                    return parse_var(ctx, first);
-                else if (ctx.tokens.current.type == Token.Equals)
-                    return parse_binary!(Assign, ExprPrecedence.Logic, true)(ctx, first);
-            }
-            // a.b().c = 3
-            else if (first.type == AstNode.Call && ctx.tokens.current.type == Token.Equals) {
-                return parse_binary!(Assign, ExprPrecedence.Logic, true)(ctx, first);
-            }
-            return parse_infix(ctx, first);
+            auto expression = parse_expression(ctx);
+            ctx.tokens.skip_required(Token.Semicolon, &ctx.errors);
+            return expression;
     }
 }
 
-AstNode parse_expression(ref ParseCtx ctx, ExprPrecedence precedence = ExprPrecedence.Logic) {
-    const prefix_parselet = prefix_parselets[ctx.tokens.current.type];
-    auto expression = prefix_parselet(ctx);
+AstNode parse_expression(ref ParseCtx ctx, ExprPrecedence precedence = ExprPrecedence.Assign) {
+    auto expression = prefix_parselets[ctx.tokens.current.type](ctx);
 
-    return parse_infix(ctx, expression, precedence);
+    while (precedence <= infix_parselets[ctx.tokens.current.type].precedence)
+        expression = infix_parselets[ctx.tokens.current.type].parselet(ctx, expression);
+
+    return expression;
 }
 
 AstNode parse_type(ref ParseCtx ctx, ExprPrecedence precedence = ExprPrecedence.Call) {
@@ -276,6 +265,7 @@ Infix[] infix_parselets = () {
         parselets[ttype] = Infix(prec, &parse_binary!(Node, left_assoc ? prec + 1 : prec, skip_op));
     }
 
+    set!(Assign,        Token.Equals,       ExprPrecedence.Assign   )(parselets);
     set!(Less,          Token.Less,         ExprPrecedence.Compare  )(parselets);
     set!(LessEqual,     Token.LessEqual,    ExprPrecedence.Compare  )(parselets);
     set!(Greater,       Token.Greater,      ExprPrecedence.Compare  )(parselets);
@@ -292,19 +282,11 @@ Infix[] infix_parselets = () {
     set!(Call,          Token.Dot,          ExprPrecedence.Call     )(parselets);
     set!(Call,          Token.Lparen,       ExprPrecedence.Call,    true, false)(parselets);
     set!(Call,          Token.Lbracket,     ExprPrecedence.Call,    true, false)(parselets);
+    parselets[Token.Colon]  = Infix(ExprPrecedence.Assign, &parse_var);
     parselets[Token.Rarrow] = Infix(ExprPrecedence.Primary, &parse_function);
 
     return parselets;
 } ();
-
-AstNode parse_infix(ref ParseCtx ctx, AstNode prefix, ExprPrecedence precedence = ExprPrecedence.Logic) {
-    auto expression = prefix;
-    while (precedence <= infix_parselets[ctx.tokens.current.type].precedence) {
-        expression = infix_parselets[ctx.tokens.current.type].parselet(ctx, expression);
-    }
-
-    return expression;
-}
 
 auto parse_key_type(NodeType)(ref ParseCtx ctx) {
     auto t = ctx.tokens.take();
@@ -425,7 +407,8 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
 
     // expression or type ... depends on what comes first, a semicolon, or a block
     // Copy the lexer so that we can do lookahead.
-    // Yes, this does involve copying an array. A new method will be needed eventually.
+    // Yes, this does involve copying the delimiter array, but it's probably not
+    // going to be very large, so we can get away with it for now.
     auto lookahead = ctx.tokens;
     while (!lookahead.matches_one(Token.Done, Token.Comma, Token.Semicolon, Token.Lbrace))
         lookahead.advance();
@@ -435,9 +418,7 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
                     parse_type(ctx) :
                     TypeExpression.inferred;
     
-    auto body = has_block ?
-                parse_block(ctx) :
-                parse_expression(ctx) ;
+    auto body = parse_expression(ctx) ;
 
     const span = params.span.merge(ret_type.span).merge(body.span);
     if (params.type != AstNode.Invalid && ret_type.type != AstNode.Invalid && body.type != AstNode.Invalid)

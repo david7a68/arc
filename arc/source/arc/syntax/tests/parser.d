@@ -272,21 +272,6 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
                             Name,
                 Name
     ));
-
-    with (AstNode.Type)
-    assert(type_equivalent("(a) -> {b}()".parse!"expression",
-        Call,
-            Function,
-                List,
-                    ListMember,
-                        None,
-                        InferredType,
-                        Name,
-                InferredType,
-                Block,
-                    Name,
-            List,
-    ));
 }
 
 @("parse:list") unittest {
