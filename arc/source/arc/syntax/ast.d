@@ -271,9 +271,9 @@ final class List : Expression {
 final class Function : Expression {
     AstNode[3] parts;
 
-    this(Span span, AstNode name, AstNode return_type, AstNode body) {
+    this(Span span, AstNode parameters, AstNode return_type, AstNode body) {
         super(AstNode.Function, span);
-        parts = [name, return_type, body];
+        parts = [parameters, return_type, body];
     }
 
     override AstNode[] get_children() { return parts; }

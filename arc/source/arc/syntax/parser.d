@@ -69,8 +69,31 @@ AstNode parse_statement(ref ParseCtx ctx) {
 AstNode parse_expression(ref ParseCtx ctx, ExprPrecedence precedence = ExprPrecedence.Assign) {
     auto expression = prefix_parselets[ctx.tokens.current.type](ctx);
 
-    while (precedence <= infix_parselets[ctx.tokens.current.type].precedence)
+    while (precedence <= infix_parselets[ctx.tokens.current.type].precedence) {
+        // unwrap a single-element list that is not part of an array 
+        const is_not_function_param_list = ctx.tokens.current.type != Token.Rarrow;
+        const is_single_element_list = expression.type == AstNode.List && expression.get_children().length == 1;
+
+        if (is_single_element_list && is_not_function_param_list) {
+            auto list_member = expression.get_children()[0];
+            if (list_member.type != AstNode.Invalid &&
+                list_member.get_children[0].type == AstNode.None &&
+                list_member.get_children[1].type == AstNode.InferredType)
+                expression = list_member.get_children[2];
+        }
+
         expression = infix_parselets[ctx.tokens.current.type].parselet(ctx, expression);
+    }
+
+    const is_single_element_list = expression.type == AstNode.List && expression.get_children().length == 1;
+
+    if (is_single_element_list) {
+        auto list_member = expression.get_children()[0];
+        if (list_member.type != AstNode.Invalid &&
+            list_member.get_children[0].type == AstNode.None &&
+            list_member.get_children[1].type == AstNode.InferredType)
+            expression = list_member.get_children[2];
+    }
 
     return expression;
 }

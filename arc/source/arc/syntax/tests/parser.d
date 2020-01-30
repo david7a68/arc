@@ -169,36 +169,6 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
     assert(type_equivalent("loop a = a + 1".parse!"statement", Loop, Assign, Name, Add, Name, Integer));
 }
 
-@("parse:assign") unittest {
-    assert(type_equivalent("a = 3".parse!"statement", AstNode.Assign, AstNode.Name, AstNode.Integer));
-}
-
-@("parse:variable") unittest {
-    with (AstNode.Type)
-    assert(type_equivalent("a : = b".parse!"statement",
-        Variable,
-            Name,
-            InferredType,
-            Name
-    ));
-
-    with (AstNode.Type)
-    assert(type_equivalent("a : b".parse!"statement",
-        Variable,
-            Name,
-            Name,
-            None,
-    ));
-
-    with (AstNode.Type)
-    assert(type_equivalent("a : b = c".parse!"statement",
-            Variable,
-                Name,
-                Name,
-                Name,
-    ));
-}
-
 // ----------------------------------------------------------------------
 //   ______                                    _                    
 //  |  ____|                                  (_)                   
@@ -241,21 +211,6 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
     assert(type_equivalent("a.b".parse!"expression", AstNode.Call, AstNode.Name, AstNode.Name));
 
     with (AstNode.Type)
-    assert(type_equivalent("(foo()())()".parse!"expression",
-        Call,
-            List,
-                ListMember,
-                    None,
-                    InferredType,
-                    Call,
-                        Call,
-                            Name,
-                            List,
-                        List,
-            List,
-    ));
-
-    with (AstNode.Type)
     assert(type_equivalent("b - c + d * e ^ f ^ g / h".parse!"expression",
         Add,
             Subtract,
@@ -271,6 +226,8 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
                             Name,
                 Name
     ));
+
+    assert(type_equivalent("a = 3".parse!"expression", AstNode.Assign, AstNode.Name, AstNode.Integer));
 }
 
 @("parse:list") unittest {
@@ -316,6 +273,12 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
                     Name,
                     Integer
         ));
+
+        // single-value list elision
+        assert(type_equivalent("(a)".parse!"expression", Name));
+
+        // correct exclusions
+        assert(type_equivalent("(a: b)".parse!"expression", List, ListMember, Name, Name, None));
     }
 }
 
@@ -368,6 +331,52 @@ bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...)
                         List,
         ));
     }
+}
+
+@("parse:variable") unittest {
+    with (AstNode.Type)
+    assert(type_equivalent("a : = b".parse!"expression",
+        Variable,
+            Name,
+            InferredType,
+            Name
+    ));
+
+    with (AstNode.Type)
+    assert(type_equivalent("a : b".parse!"expression",
+        Variable,
+            Name,
+            Name,
+            None,
+    ));
+
+    with (AstNode.Type)
+    assert(type_equivalent("a : b = c".parse!"expression",
+        Variable,
+            Name,
+            Name,
+            Name,
+    ));
+}
+
+@("parse:single_element_list") unittest {
+    with (AstNode.Type)
+    assert(type_equivalent("(a + b) * c".parse!"expression",
+        Multiply,
+            Add,
+                Name,
+                Name,
+            Name
+    ));
+
+    with (AstNode.Type)
+    assert(type_equivalent("a * (b + c)".parse!"expression",
+        Multiply,
+            Name,
+            Add,
+                Name,
+                Name,
+    ));
 }
 
 // ----------------------------------------------------------------------
