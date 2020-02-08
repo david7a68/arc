@@ -3,11 +3,12 @@ module arc.syntax.tests.parser;
 import arc.syntax.parser;
 import arc.syntax.lexer: Lexer, Token;
 import arc.syntax.ast: AstNode;
-import arc.syntax.reporter: SyntaxReporter, SyntaxError;
+// import arc.syntax.reporter: SyntaxReporter, SyntaxError;
+import arc.syntax.error: SyntaxError;
 
 struct ParseResult {
     AstNode tree;
-    SyntaxReporter errors;
+    SyntaxError[] errors;
 }
 
 /// Parses a statement.
@@ -15,11 +16,8 @@ struct ParseResult {
 auto parse(string category)(const(char)[] text) {
     import arc.syntax.location: Source, SpannedText;
 
-    auto span = SpannedText(0, cast(uint) text.length, text);
-    auto p = ParseCtx(
-        Lexer(span),
-        SyntaxReporter(Source("test", span), true)
-    );
+    auto source = Source("test", SpannedText(0, cast(uint) text.length, text));
+    auto p = ParseCtx(source);
 
     static if (category == "statement")
         p.tokens.push_eol_delimiter(Token.Semicolon);
@@ -60,8 +58,15 @@ bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
     return true;
 }
 
-bool check_error(ParseResult result, SyntaxError error, AstNode.Type[] types...) {
-    return result.errors.has_error(error) && type_equivalent(result, types);
+bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[] types...) {
+    bool has_error;
+    foreach (error; result.errors)
+        if (error.code == error_code) {
+            has_error = true;
+            break;
+        }
+    
+    return has_error && type_equivalent(result, types);
 }
 
 // ----------------------------------------------------------------------

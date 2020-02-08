@@ -3,8 +3,10 @@ module arc.syntax.parser;
 import arc.hash: Key;
 import arc.syntax.ast;
 import arc.syntax.lexer: Lexer, Token, matches_one;
-import arc.syntax.location: Span;
-import arc.syntax.reporter: SyntaxReporter, SyntaxError;
+import arc.syntax.location:  Source;
+import arc.syntax.error: SyntaxError;
+
+pure:
 
 enum ExprPrecedence {
     None,
@@ -21,15 +23,21 @@ enum ExprPrecedence {
 
 struct ParseCtx {
     Lexer tokens;
-    SyntaxReporter errors;
+    Source source_text;
+    SyntaxError[] errors;
 
-    this(Lexer lexer, SyntaxReporter reporter) {
-        tokens = lexer;
-        errors = reporter;
+    this(Source source) {
+        tokens = Lexer(source.span);
+        source_text = source;
     }
 
-    void free(AstNode[] nodes...) {
-        foreach (node; nodes) if (!is_marker(node.type)) destroy(node);
+    void free(AstNode[] nodes...) pure {
+        import arc.traits: assume_pure;
+
+        static immutable destroy_fn = assume_pure(&object.destroy!(true, AstNode));
+        foreach (node; nodes)
+            if (!is_marker(node.type))
+                destroy_fn(node);
     }
 }
 
@@ -61,7 +69,7 @@ AstNode parse_statement(ref ParseCtx ctx) {
             return parse_loop(ctx);
         default:
             auto expression = parse_expression(ctx);
-            ctx.tokens.skip_required(Token.Semicolon, &ctx.errors);
+            ctx.tokens.skip_required(Token.Semicolon, ctx);
             return expression;
     }
 }
@@ -125,7 +133,7 @@ AstNode parse_def(ref ParseCtx ctx) {
 
     auto name = parse_key_type!(Name)(ctx);
 
-    ctx.tokens.skip_required(Token.Colon, &ctx.errors);
+    ctx.tokens.skip_required(Token.Colon, ctx);
 
     auto type = ctx.tokens.current.type != Token.Equals ?
                 parse_type(ctx) :
@@ -135,7 +143,7 @@ AstNode parse_def(ref ParseCtx ctx) {
                  parse_expression(ctx) :
                  AstNode.none;
 
-    const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, &ctx.errors).span);
+    const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, ctx).span);
     return new Define(span, name, type, value);
 }
 
@@ -192,11 +200,11 @@ AstNode parse_control_flow(NodeType, Token.Type ttype, bool with_value)(ref Pars
                      parse_expression(ctx) :
                      AstNode.none;
 
-        const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, &ctx.errors).span);
+        const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, ctx).span);
         return new NodeType(span, value);
     }
     else {
-        ctx.tokens.skip_required(Token.Semicolon, &ctx.errors);
+        ctx.tokens.skip_required(Token.Semicolon, ctx);
         return new NodeType(start_span);
     }
 }
@@ -217,22 +225,22 @@ alias InfixParselet = AstNode function(ref ParseCtx ctx, AstNode lhs);
 
 struct Infix { ExprPrecedence precedence; InfixParselet parselet; }
 
-PrefixParselet[] prefix_parselets = () {
-    PrefixParselet[256] parselets = (ref ctx) {
-        ctx.errors.error(
+immutable prefix_parselets = () {
+    PrefixParselet[256] parselets = (ref ctx) pure {
+        error(
+            ctx,
             SyntaxError.TokenNotAnExpression,
-            ctx.tokens.current.span.start,
             "The token \"%s\" cannot start an expression.",
             ctx.tokens.current.type
         );
 
-        return new Invalid(Span(ctx.tokens.current.span.start, 0));
+        return new Invalid(ctx.tokens.current.span);
     };
 
-    parselets[Token.Done]       = (ref ctx) {
-        ctx.errors.error(
+    parselets[Token.Done]       = (ref ctx) pure {
+        error(
+            ctx,
             SyntaxError.UnexpectedEndOfFile,
-            ctx.tokens.current.span.start,
             "Unexpected end of file while parsing source."
         );
         return new Invalid(ctx.tokens.current.span);
@@ -252,7 +260,7 @@ PrefixParselet[] prefix_parselets = () {
     return parselets;
 } ();
 
-Infix[] infix_parselets = () {
+immutable infix_parselets = () {
     Infix[255] parselets;
 
     static set(Node, Token.Type ttype, ExprPrecedence prec, bool left_assoc = true, bool skip_op = true)(ref Infix[255] parselets) {
@@ -330,10 +338,17 @@ AstNode parse_seq(NodeType, alias parse_member, Token.Type close_delim)(ref Pars
         
         ctx.free(members);
         
-        if (!ctx.errors.has_error(SyntaxError.UnexpectedEndOfFile))
-            ctx.errors.error(
+        bool has_eof_error;
+        foreach (error; ctx.errors)
+            if (error.code == SyntaxError.UnexpectedEndOfFile) {
+                has_eof_error = true;
+                break;
+            }
+
+        if (!has_eof_error)
+            error(
+                ctx,
                 SyntaxError.UnexpectedEndOfFile,
-                close_token.span.start,
                 "Unexpected end of file while parsing source."
             );
 
@@ -385,9 +400,9 @@ AstNode parse_block(ref ParseCtx ctx) {
     else {
         assert(close_token.type == Token.Done);
 
-        ctx.errors.error(
+        error(
+            ctx,
             SyntaxError.UnexpectedEndOfFile,
-            ctx.tokens.current.span.start,
             "Unexpected end of file while parsing source."
         );
 
@@ -397,7 +412,7 @@ AstNode parse_block(ref ParseCtx ctx) {
 }
 
 AstNode parse_function(ref ParseCtx ctx, AstNode params) {
-    ctx.tokens.skip_required(Token.Rarrow, &ctx.errors);
+    ctx.tokens.skip_required(Token.Rarrow, ctx);
 
     // expression or type ... depends on what comes first, a semicolon, or a block
     // Copy the lexer so that we can do lookahead.
@@ -446,13 +461,13 @@ PrefixParselet get_type_prefix_parselet(Token.Type t) {
             return &parse_seq!(TypeList, parse_type_list_member, Token.Rbracket);
         default:
             return (ref ctx) {
-                ctx.errors.error(
+                error(
+                    ctx,
                     SyntaxError.TokenNotAnExpression,
-                    ctx.tokens.current.span.start,
                     "The token \"%s\" cannot start an expression.",
                     ctx.tokens.current.type
                 );
-                return new Invalid(Span(ctx.tokens.current.span.start, 0));
+                return new Invalid(ctx.tokens.current.span);
             };
     }
 }
@@ -487,7 +502,7 @@ AstNode parse_type_list_member(ref ParseCtx ctx) {
         assert(name.type == AstNode.Name);
         auto old = name;
         name = new Name(old.span, old.get_key);
-        destroy(old);
+        ctx.free(old);
     }
 
     const span = name.span.merge(type.span);
@@ -502,7 +517,7 @@ AstNode parse_type_list_member(ref ParseCtx ctx) {
 AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
     assert(lhs.type == AstNode.TypeList || lhs.type == AstNode.Invalid);
 
-    ctx.tokens.skip_required(Token.Rarrow, &ctx.errors);
+    ctx.tokens.skip_required(Token.Rarrow, ctx);
 
     auto return_type = parse_type(ctx);
     const span = lhs.span.merge(return_type.span);
@@ -536,31 +551,71 @@ bool skip(ref Lexer l, Token.Type t) {
     return true;
 }
 
-Token take_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
+Token take_required(ref Lexer l, Token.Type t, ref ParseCtx ctx) {
     auto token = l.take();
     if (token.type == t)
         return token;
     
-    reporter.error(
+    error(
+        ctx,
         SyntaxError.TokenExpectMismatch,
-        l.current.span.start,
         "The token %s does not match the expected token type %s",
         l.span.get_text(l.current.span),
         t
     );
+
     assert(false, "Error: Expect mismatch!");
 }
 
-void skip_required(ref Lexer l, Token.Type t, SyntaxReporter* reporter) {
+void skip_required(ref Lexer l, Token.Type t, ref ParseCtx ctx) {
     if (l.skip(t))
         return;
     
-    reporter.error(
+    error(
+        ctx,
         SyntaxError.TokenExpectMismatch,
-        l.current.span.start,
         "The token %s does not match the expected token type %s",
         l.span.get_text(l.current.span),
         t
     );
+
     assert(false, "Error: Expect mismatch!");
+}
+
+void error(Args...)(ref ParseCtx ctx, SyntaxError.Code error_code, string message, Args args) {
+    ctx.errors ~= SyntaxError(
+        error_code,
+        ctx.source_text,
+        ctx.tokens.current.span.start,
+        tprint(message, args).idup
+    );
+}
+
+const(char[]) tprint(Args...)(string message, Args args) {
+    import std.format: formattedWrite;
+    import arc.traits: assume_pure;
+
+    static struct Buffer {
+        char[] data;
+        size_t length;
+
+        void put(char c) {
+            assert(length < data.length);
+            data[length] = c;
+            length++;
+        }
+
+        const(char[]) text() const { return data[0 .. length]; }
+    }
+
+    static print_fn(string message, Args args) {
+        static char[4096] temp_buffer;
+        auto buffer = Buffer(temp_buffer);
+
+        formattedWrite(buffer, message, args);
+        return buffer.text();
+    }
+    
+    static immutable fn = assume_pure(&print_fn);
+    return fn(message, args);
 }

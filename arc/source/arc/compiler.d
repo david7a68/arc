@@ -27,7 +27,6 @@ struct CompilerOptions {
 struct CompilerContext {
     import arc.stringtable: StringTable;
     import arc.syntax.location: SourceMap, Source;
-    import arc.syntax.reporter: SyntaxReporter;
 
     StringTable strings;
     SourceMap sources;
@@ -85,11 +84,22 @@ struct CompilerContext {
 
     import arc.syntax.ast: AstNode;
     AstNode parse(Source source) {
+        import std.stdio: writeln;
         import arc.syntax.parser: ParseCtx, parse_module;
-        import arc.syntax.lexer: Lexer;
 
-        auto ctx = ParseCtx(Lexer(source.span), SyntaxReporter(source));
-        return parse_module(ctx);
+        auto ctx = ParseCtx(source);
+        auto result = parse_module(ctx);
+
+        if (ctx.errors.length > 0) {
+            foreach (error; ctx.errors) {
+                writeln("Error:\n", error.message);
+
+                const coords = source.get_loc(error.location);
+                writeln("At %s line %s column %s\n", source.name, coords.line, coords.column);
+            }
+        }
+
+        return result;
     }
 
     void dump_ast(Source source, AstNode root) {

@@ -21,9 +21,9 @@ struct Span {
     /// The length of the span
     CharPos length;
 
-    CharPos end() const { return start + length; }
+    CharPos end() const pure { return start + length; }
 
-    Span merge(Span other) const {
+    Span merge(Span other) const pure {
         auto lo = start < other.start ? start : other.start;
         auto hi_end = end > other.end ? end : other.end;
         return Span(lo, hi_end - lo);
@@ -48,12 +48,12 @@ struct SpannedText {
 
     alias span this;
 
-    this(CharPos start, CharPos length, const(char)[] text) {
+    this(CharPos start, CharPos length, const(char)[] text) pure {
         this.span = Span(start, length);
         this.text = text;
     }
     
-    SpannedText get_span(const(char)[] slice) {
+    SpannedText get_span(const(char)[] slice) pure {
         assert(text.ptr <= slice.ptr && slice.ptr + slice.length <= text.ptr + text.length);
         
         const offset = cast(uint) (slice.ptr - text.ptr);
@@ -65,7 +65,7 @@ struct SpannedText {
         return SpannedText(cast(uint) (span.start + offset), length, slice);
     }
 
-    const(char)[] get_text(Span text_span) {
+    const(char)[] get_text(Span text_span) pure {
         const start_index = text_span.start - span.start;
         const end_index = start_index + text_span.length;
         
@@ -75,7 +75,7 @@ struct SpannedText {
         return text[start_index .. start_index + text_span.length];
     }
 
-    SourceLoc get_loc(CharPos position) {
+    SourceLoc get_loc(CharPos position) pure {
         uint line_num = 1;
         uint line_pos;
         uint column;
@@ -93,7 +93,7 @@ struct SpannedText {
         return SourceLoc(line_num, line_pos, column);
     }
 
-    Span merge(Span other) const {
+    Span merge(Span other) const pure {
         return span.merge(other);
     }
 }
@@ -109,7 +109,7 @@ struct Source {
     SpannedText span;
     alias span this;
 
-    bool opBinaryRight(string op = "in")(CharPos pos) {
+    bool opBinaryRight(string op = "in")(CharPos pos) pure {
         return start <= pos && pos < end;
     }
 }
@@ -126,11 +126,11 @@ struct SourceMap {
      *
      * Returns: the allocated character array to be filled
      */
-    Source reserve(string name, uint source_length) {
+    Source reserve(string name, uint source_length) pure {
         return put(name, new const(char)[](source_length));
     }
 
-    Source put(const(char)[] name, const(char)[] text) {
+    Source put(const(char)[] name, const(char)[] text) pure {
         CharPos start = sources.length > 0 ? sources[$-1].end : 0;
 
         if (start + text.length > uint.max)
