@@ -3,7 +3,6 @@ module arc.syntax.tests.parser;
 import arc.syntax.parser;
 import arc.syntax.lexer: Lexer, Token;
 import arc.syntax.ast: AstNode;
-// import arc.syntax.reporter: SyntaxReporter, SyntaxError;
 import arc.syntax.error: SyntaxError;
 
 struct ParseResult {
@@ -235,7 +234,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
     assert(type_equivalent("a = 3".parse!"expression", AstNode.Assign, AstNode.Name, AstNode.Integer));
 }
 
-@("parse:list") unittest {
+@("parse:list0") unittest {
     with (AstNode.Type) {
         assert(type_equivalent("()".parse!"expression", List));
         

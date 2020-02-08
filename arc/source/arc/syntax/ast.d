@@ -56,39 +56,30 @@ abstract class AstNode {
     const Type type;
     const Span span;
 
-    this(Type type, Span span) pure {
+    this(Type type, Span span) {
         this.type = type;
         this.span = span;
     }
 
-    Key get_key() pure { return 0; }
+    Key get_key() { return 0; }
 
-    AstNode[] get_children() pure { return []; }
+    AstNode[] get_children() { return []; }
 
-    static none() pure {
-        import arc.traits: assume_pure;
-
-        static get() { return none_sentinel; }
-        static immutable fn = assume_pure(&get);
-
-        return fn();
-    }
-
-    static None none_sentinel;
+    static None none;
 }
 
-bool is_marker(AstNode.Type type) pure {
+bool is_marker(AstNode.Type type) {
     return type == AstNode.None || type == AstNode.InferredType;
 }
 
 final class None : AstNode {
-    this() pure {
+    this() {
         super(AstNode.None, Span());
     }
 }
 
 final class Invalid : AstNode {
-    this(Span span) pure {
+    this(Span span) {
         super(AstNode.Invalid, span);
     }
 }
@@ -104,7 +95,7 @@ final class Invalid : AstNode {
 // ----------------------------------------------------------------------
 
 abstract class Statement : AstNode {
-    this(AstNode.Type type, Span span) pure {
+    this(AstNode.Type type, Span span) {
         super(type, span);
     }
 }
@@ -115,7 +106,7 @@ alias Block = StatementSeq!(AstNode.Block, Expression);
 final class StatementSeq(AstNode.Type node_type, ParentType) : ParentType {
     AstNode[] statements;
 
-    this(Span span, AstNode[] statements) pure {
+    this(Span span, AstNode[] statements) {
         super(node_type, span);
         this.statements = statements;
     }
@@ -126,7 +117,7 @@ final class StatementSeq(AstNode.Type node_type, ParentType) : ParentType {
 final class Define : Statement {
     AstNode[3] parts;
 
-    this(Span span, AstNode name, AstNode type, AstNode value) pure {
+    this(Span span, AstNode name, AstNode type, AstNode value) {
         super(AstNode.Define, span);
         parts = [name, type, value];
     }
@@ -137,7 +128,7 @@ final class Define : Statement {
 final class If : Statement {
     AstNode[3] parts;
 
-    this(Span span, AstNode condition, AstNode body, AstNode else_branch) pure {
+    this(Span span, AstNode condition, AstNode body, AstNode else_branch) {
         super(AstNode.If, span);
         parts = [condition, body, else_branch];
     }
@@ -146,7 +137,7 @@ final class If : Statement {
 }
 
 final class Break : Statement {
-    this(Span span) pure {
+    this(Span span) {
         super(AstNode.Break, span);
     }
 }
@@ -154,7 +145,7 @@ final class Break : Statement {
 final class Return : Statement {
     AstNode[1] value;
 
-    this(Span span, AstNode return_value) pure {
+    this(Span span, AstNode return_value) {
         super(AstNode.Return, span);
         value[0] = return_value;
     }
@@ -163,7 +154,7 @@ final class Return : Statement {
 }
 
 final class Continue : Statement {
-    this(Span span) pure {
+    this(Span span) {
         super(AstNode.Continue, span);
     }
 }
@@ -171,7 +162,7 @@ final class Continue : Statement {
 final class Loop : Statement {
     AstNode[1] body;
 
-    this(Span span, AstNode body) pure {
+    this(Span span, AstNode body) {
         super(AstNode.Loop, span);
         this.body[0] = body;
     }
@@ -191,7 +182,7 @@ final class Loop : Statement {
 // ----------------------------------------------------------------------
 
 abstract class Expression : Statement {
-    this(AstNode.Type type, Span span) pure {
+    this(AstNode.Type type, Span span) {
         super(type, span);
     }
 }
@@ -203,7 +194,7 @@ alias Integer = KeyNode!(AstNode.Integer);
 final class KeyNode(AstNode.Type node_type, ParentType = Expression) : ParentType {
     Key key;
 
-    this(Span span, Key string_key) pure {
+    this(Span span, Key string_key) {
         super(node_type, span);
         key = string_key;
     }
@@ -220,7 +211,7 @@ alias Pointer = Unary!(AstNode.Pointer);
 final class Unary(AstNode.Type node_type) : Expression {
     AstNode[1] operand;
 
-    this(Span span, AstNode operand) pure {
+    this(Span span, AstNode operand) {
         super(node_type, span);
         this.operand[0] = operand;
     }
@@ -247,7 +238,7 @@ alias Call          = Binary!(AstNode.Call);
 final class Binary(AstNode.Type node_type) : Expression {
     AstNode[2] operands;
 
-    this(Span span, AstNode lhs, AstNode rhs) pure {
+    this(Span span, AstNode lhs, AstNode rhs) {
         super(node_type, span);
         operands = [lhs, rhs];
     }
@@ -259,7 +250,7 @@ final class List : Expression {
     static final class Member : AstNode {
         AstNode[3] parts;
 
-        this(Span span, AstNode name, AstNode member_type, AstNode value) pure {
+        this(Span span, AstNode name, AstNode member_type, AstNode value) {
             super(AstNode.ListMember, span);
             parts = [name, member_type, value];
         }
@@ -269,7 +260,7 @@ final class List : Expression {
 
     AstNode[] members;
 
-    this(Span span, AstNode[] members) pure {
+    this(Span span, AstNode[] members) {
         super(AstNode.List, span);
         this.members = members;
     }
@@ -280,7 +271,7 @@ final class List : Expression {
 final class Function : Expression {
     AstNode[3] parts;
 
-    this(Span span, AstNode parameters, AstNode return_type, AstNode body) pure {
+    this(Span span, AstNode parameters, AstNode return_type, AstNode body) {
         super(AstNode.Function, span);
         parts = [parameters, return_type, body];
     }
@@ -291,7 +282,7 @@ final class Function : Expression {
 final class Variable : Expression {
     AstNode[3] parts;
 
-    this(Span span, AstNode name, AstNode type, AstNode value) pure {
+    this(Span span, AstNode name, AstNode type, AstNode value) {
         super(AstNode.Variable, span);
         parts = [name, type, value];
     }
@@ -311,24 +302,15 @@ final class Variable : Expression {
 // ----------------------------------------------------------------------
 
 abstract class TypeExpression : AstNode {
-    this(AstNode.Type type, Span span) pure {
+    this(AstNode.Type type, Span span) {
         super(type, span);
     }
 
-    static inferred() {
-        import arc.traits: assume_pure;
-
-        static get() { return inferred_sentinel; }
-        static immutable fn = assume_pure(&get);
-
-        return fn();
-    }
-
-    static TypeExpression inferred_sentinel;
+    static TypeExpression inferred;
 }
 
 final class InferredType : TypeExpression {
-    this() pure {
+    this() {
         super(AstNode.InferredType, Span());
     }
 }
@@ -336,7 +318,7 @@ final class InferredType : TypeExpression {
 final class PointerType : TypeExpression {
     AstNode[1] target;
 
-    this(Span span, AstNode target) pure {
+    this(Span span, AstNode target) {
         super(AstNode.PointerType, span);
         this.target[0] = target;
     }
@@ -348,7 +330,7 @@ final class TypeList : TypeExpression {
     static final class Member : AstNode {
         AstNode[2] parts;
 
-        this(Span span, AstNode name, AstNode type) pure {
+        this(Span span, AstNode name, AstNode type) {
             super(AstNode.TypeListMember, span);
             parts = [name, type];
         }
@@ -358,7 +340,7 @@ final class TypeList : TypeExpression {
 
     AstNode[] members;
 
-    this(Span span, AstNode[] members) pure {
+    this(Span span, AstNode[] members) {
         super(AstNode.TypeList, span);
         this.members = members;
     }
@@ -369,7 +351,7 @@ final class TypeList : TypeExpression {
 final class FunctionType : TypeExpression {
     AstNode[2] parts;
 
-    this(Span span, AstNode parameters, AstNode return_type) pure {
+    this(Span span, AstNode parameters, AstNode return_type) {
         super(AstNode.FunctionType, span);
         parts = [parameters, return_type];
     }
@@ -388,6 +370,6 @@ final class FunctionType : TypeExpression {
 // ----------------------------------------------------------------------
 
 static this() {
-    AstNode.none_sentinel = new None();
-    TypeExpression.inferred_sentinel = new InferredType();
+    AstNode.none = new None();
+    TypeExpression.inferred = new InferredType();
 }

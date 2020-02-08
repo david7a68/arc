@@ -28,7 +28,7 @@ struct Token {
     Key key;
 }
 
-bool matches_one(Token.Type type, const Token.Type[] types...) pure {
+bool matches_one(Token.Type type, const Token.Type[] types...) {
     foreach (t; types)
         if (type == t)
             return true;
@@ -50,28 +50,28 @@ struct Lexer {
     alias front = current;
     alias popFront = advance;
 
-    this(SpannedText span) pure {
+    this(SpannedText span) {
         cursor = span.text.ptr;
         end = cursor + span.text.length;
         this.span = span;
         advance();
     }
 
-    bool empty() pure {
+    bool empty() {
         return current.type == Token.Done;
     }
 
-    void advance() pure {
+    void advance() {
         const eol_type = eol_stack.length > 0 ? eol_stack.back : Token.Invalid;
         auto scan = scan_token(cursor, end, current.type, eol_type);
         current = Token(scan.type, span.get_span(scan.text).span, scan.key);
     }
 
-    void push_eol_delimiter(Token.Type t) pure {
+    void push_eol_delimiter(Token.Type t) {
         eol_stack.insertBack(t);
     }
 
-    void pop_eol_delimiter() pure {
+    void pop_eol_delimiter() {
         eol_stack.removeBack();
     }
 }
@@ -89,7 +89,7 @@ immutable end_of_section_tokens = [
     Token.Else
 ];
 
-ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) pure {
+ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
     const start = cursor;
     auto scan = scan_type(cursor, end);
 
@@ -151,7 +151,7 @@ shared static this() {
  *
  * This function will identify keywords as distinct from symbols.
  */
-ScanResult scan_type(ref const(char)* cursor, const char* end) pure {
+ScanResult scan_type(ref const(char)* cursor, const char* end) {
     auto start = cursor;
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
