@@ -32,14 +32,19 @@ struct ParseCtx {
     void free(AstNode[] nodes...) {
         import std.algorithm: filter;
 
-        foreach (node; nodes.filter!(a => !is_marker(a.type))) {
+        foreach (node; nodes.filter!(a => !a.is_marker)) {
             free(node.get_children());
             destroy(node);
         }
     }
+
+    /// Constructs an array from a comma-separated list of nodes
+    AstNode[] node_array(AstNode[] nodes...) {
+        return nodes.dup;
+    }
 }
 
-Module parse_module(ref ParseCtx ctx) {
+AstNode parse_module(ref ParseCtx ctx) {
     ctx.tokens.push_eol_delimiter(Token.Semicolon);
 
     AstNode[] statements;
@@ -48,7 +53,7 @@ Module parse_module(ref ParseCtx ctx) {
 
     ctx.tokens.pop_eol_delimiter();
 
-    return new Module(ctx.tokens.span, statements);
+    return new AstNode(AstNode.Module, ctx.tokens.span, statements);
 }
 
 AstNode parse_statement(ref ParseCtx ctx) {
@@ -57,13 +62,13 @@ AstNode parse_statement(ref ParseCtx ctx) {
             return parse_def(ctx);
 
         case Token.Break:
-            return parse_escape!(Break, Token.Break, false)(ctx);
+            return parse_escape!(AstNode.Break, Token.Break, false)(ctx);
         
         case Token.Return:
-            return parse_escape!(Return, Token.Return, true)(ctx);
+            return parse_escape!(AstNode.Return, Token.Return, true)(ctx);
         
         case Token.Continue:
-            return parse_escape!(Continue, Token.Continue, false)(ctx);
+            return parse_escape!(AstNode.Continue, Token.Continue, false)(ctx);
         
         case Token.If:
             return parse_if(ctx);
@@ -117,20 +122,20 @@ private:
 AstNode parse_def(ref ParseCtx ctx) {
     const start_span = ctx.tokens.take().span;
 
-    auto name = parse_key_type!(Name)(ctx);
+    auto name = parse_key_type!(AstNode.Name)(ctx);
 
     ctx.tokens.skip_required(Token.Colon, ctx);
 
     auto type = ctx.tokens.current.type != Token.Equals ?
                 parse_type(ctx) :
-                TypeExpression.inferred;
+                AstNode.inferred_type;
 
     auto value = ctx.tokens.skip(Token.Equals) ?
                  parse_expression(ctx) :
                  AstNode.none;
 
     const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, ctx).span);
-    return new Define(span, name, type, value);
+    return new AstNode(AstNode.Define, span, ctx.node_array(name, type, value));
 }
 
 AstNode parse_var(ref ParseCtx ctx, AstNode lhs) {
@@ -140,14 +145,14 @@ AstNode parse_var(ref ParseCtx ctx, AstNode lhs) {
 
     auto type = ctx.tokens.current.type != Token.Equals ?
                 parse_type(ctx) :
-                TypeExpression.inferred;
+                AstNode.inferred_type;
 
     auto value = ctx.tokens.skip(Token.Equals) ?
                  parse_expression(ctx) : 
                  AstNode.none;
 
     const span = lhs.span.merge(type.span);
-    return new Variable(span, lhs, type, value);
+    return new AstNode(AstNode.Variable, span, ctx.node_array(lhs, type, value));
 }
 
 AstNode parse_loop(ref ParseCtx ctx) {
@@ -155,7 +160,7 @@ AstNode parse_loop(ref ParseCtx ctx) {
 
     auto body = parse_statement(ctx);
 
-    return new Loop(start_span.merge(body.span), body);
+    return new AstNode(AstNode.Loop, start_span.merge(body.span), body);
 }
 
 AstNode parse_if(ref ParseCtx ctx) {
@@ -170,10 +175,10 @@ AstNode parse_if(ref ParseCtx ctx) {
                        AstNode.none;
     
     const span = start_span.merge(body.span).merge(else_branch.span);
-    return new If(span, condition, body, else_branch);
+    return new AstNode(AstNode.If, span, ctx.node_array(condition, body, else_branch));
 }
 
-AstNode parse_escape(NodeType, Token.Type ttype, bool with_value)(ref ParseCtx ctx) {
+AstNode parse_escape(AstNode.Type Type, Token.Type ttype, bool with_value)(ref ParseCtx ctx) {
     auto start_span = ctx.tokens.take().span;
 
     static if (with_value) {
@@ -182,11 +187,11 @@ AstNode parse_escape(NodeType, Token.Type ttype, bool with_value)(ref ParseCtx c
                      AstNode.none;
 
         const span = start_span.merge(ctx.tokens.take_required(Token.Semicolon, ctx).span);
-        return new NodeType(span, value);
+        return new AstNode(Type, span, value);
     }
     else {
         ctx.tokens.skip_required(Token.Semicolon, ctx);
-        return new NodeType(start_span);
+        return new AstNode(Type, start_span);
     }
 }
 
@@ -201,13 +206,13 @@ AstNode parse_escape(NodeType, Token.Type ttype, bool with_value)(ref ParseCtx c
 //                |_|                                               
 // ----------------------------------------------------------------------
 
-alias PrefixParselet = AstNode function(ref ParseCtx ctx);
-alias InfixParselet = AstNode function(ref ParseCtx ctx, AstNode lhs);
+alias PrefixParseFn = AstNode function(ref ParseCtx ctx);
+alias InfixParseFn = AstNode function(ref ParseCtx ctx, AstNode lhs);
 
-struct Infix { Precedence precedence; InfixParselet parselet; }
+struct Infix { Precedence precedence; InfixParseFn parselet; }
 
 immutable prefix_parselets = () {
-    PrefixParselet[256] parselets = (ref ctx) {
+    PrefixParseFn[256] parselets = (ref ctx) {
         error(
             ctx,
             SyntaxError.TokenNotAnExpression,
@@ -215,7 +220,7 @@ immutable prefix_parselets = () {
             ctx.tokens.current.type
         );
 
-        return new Invalid(ctx.tokens.current.span);
+        return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
     };
 
     parselets[Token.Done]       = (ref ctx) {
@@ -225,81 +230,81 @@ immutable prefix_parselets = () {
             "Unexpected end of file while parsing source."
         );
 
-        return new Invalid(ctx.tokens.current.span);
+        return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
     };
 
-    parselets[Token.Name]       = &parse_key_type!Name;
-    parselets[Token.Integer]    = &parse_key_type!Integer;
-    parselets[Token.Char]       = &parse_key_type!Char;
-    parselets[Token.Minus]      = &parse_unary!Negate;
-    parselets[Token.Bang]       = &parse_unary!Falsify;
-    parselets[Token.Ampersand]  = &parse_unary!GetRef;
-    parselets[Token.Star]       = &parse_unary!Pointer;
-    parselets[Token.Lparen]     = &parse_seq!(List, parse_list_member, Token.Rparen);
-    parselets[Token.Lbracket]   = &parse_seq!(List, parse_list_member, Token.Rbracket);
+    parselets[Token.Name]       = &parse_key_type!(AstNode.Name);
+    parselets[Token.Integer]    = &parse_key_type!(AstNode.Integer);
+    parselets[Token.Char]       = &parse_key_type!(AstNode.Char);
+    parselets[Token.Minus]      = &parse_unary!(AstNode.Negate);
+    parselets[Token.Bang]       = &parse_unary!(AstNode.Falsify);
+    parselets[Token.Ampersand]  = &parse_unary!(AstNode.GetRef);
+    parselets[Token.Star]       = &parse_unary!(AstNode.Pointer);
+    parselets[Token.Lparen]     = &parse_seq!(AstNode.List, parse_list_member, Token.Rparen);
+    parselets[Token.Lbracket]   = &parse_seq!(AstNode.List, parse_list_member, Token.Rbracket);
     parselets[Token.Lbrace]     = &parse_block;
 
     return parselets;
 } ();
 
 immutable infix_parselets = () {
-    Infix[255] parselets;
+    Infix[256] parselets;
 
-    static set(Node, Token.Type ttype, Precedence prec, bool left_assoc = true, bool skip_op = true)(ref Infix[255] parselets) {
-        parselets[ttype] = Infix(prec, &parse_binary!(Node, left_assoc ? prec + 1 : prec, skip_op));
+    static set(AstNode.Type type, Token.Type ttype, Precedence prec, bool left_assoc = true, bool skip_op = true)(ref Infix[256] parselets) {
+        parselets[ttype] = Infix(prec, &parse_binary!(type, left_assoc ? prec + 1 : prec, skip_op));
     }
 
-    set!(Assign,        Token.Equals,       Precedence.Assign   )(parselets);
-    set!(Less,          Token.Less,         Precedence.Compare  )(parselets);
-    set!(LessEqual,     Token.LessEqual,    Precedence.Compare  )(parselets);
-    set!(Greater,       Token.Greater,      Precedence.Compare  )(parselets);
-    set!(GreaterEqual,  Token.GreaterEqual, Precedence.Compare  )(parselets);
-    set!(Equal,         Token.EqualEqual,   Precedence.Equality )(parselets);
-    set!(NotEqual,      Token.BangEqual,    Precedence.Equality )(parselets);
-    set!(And,           Token.And,          Precedence.Logic    )(parselets);
-    set!(Or,            Token.Or,           Precedence.Logic    )(parselets);
-    set!(Add,           Token.Plus,         Precedence.Sum      )(parselets);
-    set!(Subtract,      Token.Minus,        Precedence.Sum      )(parselets);
-    set!(Multiply,      Token.Star,         Precedence.Product  )(parselets);
-    set!(Divide,        Token.Slash,        Precedence.Product  )(parselets);
-    set!(Power,         Token.Caret,        Precedence.Power,   false)(parselets);
-    set!(Call,          Token.Dot,          Precedence.Call     )(parselets);
-    set!(Call,          Token.Lparen,       Precedence.Call,    true, false)(parselets);
-    set!(Call,          Token.Lbracket,     Precedence.Call,    true, false)(parselets);
+    set!(AstNode.Assign,        Token.Equals,       Precedence.Assign   )(parselets);
+    set!(AstNode.Less,          Token.Less,         Precedence.Compare  )(parselets);
+    set!(AstNode.LessEqual,     Token.LessEqual,    Precedence.Compare  )(parselets);
+    set!(AstNode.Greater,       Token.Greater,      Precedence.Compare  )(parselets);
+    set!(AstNode.GreaterEqual,  Token.GreaterEqual, Precedence.Compare  )(parselets);
+    set!(AstNode.Equal,         Token.EqualEqual,   Precedence.Equality )(parselets);
+    set!(AstNode.NotEqual,      Token.BangEqual,    Precedence.Equality )(parselets);
+    set!(AstNode.And,           Token.And,          Precedence.Logic    )(parselets);
+    set!(AstNode.Or,            Token.Or,           Precedence.Logic    )(parselets);
+    set!(AstNode.Add,           Token.Plus,         Precedence.Sum      )(parselets);
+    set!(AstNode.Subtract,      Token.Minus,        Precedence.Sum      )(parselets);
+    set!(AstNode.Multiply,      Token.Star,         Precedence.Product  )(parselets);
+    set!(AstNode.Divide,        Token.Slash,        Precedence.Product  )(parselets);
+    set!(AstNode.Power,         Token.Caret,        Precedence.Power,   false)(parselets);
+    set!(AstNode.Call,          Token.Dot,          Precedence.Call     )(parselets);
+    set!(AstNode.Call,          Token.Lparen,       Precedence.Call,    true, false)(parselets);
+    set!(AstNode.Call,          Token.Lbracket,     Precedence.Call,    true, false)(parselets);
     parselets[Token.Colon]  = Infix(Precedence.Assign, &parse_var);
     parselets[Token.Rarrow] = Infix(Precedence.Primary, &parse_function);
 
     return parselets;
 } ();
 
-auto parse_key_type(Node)(ref ParseCtx ctx) {
+auto parse_key_type(AstNode.Type type)(ref ParseCtx ctx) {
     auto t = ctx.tokens.take();
-    return new Node(t.span, t.key);
+    return new AstNode(type, t.span, t.key);
 }
 
-auto parse_unary(Node)(ref ParseCtx ctx) {
+auto parse_unary(AstNode.Type type)(ref ParseCtx ctx) {
     auto op_span = ctx.tokens.take().span;
     auto operand = parse_expression(ctx);
 
-    return new Node(op_span.merge(operand.span), operand);
+    return new AstNode(type, op_span.merge(operand.span), operand);
 }
 
-AstNode parse_binary(Node, int precedence, bool skip_operator)(ref ParseCtx ctx, AstNode lhs) {
+AstNode parse_binary(AstNode.Type type, int precedence, bool skip_operator)(ref ParseCtx ctx, AstNode lhs) {
     static if (skip_operator)
         ctx.tokens.advance();
     
     auto rhs = parse_expression(ctx, cast(Precedence) precedence);
 
     if (lhs.type != AstNode.Invalid && rhs.type != AstNode.Invalid) {
-        return new Node(lhs.span.merge(rhs.span), lhs, rhs);
+        return new AstNode(type, lhs.span.merge(rhs.span), ctx.node_array(lhs, rhs));
     }
     else {
         scope(exit) ctx.free(lhs, rhs);
-        return new Invalid(lhs.span.merge(rhs.span));
+        return new AstNode(AstNode.Invalid, lhs.span.merge(rhs.span));
     }
 }
 
-AstNode parse_seq(Node, alias parse_member, Token.Type close_delim)(ref ParseCtx ctx) {
+AstNode parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)(ref ParseCtx ctx) {
     ctx.tokens.push_eol_delimiter(Token.Comma);
     const open_span = ctx.tokens.take().span;
 
@@ -316,7 +321,7 @@ AstNode parse_seq(Node, alias parse_member, Token.Type close_delim)(ref ParseCtx
     const close_token = ctx.tokens.take();
 
     if (close_token.type == close_delim) {
-        return new Node(open_span.merge(close_token.span), members);
+        return new AstNode(type, open_span.merge(close_token.span), members);
     }
     else {
         assert(close_token.type == Token.Done);
@@ -337,7 +342,7 @@ AstNode parse_seq(Node, alias parse_member, Token.Type close_delim)(ref ParseCtx
                 "Unexpected end of file while parsing source."
             );
 
-        return new Invalid(open_span.merge(close_token.span));
+        return new AstNode(AstNode.Invalid, open_span.merge(close_token.span));
     }
 }
 
@@ -351,7 +356,7 @@ AstNode parse_list_member(ref ParseCtx ctx) {
     
     auto type = ctx.tokens.skip(Token.Colon) ?
                 parse_type(ctx) :
-                TypeExpression.inferred;
+                AstNode.inferred_type;
     
     auto expr = ctx.tokens.skip(Token.Equals) ?
                 parse_expression(ctx) :
@@ -361,11 +366,11 @@ AstNode parse_list_member(ref ParseCtx ctx) {
 
     const span = name.span.merge(type.span).merge(expr.span);
     if (name.type != AstNode.Invalid && type.type != AstNode.Invalid && expr.type != AstNode.Invalid) {
-        return new List.Member(span, name, type, expr);
+        return new AstNode(AstNode.ListMember, span, ctx.node_array(name, type, expr));
     }
     else {
         ctx.free(name, type, expr);
-        return new Invalid(span);
+        return new AstNode(AstNode.Invalid, span);
     }
 }
 
@@ -382,7 +387,7 @@ AstNode parse_block(ref ParseCtx ctx) {
     const close_token = ctx.tokens.take();
 
     if (close_token.type == Token.Rbrace) {
-        return new Block(open_span.merge(close_token.span), statements);
+        return new AstNode(AstNode.Block, open_span.merge(close_token.span), statements);
     }
     else {
         assert(close_token.type == Token.Done);
@@ -394,7 +399,7 @@ AstNode parse_block(ref ParseCtx ctx) {
         );
 
         // it's the end of the file, raise an error, but close the block so we can do further processing
-        return new Block(open_span.merge(close_token.span), statements);
+        return new AstNode(AstNode.Block, open_span.merge(close_token.span), statements);
     }
 }
 
@@ -411,16 +416,16 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
     
     auto ret_type = lookahead.current.type == Token.Lbrace && lookahead.current != ctx.tokens.current ?
                     parse_type(ctx) :
-                    TypeExpression.inferred;
+                    AstNode.inferred_type;
     
     auto body = parse_expression(ctx) ;
 
     const span = params.span.merge(ret_type.span).merge(body.span);
     if (params.type != AstNode.Invalid && ret_type.type != AstNode.Invalid && body.type != AstNode.Invalid)
-        return new Function(span, params, ret_type, body);
+        return new AstNode(AstNode.Function, span, ctx.node_array(params, ret_type, body));
     else {
         ctx.free(params, ret_type, body);
-        return new Invalid(span);
+        return new AstNode(AstNode.Invalid, span);
     }
 }
 
@@ -435,19 +440,19 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
 //         |___/ |_|               
 // ----------------------------------------------------------------------
 
-PrefixParselet get_type_prefix_parselet(Token.Type t) {
+PrefixParseFn get_type_prefix_parselet(Token.Type t) {
     switch (t) {
         case Token.Name:
-            return &parse_key_type!(Name);
+            return &parse_key_type!(AstNode.Name);
 
         case Token.Star:
-            return &parse_unary!(PointerType);
+            return &parse_unary!(AstNode.PointerType);
 
         case Token.Lparen:
-            return &parse_seq!(TypeList, parse_type_list_member, Token.Rparen);
+            return &parse_seq!(AstNode.TypeList, parse_type_list_member, Token.Rparen);
 
         case Token.Lbracket:
-            return &parse_seq!(TypeList, parse_type_list_member, Token.Rbracket);
+            return &parse_seq!(AstNode.TypeList, parse_type_list_member, Token.Rbracket);
 
         default:
             return (ref ctx) {
@@ -457,7 +462,7 @@ PrefixParselet get_type_prefix_parselet(Token.Type t) {
                     "The token \"%s\" cannot start an expression.",
                     ctx.tokens.current.type
                 );
-                return new Invalid(ctx.tokens.current.span);
+                return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
             };
     }
 }
@@ -465,13 +470,13 @@ PrefixParselet get_type_prefix_parselet(Token.Type t) {
 Infix get_type_infix_parselet(Token.Type t) {
     switch (t) {
         case Token.Dot:
-            return Infix(Precedence.Call, &parse_binary!(Call, Precedence.Primary, true));
+            return Infix(Precedence.Call, &parse_binary!(AstNode.Call, Precedence.Primary, true));
 
         case Token.Lparen:
-            return Infix(Precedence.Call, &parse_binary!(Call, Precedence.Primary, false));
+            return Infix(Precedence.Call, &parse_binary!(AstNode.Call, Precedence.Primary, false));
 
         case Token.Lbracket:
-            return Infix(Precedence.Call, &parse_binary!(Call, Precedence.Primary, false));
+            return Infix(Precedence.Call, &parse_binary!(AstNode.Call, Precedence.Primary, false));
 
         case Token.Rarrow:
             return Infix(Precedence.Primary, &parse_function_type);
@@ -493,11 +498,11 @@ AstNode parse_type_list_member(ref ParseCtx ctx) {
 
     const span = name.span.merge(type.span);
     if (name.type != AstNode.Invalid && type.type != AstNode.Invalid) {
-        return new TypeList.Member(span, name, type);
+        return new AstNode(AstNode.TypeListMember, span, ctx.node_array(name, type));
     }
     else {
         ctx.free(name, type);
-        return new Invalid(span);
+        return new AstNode(AstNode.Invalid, span);
     }
 }
 
@@ -510,11 +515,11 @@ AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
     const span = lhs.span.merge(return_type.span);
 
     if (lhs.type != AstNode.Invalid && return_type.type != AstNode.Invalid) {
-        return new FunctionType(span, lhs, return_type);
+        return new AstNode(AstNode.FunctionType, span, ctx.node_array(lhs, return_type));
     }
     else {
         ctx.free(lhs, return_type);
-        return new Invalid(span);
+        return new AstNode(AstNode.Invalid, span);
     }
 }
 
