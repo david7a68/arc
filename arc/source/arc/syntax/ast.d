@@ -1,7 +1,7 @@
 module arc.syntax.ast;
 
 import arc.hash: Key;
-import arc.syntax.location: Span;
+import arc.source: Span;
 
 final class AstNode {
     enum Type : ubyte {

@@ -1,40 +1,53 @@
 module arc.syntax.tests.lexer;
 
-import arc.syntax.lexer: Lexer, Token;
-import arc.syntax.location: Span, SpannedText;
+import arc.syntax.lexer: Cursor, Token, scan_token, scan_type;
+import arc.source: Span;
 
-Lexer scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
-    auto l = Lexer(SpannedText(0, cast(uint) text.length, text));
-    l.push_eol_delimiter(delimiter);
+struct Lexer {
+    Cursor cursor;
+    Token.Type delimiter;
+
+    Token front;
+    bool empty() { return front.type == Token.Done; }
+    void popFront() { front = scan_token(cursor, front.type, delimiter); }
+}
+
+auto scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
+    auto l = Lexer(Cursor(text), delimiter);
+    l.popFront();
     return l;
 }
 
 bool seq_equivalent(string expr, T)(Lexer lexer, T[] ts...) {
-    while (lexer.current.type != Token.Done) {
+    while (lexer.front.type != Token.Done) {
         if (ts.length == 0)
             return false;
-        mixin("if (" ~ expr ~ " != ts[0]) return false;");
-        ts = ts[1 .. $];
-        lexer.advance();
-    }
+        mixin("const eq = " ~ expr ~ " == ts[0];");
+        if (!eq) {
+            import std.stdio: writefln;
+            writefln("Tokens not equal: %s and %s", lexer.front.type, ts[0]);
+            return false;
+        }
 
-    if (ts.length > 0 || !lexer.empty)
-        return false;
-    return true;
+        ts = ts[1 .. $];
+        lexer.popFront();
+    }
+    
+    return ts.length == 0 && lexer.empty;
 }
 
-alias type_equivalent = seq_equivalent!("lexer.current.type", Token.Type);
-alias token_equivalent = seq_equivalent!("lexer.current", Token);
+alias type_equivalent = seq_equivalent!("lexer.front.type", Token.Type);
+alias token_equivalent = seq_equivalent!("lexer.front", Token);
 
-@("lexer:empty") unittest {
+@("lex empty") unittest {
     assert("".scan_tokens.empty);
 }
 
-@("lexer:whitespace") unittest {
+@("lex whitespace") unittest {
     assert("  \t\t\t\t    ".scan_tokens.empty);
 }
 
-@("lexer:compact") unittest {
+@("lex compact") unittest {
     assert("()[]{},.;->1a_3'a".scan_tokens.type_equivalent(
         Token.Lparen,
         Token.Rparen,
@@ -52,7 +65,7 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
     ));
 }
 
-@("lexer:keywords") unittest {
+@("lex keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.token_equivalent(
         Token(Token.And,        Span(0, 3), 17648556366517412293UL),
         Token(Token.Or,         Span(4, 2), 4116612837551264357UL),
@@ -66,12 +79,12 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
     ));
 }
 
-@("lexer:labels") unittest {
+@("lex labels") unittest {
     assert("'a".scan_tokens.type_equivalent(Token.Label));
     assert("'hi".scan_tokens.type_equivalent(Token.Label));
 }
 
-@("lexer:char") unittest {
+@("lex char") unittest {
     assert("'\\a'".scan_tokens.token_equivalent(
         Token(Token.Char, Span(0, 4))
     ));
@@ -89,7 +102,7 @@ alias token_equivalent = seq_equivalent!("lexer.current", Token);
     static test_tokens(string[] str...) {
         foreach (s; str) {
             auto lexer = s.scan_tokens(Token.Comma);
-            lexer.advance();
+            lexer.popFront();
             assert(lexer.type_equivalent(Token.Comma), s);
         }
     }

@@ -1,7 +1,7 @@
 module arc.syntax.lexer;
 
 import arc.hash: Key, digest;
-import arc.syntax.location: Span, SpannedText;
+import arc.source: Span;
 
 struct Token {
     enum Type: ubyte {
@@ -35,51 +35,33 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
-struct Lexer {
-    import std.container.array: Array;
+struct Cursor {
+    const char* start;
+    const (char)* current;
+    const char* end;
 
-    const(char)* cursor;
-    const(char)* end;
-    /// The span of text that this lexer is working on.
-    SpannedText span;
-
-    Token current;
-
-    Array!(Token.Type) eol_stack;
-
-    alias front = current;
-    alias popFront = advance;
-
-    this(SpannedText span) {
-        cursor = span.text.ptr;
-        end = cursor + span.text.length;
-        this.span = span;
-        advance();
+    this(const(char)[] text) {
+        start = current = text.ptr;
+        end = start + text.length;
     }
 
-    bool empty() {
-        return current.type == Token.Done;
+    uint index() in (current - start <= uint.max) {
+        return cast(uint) (current - start);
     }
 
-    void advance() {
-        const eol_type = eol_stack.length > 0 ? eol_stack.back : Token.Invalid;
-        auto scan = scan_token(cursor, end, current.type, eol_type);
-        current = Token(scan.type, span.get_span(scan.text).span, scan.key);
+    bool done() {
+        return current >= end;
     }
 
-    void push_eol_delimiter(Token.Type t) {
-        eol_stack.insertBack(t);
+    void advance(uint n = 1) in (current + n <= end) {
+        current += n;
     }
 
-    void pop_eol_delimiter() {
-        eol_stack.removeBack();
+    const(char)[] spanned_text(ref Cursor other) {
+        const lo = current < other.current ? current : other.current;
+        const hi = current > other.current ? current : other.current;
+        return lo[0 .. hi - lo];
     }
-}
-
-struct ScanResult {
-    Token.Type type;
-    const(char)[] text;
-    Key key;
 }
 
 immutable end_of_section_tokens = [
@@ -89,11 +71,11 @@ immutable end_of_section_tokens = [
     Token.Else
 ];
 
-ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previous, Token.Type eol_type) {
+Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim) {
     const start = cursor;
-    auto scan = scan_type(cursor, end);
+    auto scan = scan_type(cursor);
 
-    if (scan.type.matches_one(end_of_section_tokens) && eol_type != Token.Invalid) {
+    if (scan.type.matches_one(end_of_section_tokens) && delim != Token.Invalid) {
         switch (previous) with (Token.Type) {
             case Rbrace:
             case Rparen:
@@ -105,24 +87,24 @@ ScanResult scan_token(ref const(char)* cursor, const char* end, Token.Type previ
             case Break:
             case Return:
             case Continue:
-                cursor = start; // reset the cursor so we don't overwrite it
-                return ScanResult(eol_type, scan.text[0..0]);
+                cursor.current = start.current; // reset the cursor so we don't overwrite it
+                return Token(delim);
             case Done:
-                assert(scan.type == Token.Done);
-                return ScanResult(Token.Invalid, scan.text[0..0]);
+                assert(scan.type == Token.Done && cursor.done);
+                return Token(Token.Invalid);
             default:
                 while (scan.type == Token.Eol)
-                    scan = scan_type(cursor, end);
+                    scan = scan_type(cursor);
         }
     }
     else if (scan.type == Token.Eol) {
         do {
-            scan = scan_type(cursor, end);
+            scan = scan_type(cursor);
         } while (scan.type == Token.Eol);
     }
     else if (scan.type == previous && (previous == Token.Comma || previous == Token.Semicolon)) {
         do {
-            scan = scan_type(cursor, end);
+            scan = scan_type(cursor);
         } while (scan.type == previous);
     }
 
@@ -145,32 +127,31 @@ shared static this() {
 }
 
 /**
- * Identifies the first valid token in the text sequence from `*cursor` to 
+ * Identifies the first valid token in the text sequence from `*cursor.current` to 
  * `end`. If the first character in the text is not a valid start of a token,
  * a token of type `Invalid` will be returned.
  *
  * This function will identify keywords as distinct from symbols.
  */
-ScanResult scan_type(ref const(char)* cursor, const char* end) {
+Token scan_type(ref Cursor cursor) {
     auto start = cursor;
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
-        cursor += advance_n;
-        assert(cursor <= end);
-        return ScanResult(t, start[0 .. cursor - start], key);
+        cursor.advance(advance_n);
+        return Token(t, Span(start.index, cursor.index - start.index), key);
     }
 
     switch_start:
-    if (cursor >= end)
-        return ScanResult(Token.Done, (cursor)[0 .. 0]); 
+    if (cursor.done)
+        return Token(Token.Done); 
 
-    const c = *cursor;
-    cursor++;
+    const c = *cursor.current;
+    cursor.advance();
     switch (c) {
         case ' ':
         case '\t':
         case '\r':
-            start++;
+            start.advance();
             goto switch_start;
         case '\n':
         case '(':
@@ -187,95 +168,95 @@ ScanResult scan_type(ref const(char)* cursor, const char* end) {
         case '&':
             return make_token(cast(Token.Type) c);
         case '-':
-            if (cursor != end && *cursor == '>')
+            if (!cursor.done && *cursor.current == '>')
                 return make_token(Token.Rarrow, 1);
             return make_token(Token.Minus);
         case '.':
-            if (cursor <= end && *cursor == '.')
+            if (!cursor.done && *cursor.current == '.')
                 return make_token(Token.DotDot, 1);
             return make_token(Token.Dot);
         case ':':
-            if (cursor <= end && *cursor == ':')
+            if (!cursor.done && *cursor.current == ':')
                 return make_token(Token.ColonColon, 1);
             else
                 return make_token(Token.Colon);
         case '/':
-            if (cursor <= end && *cursor == '/') {
-                while (*cursor != '\n') cursor++;
+            if (!cursor.done && *cursor.current == '/') {
+                while (*cursor.current != '\n') cursor.advance();
                 goto switch_start;
             }
             else return make_token(Token.Slash);
         case '=':
-            if (cursor != end && *cursor == '=')
+            if (!cursor.done && *cursor.current == '=')
                 return make_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_token(Token.Equals);
         case '<':
-            if (cursor != end && *cursor == '=')
+            if (!cursor.done && *cursor.current == '=')
                 return make_token(Token.LessEqual, 1);
             else
                 return make_token(Token.Less);
         case '>':
-            if (cursor != end && *cursor == '=')
+            if (!cursor.done && *cursor.current == '=')
                 return make_token(Token.GreaterEqual, 1);
             else
                 return make_token(Token.Greater);
         case '!':
-            if (cursor != end && *cursor == '=')
+            if (!cursor.done && *cursor.current == '=')
                 return make_token(Token.BangEqual, 1);
             else
                 return make_token(Token.Bang);
         case '\'':
-            if (cursor == end)
+            if (cursor.done)
                 return make_token(Token.Invalid);
-            else if (*cursor == '\\') {
-                cursor += 2;
+            else if (*cursor.current == '\\') {
+                cursor.advance(2);
 
-                if (*cursor == '\'')
+                if (*cursor.current == '\'')
                     return make_token(Token.Char, 1);
                 
-                while (cursor != end && *cursor != '\'')
-                    cursor++;
+                while (!cursor.done && *cursor.current != '\'')
+                    cursor.advance();
                 
                 return make_token(Token.Invalid);
             }
             else {
-                cursor++;
-                if (*cursor == '\'')
+                cursor.advance();
+                if (*cursor.current == '\'')
                     return make_token(Token.Char, 1);
                 else {
-                    char_loop: if (cursor < end) switch (*cursor) {
+                    char_loop: if (!cursor.done) switch (*cursor.current) {
                         case 'a': .. case 'z':
                         case 'A': .. case 'Z':
                         case '0': .. case '9':
                         case '_':
-                            cursor++;
+                            cursor.advance();
                             goto char_loop;
                         default:
                     }
 
-                    const key = digest(start[0 .. cursor - start]);
+                    const key = digest(start.spanned_text(cursor));
                     return make_token(Token.Label, 0, key);
                 }
             }
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
-            loop_start: if (cursor < end) switch (*cursor) {
+            loop_start: if (!cursor.done) switch (*cursor.current) {
                 case 'a': .. case 'z':
                 case 'A': .. case 'Z':
                 case '0': .. case '9':
                 case '_':
-                    cursor++;
+                    cursor.advance();
                     goto loop_start;
                 default:
             }
 
-            const key = digest(start[0 .. cursor - start]);
+            const key = digest(start.spanned_text(cursor));
             return make_token(keywords.get(key, Token.Name), 0, key);
         case '0': .. case '9':
-            while (cursor < end && (('0' <= *cursor && *cursor <= '9') || *cursor == '_'))
-                cursor++;
+            while (!cursor.done && (('0' <= *cursor.current && *cursor.current <= '9') || *cursor.current == '_'))
+                cursor.advance();
             return make_token(Token.Integer, 0);
         default:
             return make_token(Token.Invalid, 1);

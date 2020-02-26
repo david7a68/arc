@@ -1,7 +1,7 @@
 module arc.syntax.error;
 
 struct SyntaxError {
-    import arc.syntax.location: Source, CharPos;
+    import arc.source: Source;
 
     enum Code {
         NoError,
@@ -13,7 +13,7 @@ struct SyntaxError {
     alias Code this;
 
     Code code;
-    Source parsed_file;
-    CharPos location;
+    // Source parsed_file;
+    uint location;
     string message;
 }

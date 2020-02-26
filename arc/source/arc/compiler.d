@@ -26,7 +26,7 @@ struct CompilerOptions {
  */
 struct CompilerContext {
     import arc.stringtable: StringTable;
-    import arc.syntax.location: SourceMap, Source;
+    import arc.source: SourceMap, Source;
 
     StringTable strings;
     SourceMap sources;
@@ -56,23 +56,23 @@ struct CompilerContext {
     void compile(Source source) {
         auto syntax = parse(source);
 
-        if (options.final_pass == TerminalCompilerPass.parse) {
-            dump_ast(source, syntax);
-            return;
-        }
+        // if (options.final_pass == TerminalCompilerPass.parse) {
+        //     dump_ast(source, syntax);
+        //     return;
+        // }
 
 
-        auto symbols = build_symbol_tree(syntax);
+        // auto symbols = build_symbol_tree(syntax);
 
-        if (options.final_pass == TerminalCompilerPass.build_symbols) {
-            dump_symbols(symbols);
-            return;
-        }
+        // if (options.final_pass == TerminalCompilerPass.build_symbols) {
+        //     dump_symbols(symbols);
+        //     return;
+        // }
 
-        if (options.final_pass == TerminalCompilerPass.all) {
-            dump_symbols(symbols);
-            return;
-        }
+        // if (options.final_pass == TerminalCompilerPass.all) {
+        //     dump_symbols(symbols);
+        //     return;
+        // }
     }
 
     Source load_source(const(char)[] filename) {
@@ -87,7 +87,7 @@ struct CompilerContext {
         import std.stdio: writeln;
         import arc.syntax.parser: ParseCtx, parse_module;
 
-        auto ctx = ParseCtx(source);
+        auto ctx = ParseCtx(source.text, source.start_offset);
         auto result = parse_module(ctx);
 
         if (ctx.errors.length > 0) {
@@ -102,31 +102,31 @@ struct CompilerContext {
         return result;
     }
 
-    void dump_ast(Source source, AstNode root) {
-        import std.stdio: writeln;
-        import arc.output.ast_printer: AstPrinter;
+    // void dump_ast(Source source, AstNode root) {
+    //     import std.stdio: writeln;
+    //     import arc.output.ast_printer: AstPrinter;
 
-        auto printer = new AstPrinter(source);
-        printer.print(root);
-        writeln(printer.data);
-    }
+    //     auto printer = new AstPrinter(source);
+    //     printer.print(root);
+    //     writeln(printer.data);
+    // }
 
-    import arc.semantic.symbol: Symbol;
-    Symbol* build_symbol_tree(AstNode syntax) {
-        import arc.semantic.scope_builder: ScopeBuilder, build_symbol_tree;
+    // import arc.semantic.symbol: Symbol;
+    // Symbol* build_symbol_tree(AstNode syntax) {
+    //     import arc.semantic.scope_builder: ScopeBuilder, build_symbol_tree;
 
-        auto builder = ScopeBuilder();
-        builder.module_scope = builder.current_scope = new Symbol(Symbol.Scope);
-        build_symbol_tree(builder, syntax);
-        return builder.module_scope;
-    }
+    //     auto builder = ScopeBuilder();
+    //     builder.module_scope = builder.current_scope = new Symbol(Symbol.Scope);
+    //     build_symbol_tree(builder, syntax);
+    //     return builder.module_scope;
+    // }
 
-    void dump_symbols(Symbol* symbol_tree) {
-        import std.stdio: writeln;
-        import arc.output.symbol_printer: SymbolPrinter;
+    // void dump_symbols(Symbol* symbol_tree) {
+    //     import std.stdio: writeln;
+    //     import arc.output.symbol_printer: SymbolPrinter;
 
-        auto printer = new SymbolPrinter(&strings);
-        printer.print(symbol_tree);
-        writeln(printer.data);
-    }
+    //     auto printer = new SymbolPrinter(&strings);
+    //     printer.print(symbol_tree);
+    //     writeln(printer.data);
+    // }
 }

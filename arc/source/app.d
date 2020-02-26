@@ -13,7 +13,7 @@ auto handle_mode(string option) {
         assert(false, option);
 }
 
-void main(string[] args) {
+void do_cli(string[] args) {
     import std.getopt: getopt, defaultGetoptPrinter;
 
     auto help = getopt(args,
@@ -37,4 +37,8 @@ void main(string[] args) {
     }
 
     assert(false, "unexpected arguments");
+}
+
+void main(string[] args) {
+    do_cli(args);
 }
