@@ -77,13 +77,17 @@ struct Source {
 
         return SourceLoc(line_num, line_pos, column);
     }
+
+    bool opBinaryRight(string op = "in")(Span span) {
+        return start_offset <= span.start && span.end <= this.span.end;
+    }
 }
 
 /**
  * The SourceMap presents a mapping between character positions and the files
  * that they belong to.
  */
-struct SourceMap {
+class SourceMap {
     Source[] sources;
 
     /**
@@ -109,5 +113,20 @@ struct SourceMap {
 
         sources ~= src;
         return src;
+    }
+
+    const(char)[] get_spanned_text(Span span) {
+        if (span == Span())
+            return [];
+
+        auto source = () {
+            foreach (src; sources)
+                if (span in src)
+                    return src;
+            assert(false);
+        } ();
+
+        const start = span.start - source.start_offset;
+        return source.text[start .. start + span.length];
     }
 }

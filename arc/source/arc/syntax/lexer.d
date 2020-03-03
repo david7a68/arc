@@ -88,7 +88,7 @@ Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim) {
             case Return:
             case Continue:
                 cursor.current = start.current; // reset the cursor so we don't overwrite it
-                return Token(delim);
+                return Token(delim, Span(cursor.index, 0));
             case Done:
                 assert(scan.type == Token.Done && cursor.done);
                 return Token(Token.Invalid);

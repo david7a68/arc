@@ -99,11 +99,13 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
 }
 
 @("lexer:insert_delim") unittest {
-    static test_tokens(string[] str...) {
-        foreach (s; str) {
+    static test_tokens(string[] strings...) {
+        foreach (s; strings) {
             auto lexer = s.scan_tokens(Token.Comma);
             lexer.popFront();
-            assert(lexer.type_equivalent(Token.Comma), s);
+            const token = lexer.front;
+            assert(token.type == Token.Comma);
+            assert(token.span == Span(cast(uint) (s.length), 0));
         }
     }
 

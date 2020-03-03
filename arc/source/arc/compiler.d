@@ -34,6 +34,7 @@ struct CompilerContext {
 
     this(CompilerOptions options) {
         this.options = options;
+        sources = new SourceMap();
     }
 
     void execute() {
@@ -45,7 +46,7 @@ struct CompilerContext {
                 first_source = sources.put("command line", readln());
                 break;
             case File:
-                first_source = load_source(options.first_file);
+                first_source = sources.put(options.first_file, load_file(options.first_file));
                 break;
             default:
         }
@@ -56,10 +57,10 @@ struct CompilerContext {
     void compile(Source source) {
         auto syntax = parse(source);
 
-        // if (options.final_pass == TerminalCompilerPass.parse) {
-        //     dump_ast(source, syntax);
-        //     return;
-        // }
+        if (options.final_pass == TerminalCompilerPass.parse) {
+            dump_ast(syntax);
+            return;
+        }
 
 
         // auto symbols = build_symbol_tree(syntax);
@@ -75,16 +76,15 @@ struct CompilerContext {
         // }
     }
 
-    Source load_source(const(char)[] filename) {
+    const(char)[] load_file(const(char)[] filename) {
         import std.file: readText;
 
-        const(char)[] text = readText(filename);
-        return sources.put(filename, text);
+        return readText(filename);
     }
 
     import arc.syntax.ast: AstNode;
     AstNode parse(Source source) {
-        import std.stdio: writeln;
+        import std.stdio: writefln;
         import arc.syntax.parser: ParseCtx, parse_module;
 
         auto ctx = ParseCtx(source.text, source.start_offset);
@@ -92,24 +92,22 @@ struct CompilerContext {
 
         if (ctx.errors.length > 0) {
             foreach (error; ctx.errors) {
-                writeln("Error:\n", error.message);
-
                 const coords = source.get_loc(error.location);
-                writeln("At %s line %s column %s\n", source.name, coords.line, coords.column);
+                writefln("Error:\n%s\nAt %s line %s column %s\n", error.message, source.name, coords.line, coords.column);
             }
         }
 
         return result;
     }
 
-    // void dump_ast(Source source, AstNode root) {
-    //     import std.stdio: writeln;
-    //     import arc.output.ast_printer: AstPrinter;
+    void dump_ast(AstNode root) {
+        import std.stdio: writeln;
+        import arc.output.ast_printer: AstPrinter;
 
-    //     auto printer = new AstPrinter(source);
-    //     printer.print(root);
-    //     writeln(printer.data);
-    // }
+        auto printer = new AstPrinter(sources);
+        printer.print(root);
+        writeln(printer.data);
+    }
 
     // import arc.semantic.symbol: Symbol;
     // Symbol* build_symbol_tree(AstNode syntax) {

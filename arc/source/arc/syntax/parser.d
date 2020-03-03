@@ -142,12 +142,9 @@ AstNode parse_expression(ref ParseCtx ctx, Precedence precedence = Precedence.As
     auto expression = prefix_parselets[ctx.current.type](ctx);
 
     while (precedence <= infix_parselets[ctx.current.type].precedence) {
-        if (ctx.current.type != Token.Rarrow)
-            expression = try_unwrap_list(ctx, expression);
 
         expression = infix_parselets[ctx.current.type].parselet(ctx, expression);
     }
-    expression = try_unwrap_list(ctx, expression);
 
     return expression;
 }
@@ -231,10 +228,10 @@ AstNode parse_if(ref ParseCtx ctx) {
 
     auto condition = parse_expression(ctx);
 
-    auto body = parse_statement(ctx);
+    auto body = parse_block(ctx);
     
     auto else_branch = ctx.skip_token(Token.Else) ?
-                       parse_statement(ctx) :
+                       parse_block(ctx) :
                        AstNode.none;
     
     const span = merge_all(start_span, body.span, else_branch.span);
@@ -613,31 +610,4 @@ const(char[]) tprint(Args...)(string message, Args args) {
     formattedWrite(buffer, message, args);
     
     return buffer.text();
-}
-
-/**
- * Attempts to unwrap an AstNode as a single-element list.
- * If the node is not a single-element list, or if the list
- * member is invalid, this function returns the node
- * untouched.
- */
-AstNode try_unwrap_list(ref ParseCtx ctx, AstNode node) {
-    const can_try_unwrap = node.type == AstNode.List && node.get_children().length == 1;
-
-    if (!can_try_unwrap)
-        return node;
-
-    auto member_parts = node.get_children()[0].get_children();
-    
-    // the member is invalid or is not just a value
-    if (member_parts.length == 0 || member_parts[0].type != AstNode.None)
-        return node;
-    
-    assert(member_parts[1].type == AstNode.InferredType);
-
-    auto value = member_parts[2];
-    member_parts[2] = AstNode.none;
-    ctx.free(node);
-
-    return value;
 }

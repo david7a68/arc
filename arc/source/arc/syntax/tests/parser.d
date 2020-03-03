@@ -34,6 +34,7 @@ bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
     }
 
     flatten(result.tree);
+    import std.stdio; writeln(flattened_tree); writeln(result.errors);
 
     if (flattened_tree.length != types.length) {
         writefln(
@@ -117,35 +118,39 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 @("parse if") unittest {
     assert(type_equivalent("if a {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
 
-    assert(type_equivalent("if a {} else b;".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.Name));
+    assert(type_equivalent("if a {} else {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.Block));
 
     with (AstNode.Type)
-    assert(type_equivalent("if a b; else c;".parse!"statement",
+    assert(type_equivalent("if a {} else {}".parse!"statement",
         If,
             Name,
-            Name,
-            Name
+            Block,
+            Block
     ));
 
     with (AstNode.Type)
-    assert(type_equivalent("if a b; else if c d; else e;".parse!"statement",
+    assert(type_equivalent("if a {} else if c {} else {}".parse!"statement",
         If,
             Name,
-            Name,
+            Block,
             If,
                 Name,
-                Name,
-                Name
+                Block,
+                Block
     ));
     
     with (AstNode.Type)
-    assert(type_equivalent("if a b;\nelse c;".parse!"statement",
+    assert(type_equivalent("if a {}\nelse {}".parse!"statement",
         If,
             Name,
-            Name,
-            Name
+            Block,
+            Block
     ));
 }
+
+// @("bad if") unittest {
+//     assert(type_equivalent("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block));
+// }
 
 @("parse break") unittest {
     assert(type_equivalent("break".parse!"statement", AstNode.Break));
