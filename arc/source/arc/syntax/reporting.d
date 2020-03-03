@@ -19,7 +19,8 @@ struct SyntaxError {
 struct SyntaxWarning {
     enum Code {
         /// A semicolon-only statement should be replaced with an empty block ({})
-        LonelySemicolon
+        LonelySemicolon,
+        TooManyErrors,
     }
 
     alias Code this;

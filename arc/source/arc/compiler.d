@@ -90,6 +90,13 @@ struct CompilerContext {
         auto ctx = ParseCtx(source.text, source.start_offset);
         auto result = parse_module(ctx);
 
+        if (ctx.warnings.length > 0) {
+            foreach (warning; ctx.warnings) {
+                const coords = source.get_loc(warning.location);
+                writefln("Warning:\n%s\nAt %s line %s column %s\n", warning.message, source.name, coords.line, coords.column);
+            }
+        }
+
         if (ctx.errors.length > 0) {
             foreach (error; ctx.errors) {
                 const coords = source.get_loc(error.location);

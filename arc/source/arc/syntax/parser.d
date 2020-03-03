@@ -21,6 +21,8 @@ enum Precedence {
     Primary
 }
 
+enum max_errors = 20;
+
 struct ParseCtx {
     Cursor cursor;
     uint span_offset;
@@ -94,10 +96,15 @@ AstNode parse_module(ref ParseCtx ctx) {
     ctx.delimiter_stack.insertBack(Token.Semicolon);
 
     AstNode[] statements;
-    while (!ctx.done)
+    while (!ctx.done && ctx.errors.length < max_errors)
         statements ~= parse_statement(ctx);
 
     ctx.delimiter_stack.removeBack();
+
+    ctx.warning(
+        SyntaxWarning.TooManyErrors,
+        "Too many errors were detected in this file. Aborting parse in case of degenerate error."
+    );
 
     return new AstNode(AstNode.Module, Span(ctx.span_offset, cast(uint) (ctx.cursor.end - ctx.cursor.start)), statements);
 }
@@ -242,10 +249,10 @@ AstNode parse_if(ref ParseCtx ctx) {
 
     auto condition = parse_expression(ctx);
 
-    auto body = parse_block(ctx);
+    auto body = parse_statement(ctx);
     
     auto else_branch = ctx.skip_token(Token.Else) ?
-                       parse_block(ctx) :
+                       parse_statement(ctx) :
                        AstNode.none;
     
     const span = merge_all(start_span, body.span, else_branch.span);

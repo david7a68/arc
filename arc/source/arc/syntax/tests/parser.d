@@ -116,41 +116,40 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 }
 
 @("parse if") unittest {
-    assert(type_equivalent("if a {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
+    with (AstNode.Type) {
+        assert(type_equivalent("if a {}".parse!"statement", If, Name, Block, None));
 
-    assert(type_equivalent("if a {} else {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.Block));
+        assert(type_equivalent("if a {} else {}".parse!"statement", If, Name, Block, Block));
 
-    with (AstNode.Type)
-    assert(type_equivalent("if a {} else {}".parse!"statement",
-        If,
-            Name,
-            Block,
-            Block
-    ));
-
-    with (AstNode.Type)
-    assert(type_equivalent("if a {} else if c {} else {}".parse!"statement",
-        If,
-            Name,
-            Block,
+        assert(type_equivalent("if a {} else {}".parse!"statement",
             If,
                 Name,
                 Block,
                 Block
-    ));
-    
-    with (AstNode.Type)
-    assert(type_equivalent("if a {}\nelse {}".parse!"statement",
-        If,
-            Name,
-            Block,
-            Block
-    ));
+        ));
+
+        assert(type_equivalent("if a {} else if c {} else {}".parse!"statement",
+            If,
+                Name,
+                Block,
+                If,
+                    Name,
+                    Block,
+                    Block
+        ));
+        
+        assert(type_equivalent("if a {}\nelse {}".parse!"statement",
+            If,
+                Name,
+                Block,
+                Block
+        ));
+    }
 }
 
-// @("bad if") unittest {
-//     assert(type_equivalent("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block));
-// }
+@("bad if") unittest {
+    assert(type_equivalent("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
+}
 
 @("parse break") unittest {
     assert(type_equivalent("break".parse!"statement", AstNode.Break));
