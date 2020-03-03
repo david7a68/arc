@@ -42,8 +42,10 @@ def float2x2_dot : (float2x2, float2x2) -> float;
 def float2x2_dot := (a, b) -> a[0] * b[0] + a[1] * b[1];
 
 def abs := (f: float) -> {
-    if f < 0
-        { return (-f, true) }
-    else
-        { return (f, false) }
+    if f < 0 {
+        return (-f, true)
+    }
+    else {
+        return (f, false)
+    }
 }

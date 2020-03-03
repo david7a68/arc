@@ -20,7 +20,7 @@ statement = def ';'
 
     block = '{' stmt* '}' ;
 
-    if = 'if' expr statement (else statement)? ;
+    if = 'if' expr block (else statement)? ;
 
     loop = 'loop' block ;
 

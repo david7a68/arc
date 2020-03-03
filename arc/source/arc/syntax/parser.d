@@ -122,9 +122,9 @@ AstNode parse_statement(ref ParseCtx ctx) {
                 SyntaxError.UnboundElse,
                 "An else-clause must be bound to an if statement."
             );
-            ctx.advance();
+            const token_span = ctx.take_token().span;
             auto else_body = parse_else(ctx);
-            const span = else_body.span;
+            const span = token_span.merge(else_body.span);
             ctx.free(else_body);
             return new AstNode(AstNode.Invalid, span);
 
