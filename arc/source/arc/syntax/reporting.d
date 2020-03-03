@@ -6,6 +6,7 @@ struct SyntaxError {
         UnexpectedEndOfFile,
         TokenExpectMismatch,
         TokenNotAnExpression,
+        UnboundElse,
     }
 
     alias Code this;

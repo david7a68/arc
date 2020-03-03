@@ -101,10 +101,12 @@ AstNode parse_module(ref ParseCtx ctx) {
 
     ctx.delimiter_stack.removeBack();
 
-    ctx.warning(
-        SyntaxWarning.TooManyErrors,
-        "Too many errors were detected in this file. Aborting parse in case of degenerate error."
-    );
+    if (ctx.errors.length == max_errors && !ctx.done) {
+        ctx.warning(
+            SyntaxWarning.TooManyErrors,
+            "Too many errors were detected in this file. Aborting parse in case of degenerate error."
+        );
+    }
 
     return new AstNode(AstNode.Module, Span(ctx.span_offset, cast(uint) (ctx.cursor.end - ctx.cursor.start)), statements);
 }
@@ -115,6 +117,17 @@ AstNode parse_statement(ref ParseCtx ctx) {
         case Token.If:
             return parse_if(ctx);
         
+        case Token.Else:
+            ctx.error(
+                SyntaxError.UnboundElse,
+                "An else-clause must be bound to an if statement."
+            );
+            ctx.advance();
+            auto else_body = parse_else(ctx);
+            const span = else_body.span;
+            ctx.free(else_body);
+            return new AstNode(AstNode.Invalid, span);
+
         case Token.Loop:
             return parse_loop(ctx);
 
@@ -147,6 +160,8 @@ AstNode parse_statement(ref ParseCtx ctx) {
 
     if (ctx.current.type == Token.Semicolon)
         ctx.advance();
+    else if (result.type == AstNode.Invalid)
+        return result;
     else {
         auto to_free = result;
         result = new AstNode(AstNode.Invalid, to_free.span);
@@ -154,7 +169,8 @@ AstNode parse_statement(ref ParseCtx ctx) {
 
         ctx.error(
             SyntaxError.TokenExpectMismatch,
-            "All statements other than If and Loop must terminate in a semicolon."
+            "%ss must terminate in a semicolon.",
+            result.type
         );
     }
 
@@ -252,12 +268,14 @@ AstNode parse_if(ref ParseCtx ctx) {
     auto body = parse_statement(ctx);
     
     auto else_branch = ctx.skip_token(Token.Else) ?
-                       parse_statement(ctx) :
+                       parse_else(ctx) :
                        AstNode.none;
     
     const span = merge_all(start_span, body.span, else_branch.span);
     return new AstNode(AstNode.If, span, ctx.node_array(condition, body, else_branch));
 }
+
+alias parse_else = parse_statement;
 
 AstNode parse_escape(AstNode.Type Type, Token.Type ttype, bool with_value)(ref ParseCtx ctx) {
     auto start_span = ctx.take_token().span;

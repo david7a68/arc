@@ -21,7 +21,7 @@ auto parse(string category)(const(char)[] text) {
     mixin("return ParseResult(parse_" ~ category ~ "(p), p.errors);");
 }
 
-bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
+bool type_equivalent(AstNode tree, AstNode.Type[] types...) {
     import std.stdio: writefln;
 
     AstNode.Type[] flattened_tree;
@@ -33,8 +33,8 @@ bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
             flatten(child);
     }
 
-    flatten(result.tree);
-    import std.stdio; writeln(flattened_tree); writeln(result.errors);
+    flatten(tree);
+    import std.stdio; writeln(flattened_tree);
 
     if (flattened_tree.length != types.length) {
         writefln(
@@ -55,6 +55,10 @@ bool type_equivalent(ParseResult result, AstNode.Type[] types...) {
     return true;
 }
 
+bool check_types(ParseResult result, AstNode.Type[] types...) {
+    return result.errors.length == 0 && type_equivalent(result.tree, types);
+}
+
 bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[] types...) {
     bool has_error;
     foreach (error; result.errors)
@@ -63,7 +67,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
             break;
         }
     
-    return has_error && type_equivalent(result, types);
+    return has_error && type_equivalent(result.tree, types);
 }
 
 // ----------------------------------------------------------------------
@@ -78,7 +82,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse def") unittest {
     with (AstNode.Type)
-    assert(type_equivalent("def a := 3".parse!"statement",
+    assert(check_types("def a := 3".parse!"statement",
         Define,
             Name,
             InferredType,
@@ -86,7 +90,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
     ));
 
     with (AstNode.Type)
-    assert(type_equivalent("def T :\n(int\nint)".parse!"statement",
+    assert(check_types("def T :\n(int\nint)".parse!"statement",
         Define,
             Name,
             TypeList,
@@ -100,7 +104,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
     ));
 
     with (AstNode.Type)
-    assert(type_equivalent("def f : F = (a) -> a".parse!"statement",
+    assert(check_types("def f : F = (a) -> a".parse!"statement",
         Define,
             Name,
             Name,
@@ -117,18 +121,18 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse if") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("if a {}".parse!"statement", If, Name, Block, None));
+        assert(check_types("if a {}".parse!"statement", If, Name, Block, None));
 
-        assert(type_equivalent("if a {} else {}".parse!"statement", If, Name, Block, Block));
+        assert(check_types("if a {} else {}".parse!"statement", If, Name, Block, Block));
 
-        assert(type_equivalent("if a {} else {}".parse!"statement",
+        assert(check_types("if a {} else {}".parse!"statement",
             If,
                 Name,
                 Block,
                 Block
         ));
 
-        assert(type_equivalent("if a {} else if c {} else {}".parse!"statement",
+        assert(check_types("if a {} else if c {} else {}".parse!"statement",
             If,
                 Name,
                 Block,
@@ -138,7 +142,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
                     Block
         ));
         
-        assert(type_equivalent("if a {}\nelse {}".parse!"statement",
+        assert(check_types("if a {}\nelse {}".parse!"statement",
             If,
                 Name,
                 Block,
@@ -148,30 +152,34 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 }
 
 @("bad if") unittest {
-    assert(type_equivalent("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
+    assert(check_types("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
 }
 
 @("parse break") unittest {
-    assert(type_equivalent("break".parse!"statement", AstNode.Break));
+    assert(check_types("break".parse!"statement", AstNode.Break));
 }
 
 @("parse return") unittest {
-    assert(type_equivalent("return".parse!"statement", AstNode.Return, AstNode.None));
+    assert(check_types("return".parse!"statement", AstNode.Return, AstNode.None));
 
-    assert(type_equivalent("return a".parse!"statement", AstNode.Return, AstNode.Name));
+    assert(check_types("return a".parse!"statement", AstNode.Return, AstNode.Name));
 
-    assert(type_equivalent("{return}".parse!"statement", AstNode.Block, AstNode.Return, AstNode.None));
+    assert(check_types("{return}".parse!"statement", AstNode.Block, AstNode.Return, AstNode.None));
 }
 
 @("parse continue") unittest {
-    assert(type_equivalent("continue".parse!"statement", AstNode.Continue));
+    assert(check_types("continue".parse!"statement", AstNode.Continue));
 }
 
 @("parse loop") unittest {
-    assert(type_equivalent("loop {}".parse!"statement", AstNode.Loop, AstNode.Block));
+    assert(check_types("loop {}".parse!"statement", AstNode.Loop, AstNode.Block));
     
     with (AstNode.Type)
-    assert(type_equivalent("loop a = a + 1".parse!"statement", Loop, Assign, Name, Add, Name, Integer));
+    assert(check_types("loop a = a + 1".parse!"statement", Loop, Assign, Name, Add, Name, Integer));
+}
+
+@("parse invalid statement") unittest {
+    assert(check_error("else {}".parse!"statement", SyntaxError.UnboundElse, AstNode.Invalid));
 }
 
 // ----------------------------------------------------------------------
@@ -186,37 +194,37 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 // ----------------------------------------------------------------------
 
 @("parse name") unittest {
-    assert(type_equivalent("a_name".parse!"expression", AstNode.Name));
+    assert(check_types("a_name".parse!"expression", AstNode.Name));
 }
 
 @("parse int") unittest {
-    assert(type_equivalent("20".parse!"expression", AstNode.Integer));
+    assert(check_types("20".parse!"expression", AstNode.Integer));
 }
 
 @("parse char") unittest {
-    assert(type_equivalent("'a'".parse!"expression", AstNode.Char));
+    assert(check_types("'a'".parse!"expression", AstNode.Char));
 }
 
 @("parse unary") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("-var".parse!"expression", Negate, Name));
-        assert(type_equivalent("*int".parse!"expression", Pointer, Name));
-        assert(type_equivalent("&int".parse!"expression", GetRef, Name));
-        assert(type_equivalent("&a.b".parse!"expression", GetRef, Call, Name, Name));
+        assert(check_types("-var".parse!"expression", Negate, Name));
+        assert(check_types("*int".parse!"expression", Pointer, Name));
+        assert(check_types("&int".parse!"expression", GetRef, Name));
+        assert(check_types("&a.b".parse!"expression", GetRef, Call, Name, Name));
     }
 }
 
 @("parse binary") unittest {
-    assert(type_equivalent("a + 1".parse!"expression", AstNode.Add, AstNode.Name, AstNode.Integer));
+    assert(check_types("a + 1".parse!"expression", AstNode.Add, AstNode.Name, AstNode.Integer));
 
-    assert(type_equivalent("a++".parse!"expression", AstNode.Invalid));
+    assert(check_error("a++".parse!"expression", SyntaxError.TokenNotAnExpression, AstNode.Invalid));
 
-    assert(type_equivalent("foo()".parse!"expression", AstNode.Call, AstNode.Name, AstNode.List));
+    assert(check_types("foo()".parse!"expression", AstNode.Call, AstNode.Name, AstNode.List));
 
-    assert(type_equivalent("a.b".parse!"expression", AstNode.Call, AstNode.Name, AstNode.Name));
+    assert(check_types("a.b".parse!"expression", AstNode.Call, AstNode.Name, AstNode.Name));
 
     with (AstNode.Type)
-    assert(type_equivalent("b - c + d * e ^ f ^ g / h".parse!"expression",
+    assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
         Add,
             Subtract,
                 Name,
@@ -232,14 +240,14 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
                 Name
     ));
 
-    assert(type_equivalent("a = 3".parse!"expression", AstNode.Assign, AstNode.Name, AstNode.Integer));
+    assert(check_types("a = 3".parse!"expression", AstNode.Assign, AstNode.Name, AstNode.Integer));
 }
 
 @("parse list0") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("()".parse!"expression", List));
+        assert(check_types("()".parse!"expression", List));
         
-        assert(type_equivalent("(,0, b:b1, c = 3, d : d1 = 4,)".parse!"expression",
+        assert(check_types("(,0, b:b1, c = 3, d : d1 = 4,)".parse!"expression",
             List,
                 ListMember,
                     None,
@@ -259,7 +267,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
                     Integer
         ));
 
-        assert(type_equivalent("[0, b:b1, c = 3, d : d1 = 4]".parse!"expression",
+        assert(check_types("[0, b:b1, c = 3, d : d1 = 4]".parse!"expression",
             List,
                 ListMember,
                     None,
@@ -292,19 +300,19 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 }
 
 @("parse block") unittest {
-    assert(type_equivalent("{}".parse!"expression", AstNode.Block));
+    assert(check_types("{}".parse!"expression", AstNode.Block));
 }
 
 @("parse function") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("() -> 1".parse!"expression",
+        assert(check_types("() -> 1".parse!"expression",
             Function,
                 List,               // There are no parameters in this function.
                 InferredType,       // The return type of the function is derived from the function body.
                 Integer             // The function's expression body.
         ));
 
-        assert(type_equivalent("(a, b:c) -> a".parse!"expression",
+        assert(check_types("(a, b:c) -> a".parse!"expression",
             Function,
                 List,                   // The parameter list.
                     ListMember,
@@ -320,7 +328,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
                 Name,                   // The function's expression body.
         ));
 
-        assert(type_equivalent("() -> { blah() }".parse!"expression",
+        assert(check_types("() -> { blah() }".parse!"expression",
             Function,
                 List,
                 InferredType,
@@ -334,7 +342,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse variable") unittest {
     with (AstNode.Type)
-    assert(type_equivalent("a : = b".parse!"expression",
+    assert(check_types("a : = b".parse!"expression",
         Variable,
             Name,
             InferredType,
@@ -342,7 +350,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
     ));
 
     with (AstNode.Type)
-    assert(type_equivalent("a : b".parse!"expression",
+    assert(check_types("a : b".parse!"expression",
         Variable,
             Name,
             Name,
@@ -350,7 +358,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
     ));
 
     with (AstNode.Type)
-    assert(type_equivalent("a : b = c".parse!"expression",
+    assert(check_types("a : b = c".parse!"expression",
         Variable,
             Name,
             Name,
@@ -370,16 +378,16 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 // ----------------------------------------------------------------------
 
 @("parse type_name") unittest {
-    assert(type_equivalent("T".parse!"type", AstNode.Name));
+    assert(check_types("T".parse!"type", AstNode.Name));
 }
 
 @("parse pointer_type") unittest {
-    assert(type_equivalent("*Y".parse!"type", AstNode.PointerType, AstNode.Name));
+    assert(check_types("*Y".parse!"type", AstNode.PointerType, AstNode.Name));
 }
 
 @("parse type_list") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("(int, named: int)".parse!"type",
+        assert(check_types("(int, named: int)".parse!"type",
             TypeList,
                 TypeListMember,
                     None,           // The member does not have a name.
@@ -393,7 +401,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse call_result_type") unittest {
     with (AstNode.Type)
-    assert(type_equivalent("a.b()".parse!"type",
+    assert(check_types("a.b()".parse!"type",
         Call,
             Call,
                 Name,
@@ -404,13 +412,13 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse function_types") unittest {
     with (AstNode.Type) {
-        assert(type_equivalent("() -> T".parse!"type",
+        assert(check_types("() -> T".parse!"type",
             FunctionType,
                 TypeList,           // There are no parameters for this function.
                 Name,               // The return type.
         ));
 
-        assert(type_equivalent("() -> A.B()".parse!"type",
+        assert(check_types("() -> A.B()".parse!"type",
             FunctionType,
                 TypeList,           // There are no parameters for this function.
                 Call,               // The return type is the result of a call expression.
