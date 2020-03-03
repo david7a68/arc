@@ -3,10 +3,10 @@ module arc.syntax.parser;
 import std.container.array: Array;
 
 import arc.hash: Key;
-import arc.syntax.ast;
+import arc.syntax.ast: AstNode;
 import arc.syntax.lexer: Cursor, Token, matches_one, scan_token;
 import arc.source: Span, merge, merge_all;
-import arc.syntax.error: SyntaxError;
+import arc.syntax.reporting: SyntaxError, SyntaxWarning;
 
 enum Precedence {
     None,
@@ -29,6 +29,7 @@ struct ParseCtx {
     Array!(Token.Type) delimiter_stack;
 
     SyntaxError[] errors;
+    SyntaxWarning[] warnings;
 
     this(const(char)[] source, uint span_offset) {
         cursor = Cursor(source);
@@ -54,6 +55,14 @@ struct ParseCtx {
     void error(Args...)(SyntaxError.Code error_code, string message, Args args) {
         errors ~= SyntaxError(
             error_code,
+            current.span.start,
+            tprint(message, args).idup
+        );
+    }
+
+    void warning(Args...)(SyntaxWarning.Code warn_code, string message, Args args) {
+        warnings ~= SyntaxWarning(
+            warn_code,
             current.span.start,
             tprint(message, args).idup
         );
@@ -118,6 +127,13 @@ AstNode parse_statement(ref ParseCtx ctx) {
             result = parse_escape!(AstNode.Continue, Token.Continue, false)(ctx);
             break;
         
+        case Token.Semicolon:
+            ctx.warning(
+                SyntaxWarning.LonelySemicolon,
+                "A semicolon should not be used to indicate an empty statement. Use an empty block instead ({})."
+            );
+            return new AstNode(AstNode.Block, ctx.take_token().span);
+
         default:
             result = parse_expression(ctx);
     }
@@ -141,10 +157,8 @@ AstNode parse_statement(ref ParseCtx ctx) {
 AstNode parse_expression(ref ParseCtx ctx, Precedence precedence = Precedence.Assign) {
     auto expression = prefix_parselets[ctx.current.type](ctx);
 
-    while (precedence <= infix_parselets[ctx.current.type].precedence) {
-
+    while (precedence <= infix_parselets[ctx.current.type].precedence)
         expression = infix_parselets[ctx.current.type].parselet(ctx, expression);
-    }
 
     return expression;
 }
@@ -462,6 +476,9 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
     ctx.advance();
 
     const saved_cursor = ctx.cursor.current;
+    const saved_token = ctx.current;
+
+    // Cleanup: We don't ignore any errors generated during this time...
     auto maybe_body = parse_expression(ctx);
 
     AstNode ret_type, fun_body;
@@ -469,6 +486,7 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
     // the maybe_body is a type expression
     if (ctx.current.type == Token.Lbrace) {
         ctx.cursor.current = saved_cursor;
+        ctx.current = saved_token;
         ctx.free(maybe_body);
         ret_type = parse_type(ctx);
         fun_body = parse_expression(ctx);
@@ -565,7 +583,8 @@ AstNode parse_type_list_member(ref ParseCtx ctx) {
 
 AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
     assert(lhs.type == AstNode.TypeList || lhs.type == AstNode.Invalid);
-    assert(ctx.take_token().type == Token.Rarrow);
+    assert(ctx.current.type == Token.Rarrow);
+    ctx.advance();
 
     auto return_type = parse_type(ctx);
     const span = lhs.span.merge(return_type.span);

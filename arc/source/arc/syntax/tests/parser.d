@@ -3,7 +3,7 @@ module arc.syntax.tests.parser;
 import arc.syntax.parser;
 import arc.syntax.lexer: Token;
 import arc.syntax.ast: AstNode;
-import arc.syntax.error: SyntaxError;
+import arc.syntax.reporting: SyntaxError;
 
 struct ParseResult {
     AstNode tree;
@@ -357,32 +357,6 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
             Name,
             Name,
     ));
-}
-
-@("parse single_element_list") unittest {
-    with (AstNode.Type) {
-        // single-value list elision
-        assert(type_equivalent("(a)".parse!"expression", Name));
-
-        // correct exclusions
-        assert(type_equivalent("(a: b)".parse!"expression", List, ListMember, Name, Name, None));
-
-        assert(type_equivalent("(a + b) * c".parse!"expression",
-            Multiply,
-                Add,
-                    Name,
-                    Name,
-                Name
-        ));
-
-        assert(type_equivalent("a * (b + c)".parse!"expression",
-            Multiply,
-                Name,
-                Add,
-                    Name,
-                    Name,
-        ));
-    }
 }
 
 // ----------------------------------------------------------------------
