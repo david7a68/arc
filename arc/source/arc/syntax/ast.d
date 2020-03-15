@@ -82,7 +82,7 @@ final class AstNode {
         _children = children;
     }
 
-    final Key get_key() {
+    Key get_key() {
         switch (type) with (Type) {
         case Name:
         case Char:
@@ -93,9 +93,7 @@ final class AstNode {
         }
     }
 
-    // Key get_key() { return 0; }
-
-    final AstNode[] get_children() {
+    AstNode[] get_children() {
         switch (type) with (Type) {
         case None:
         case Name:

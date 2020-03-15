@@ -4,6 +4,7 @@ import arc.syntax.parser;
 import arc.syntax.lexer: Token;
 import arc.syntax.ast: AstNode;
 import arc.syntax.reporting: SyntaxError;
+import arc.stringtable: StringTable;
 
 struct ParseResult {
     AstNode tree;
@@ -13,7 +14,7 @@ struct ParseResult {
 /// Parses a statement.
 /// Info: Don't forget, expressions are statements too!
 auto parse(string category)(const(char)[] text) {
-    auto p = ParseCtx(text, 0);
+    auto p = ParseCtx(text, 0, new StringTable);
 
     static if (category == "statement")
         p.delimiter_stack.insertBack(Token.Semicolon);
@@ -34,7 +35,6 @@ bool type_equivalent(AstNode tree, AstNode.Type[] types...) {
     }
 
     flatten(tree);
-    import std.stdio; writeln(flattened_tree);
 
     if (flattened_tree.length != types.length) {
         writefln(
@@ -295,7 +295,14 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
         assert(check_error("(a=".parse!"expression", SyntaxError.UnexpectedEndOfFile, Invalid));
         assert(check_error("(a=)".parse!"expression", SyntaxError.TokenNotAnExpression, List, Invalid));
         assert(check_error("(a:=2)".parse!"expression", SyntaxError.TokenNotAnExpression, List, Invalid));
-        assert(check_error("(a++, 2)".parse!"expression", SyntaxError.TokenNotAnExpression, List, Invalid, ListMember, None, InferredType, Integer));
+        assert(check_error("(a++, 2)".parse!"expression", SyntaxError.TokenNotAnExpression,
+            List,
+                Invalid,
+                ListMember,
+                    None,
+                    InferredType,
+                    Integer
+        ));
     }
 }
 

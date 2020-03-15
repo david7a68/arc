@@ -2,6 +2,7 @@ module arc.syntax.lexer;
 
 import arc.hash: Key, digest;
 import arc.source: Span;
+import arc.stringtable: StringTable;
 
 struct Token {
     enum Type: ubyte {
@@ -45,6 +46,10 @@ struct Cursor {
         end = start + text.length;
     }
 
+    const(char)[] text() {
+        return start[0 .. end - start];
+    }
+
     uint index() in (current - start <= uint.max) {
         return cast(uint) (current - start);
     }
@@ -71,9 +76,9 @@ immutable end_of_section_tokens = [
     Token.Else
 ];
 
-Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim) {
+Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim, StringTable strings) {
     const start = cursor;
-    auto scan = scan_type(cursor);
+    auto scan = scan_type(cursor, strings);
 
     if (scan.type.matches_one(end_of_section_tokens) && delim != Token.Invalid) {
         switch (previous) with (Token.Type) {
@@ -94,17 +99,17 @@ Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim) {
                 return Token(Token.Invalid);
             default:
                 while (scan.type == Token.Eol)
-                    scan = scan_type(cursor);
+                    scan = scan_type(cursor, strings);
         }
     }
     else if (scan.type == Token.Eol) {
         do {
-            scan = scan_type(cursor);
+            scan = scan_type(cursor, strings);
         } while (scan.type == Token.Eol);
     }
     else if (scan.type == previous && (previous == Token.Comma || previous == Token.Semicolon)) {
         do {
-            scan = scan_type(cursor);
+            scan = scan_type(cursor, strings);
         } while (scan.type == previous);
     }
 
@@ -133,7 +138,7 @@ shared static this() {
  *
  * This function will identify keywords as distinct from symbols.
  */
-Token scan_type(ref Cursor cursor) {
+Token scan_type(ref Cursor cursor, StringTable strings) {
     auto start = cursor;
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
@@ -253,7 +258,12 @@ Token scan_type(ref Cursor cursor) {
             }
 
             const key = digest(start.spanned_text(cursor));
-            return make_token(keywords.get(key, Token.Name), 0, key);
+            const type = keywords.get(key, Token.Name);
+
+            if (type == Token.Name)
+                strings.insert(start.spanned_text(cursor), key);
+            
+            return make_token(type, 0, key);
         case '0': .. case '9':
             while (!cursor.done && (('0' <= *cursor.current && *cursor.current <= '9') || *cursor.current == '_'))
                 cursor.advance();

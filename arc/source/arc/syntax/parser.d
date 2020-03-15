@@ -3,6 +3,7 @@ module arc.syntax.parser;
 import std.container.array: Array;
 
 import arc.hash: Key;
+import arc.stringtable: StringTable;
 import arc.syntax.ast: AstNode;
 import arc.syntax.lexer: Cursor, Token, matches_one, scan_token;
 import arc.source: Span, merge, merge_all;
@@ -28,14 +29,17 @@ struct ParseCtx {
     uint span_offset;
 
     Token current;
+
+    StringTable strings;
     Array!(Token.Type) delimiter_stack;
 
     SyntaxError[] errors;
     SyntaxWarning[] warnings;
 
-    this(const(char)[] source, uint span_offset) {
+    this(const(char)[] source, uint span_offset, StringTable strings) {
         cursor = Cursor(source);
         this.span_offset = span_offset;
+        this.strings = strings;
         advance();
     }
 
@@ -44,7 +48,8 @@ struct ParseCtx {
     }
 
     void advance() {
-        current = scan_token(cursor, current.type, delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid);
+        const delimiter = delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid;
+        current = scan_token(cursor, current.type, delimiter , strings);
         current.span.start += span_offset;
     }
 
@@ -108,7 +113,7 @@ AstNode parse_module(ref ParseCtx ctx) {
         );
     }
 
-    return new AstNode(AstNode.Module, Span(ctx.span_offset, cast(uint) (ctx.cursor.end - ctx.cursor.start)), statements);
+    return new AstNode(AstNode.Module, Span(ctx.span_offset, cast(uint) ctx.cursor.text.length), statements);
 }
 
 AstNode parse_statement(ref ParseCtx ctx) {
@@ -345,27 +350,27 @@ immutable prefix_parselets = () {
 immutable infix_parselets = () {
     Infix[256] parselets;
 
-    static set(AstNode.Type type, Token.Type ttype, Precedence prec, bool left_assoc = true, bool skip_op = true)(ref Infix[256] parselets) {
+    void set(AstNode.Type type, Token.Type ttype, Precedence prec, bool left_assoc = true, bool skip_op = true)() {
         parselets[ttype] = Infix(prec, &parse_binary!(type, left_assoc ? prec + 1 : prec, skip_op));
     }
 
-    set!(AstNode.Assign,        Token.Equals,       Precedence.Assign   )(parselets);
-    set!(AstNode.Less,          Token.Less,         Precedence.Compare  )(parselets);
-    set!(AstNode.LessEqual,     Token.LessEqual,    Precedence.Compare  )(parselets);
-    set!(AstNode.Greater,       Token.Greater,      Precedence.Compare  )(parselets);
-    set!(AstNode.GreaterEqual,  Token.GreaterEqual, Precedence.Compare  )(parselets);
-    set!(AstNode.Equal,         Token.EqualEqual,   Precedence.Equality )(parselets);
-    set!(AstNode.NotEqual,      Token.BangEqual,    Precedence.Equality )(parselets);
-    set!(AstNode.And,           Token.And,          Precedence.Logic    )(parselets);
-    set!(AstNode.Or,            Token.Or,           Precedence.Logic    )(parselets);
-    set!(AstNode.Add,           Token.Plus,         Precedence.Sum      )(parselets);
-    set!(AstNode.Subtract,      Token.Minus,        Precedence.Sum      )(parselets);
-    set!(AstNode.Multiply,      Token.Star,         Precedence.Product  )(parselets);
-    set!(AstNode.Divide,        Token.Slash,        Precedence.Product  )(parselets);
-    set!(AstNode.Power,         Token.Caret,        Precedence.Power,   false)(parselets);
-    set!(AstNode.Call,          Token.Dot,          Precedence.Call     )(parselets);
-    set!(AstNode.Call,          Token.Lparen,       Precedence.Call,    true, false)(parselets);
-    set!(AstNode.Call,          Token.Lbracket,     Precedence.Call,    true, false)(parselets);
+    set!(AstNode.Assign,        Token.Equals,       Precedence.Assign   )();
+    set!(AstNode.Less,          Token.Less,         Precedence.Compare  )();
+    set!(AstNode.LessEqual,     Token.LessEqual,    Precedence.Compare  )();
+    set!(AstNode.Greater,       Token.Greater,      Precedence.Compare  )();
+    set!(AstNode.GreaterEqual,  Token.GreaterEqual, Precedence.Compare  )();
+    set!(AstNode.Equal,         Token.EqualEqual,   Precedence.Equality )();
+    set!(AstNode.NotEqual,      Token.BangEqual,    Precedence.Equality )();
+    set!(AstNode.And,           Token.And,          Precedence.Logic    )();
+    set!(AstNode.Or,            Token.Or,           Precedence.Logic    )();
+    set!(AstNode.Add,           Token.Plus,         Precedence.Sum      )();
+    set!(AstNode.Subtract,      Token.Minus,        Precedence.Sum      )();
+    set!(AstNode.Multiply,      Token.Star,         Precedence.Product  )();
+    set!(AstNode.Divide,        Token.Slash,        Precedence.Product  )();
+    set!(AstNode.Power,         Token.Caret,        Precedence.Power,   false)();
+    set!(AstNode.Call,          Token.Dot,          Precedence.Call     )();
+    set!(AstNode.Call,          Token.Lparen,       Precedence.Call,    true, false)();
+    set!(AstNode.Call,          Token.Lbracket,     Precedence.Call,    true, false)();
     parselets[Token.Colon]  = Infix(Precedence.Assign, &parse_var);
     parselets[Token.Rarrow] = Infix(Precedence.Primary, &parse_function);
 

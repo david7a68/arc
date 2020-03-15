@@ -2,18 +2,20 @@ module arc.syntax.tests.lexer;
 
 import arc.syntax.lexer: Cursor, Token, scan_token, scan_type;
 import arc.source: Span;
+import arc.stringtable: StringTable;
 
 struct Lexer {
     Cursor cursor;
     Token.Type delimiter;
+    StringTable strings;
 
     Token front;
     bool empty() { return front.type == Token.Done; }
-    void popFront() { front = scan_token(cursor, front.type, delimiter); }
+    void popFront() { front = scan_token(cursor, front.type, delimiter, strings); }
 }
 
 auto scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
-    auto l = Lexer(Cursor(text), delimiter);
+    auto l = Lexer(Cursor(text), delimiter, new StringTable);
     l.popFront();
     return l;
 }

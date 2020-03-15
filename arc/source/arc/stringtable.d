@@ -2,13 +2,18 @@ module arc.stringtable;
 
 import arc.hash: Key;
 
-struct StringTable {
+final class StringTable {
     bool opBinary(string op = "in")(String s) {
         return (s.key in table) !is null;
     }
 
     Key insert(const(char)[] text) {
         auto key = StringTable.digest(text);
+        table[key] = text;
+        return key;
+    }
+
+    Key insert(const(char)[] text, Key key) {
         table[key] = text;
         return key;
     }
