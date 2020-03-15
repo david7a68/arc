@@ -5,7 +5,7 @@ import std.container.array: Array;
 import arc.hash: Key;
 import arc.stringtable: StringTable;
 import arc.syntax.ast: AstNode;
-import arc.syntax.lexer: Cursor, Token, matches_one, scan_token;
+import arc.syntax.lexer: Cursor, Token, matches_one, scan_token, initialize_token_strings;
 import arc.source: Span, merge, merge_all;
 import arc.syntax.reporting: SyntaxError, SyntaxWarning;
 
@@ -40,6 +40,7 @@ struct ParseCtx {
         cursor = Cursor(source);
         this.span_offset = span_offset;
         this.strings = strings;
+        initialize_token_strings(strings);
         advance();
     }
 

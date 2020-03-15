@@ -13,7 +13,7 @@ struct Token {
         Ampersand = '&', Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=', Less = '<', Greater = '>', Bang = '!',
         LessEqual = 128, GreaterEqual, EqualEqual, BangEqual,
-        Rarrow, ColonColon, Label, DotDot,
+        Rarrow, ColonColon,
         
         Name, Integer, Char,
 
@@ -34,6 +34,29 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
         if (type == t)
             return true;
     return false;
+}
+
+void initialize_token_strings(StringTable strings) {
+    static immutable tokens = [
+        ".",
+        "&",
+        "+",
+        "-",
+        "/",
+        "*",
+        "^",
+        "=",
+        "<",
+        ">",
+        "!",
+        "<=",
+        ">=",
+        "==",
+        "!=",
+    ];
+
+    static foreach (t; tokens)
+        strings.insert(t);
 }
 
 struct Cursor {
@@ -87,7 +110,6 @@ Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim, Strin
             case Rbracket:
             case Name:
             case Integer:
-            case Label:
             case Char:
             case Break:
             case Return:
@@ -146,6 +168,12 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
         return Token(t, Span(start.index, cursor.index - start.index), key);
     }
 
+    auto make_op_token(Token.Type t, int advance_n = 0) {
+        cursor.advance(advance_n);
+        const key = digest(start.spanned_text(cursor));
+        return Token(t, Span(start.index, cursor.index - start.index), key);
+    }
+
     switch_start:
     if (cursor.done)
         return Token(Token.Done); 
@@ -170,16 +198,15 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
         case '+':
         case '*':
         case '^':
-        case '&':
             return make_token(cast(Token.Type) c);
+        case '&':
+            return make_op_token(Token.Ampersand);
         case '-':
             if (!cursor.done && *cursor.current == '>')
                 return make_token(Token.Rarrow, 1);
-            return make_token(Token.Minus);
+            return make_op_token(Token.Minus);
         case '.':
-            if (!cursor.done && *cursor.current == '.')
-                return make_token(Token.DotDot, 1);
-            return make_token(Token.Dot);
+            return make_op_token(Token.Dot);
         case ':':
             if (!cursor.done && *cursor.current == ':')
                 return make_token(Token.ColonColon, 1);
@@ -190,27 +217,27 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
                 while (*cursor.current != '\n') cursor.advance();
                 goto switch_start;
             }
-            else return make_token(Token.Slash);
+            else return make_op_token(Token.Slash);
         case '=':
             if (!cursor.done && *cursor.current == '=')
-                return make_token(Token.EqualEqual, 1);
+                return make_op_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
-                return make_token(Token.Equals);
+                return make_op_token(Token.Equals);
         case '<':
             if (!cursor.done && *cursor.current == '=')
-                return make_token(Token.LessEqual, 1);
+                return make_op_token(Token.LessEqual, 1);
             else
-                return make_token(Token.Less);
+                return make_op_token(Token.Less);
         case '>':
             if (!cursor.done && *cursor.current == '=')
-                return make_token(Token.GreaterEqual, 1);
+                return make_op_token(Token.GreaterEqual, 1);
             else
-                return make_token(Token.Greater);
+                return make_op_token(Token.Greater);
         case '!':
             if (!cursor.done && *cursor.current == '=')
-                return make_token(Token.BangEqual, 1);
+                return make_op_token(Token.BangEqual, 1);
             else
-                return make_token(Token.Bang);
+                return make_op_token(Token.Bang);
         case '\'':
             if (cursor.done)
                 return make_token(Token.Invalid);
@@ -229,20 +256,8 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
                 cursor.advance();
                 if (*cursor.current == '\'')
                     return make_token(Token.Char, 1);
-                else {
-                    char_loop: if (!cursor.done) switch (*cursor.current) {
-                        case 'a': .. case 'z':
-                        case 'A': .. case 'Z':
-                        case '0': .. case '9':
-                        case '_':
-                            cursor.advance();
-                            goto char_loop;
-                        default:
-                    }
-
-                    const key = digest(start.spanned_text(cursor));
-                    return make_token(Token.Label, 0, key);
-                }
+                else
+                    return make_token(Token.Invalid);
             }
         case 'a': .. case 'z':
         case 'A': .. case 'Z':

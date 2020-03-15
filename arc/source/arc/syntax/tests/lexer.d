@@ -1,6 +1,6 @@
 module arc.syntax.tests.lexer;
 
-import arc.syntax.lexer: Cursor, Token, scan_token, scan_type;
+import arc.syntax.lexer: Cursor, Token, scan_token, scan_type, initialize_token_strings;
 import arc.source: Span;
 import arc.stringtable: StringTable;
 
@@ -15,6 +15,8 @@ struct Lexer {
 }
 
 auto scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
+    auto strings = new StringTable();
+    initialize_token_strings(strings);
     auto l = Lexer(Cursor(text), delimiter, new StringTable);
     l.popFront();
     return l;
@@ -50,7 +52,7 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
 }
 
 @("lex compact") unittest {
-    assert("()[]{},.;->1a_3'a".scan_tokens.type_equivalent(
+    assert("()[]{},.;->1a_3".scan_tokens.type_equivalent(
         Token.Lparen,
         Token.Rparen,
         Token.Lbracket,
@@ -63,7 +65,6 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
         Token.Rarrow,
         Token.Integer,
         Token.Name,
-        Token.Label,
     ));
 }
 
@@ -79,11 +80,6 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
         Token(Token.Continue,   Span(33, 8), 16371828708454923059UL),
         Token(Token.Def,        Span(42, 3), 9791288970560527259UL)
     ));
-}
-
-@("lex labels") unittest {
-    assert("'a".scan_tokens.type_equivalent(Token.Label));
-    assert("'hi".scan_tokens.type_equivalent(Token.Label));
 }
 
 @("lex char") unittest {
@@ -111,7 +107,7 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
         }
     }
 
-    test_tokens(")", "]", "}", "a", "1", "'a", "'a'", "break", "return", "continue");
+    test_tokens(")", "]", "}", "a", "1", "'a'", "break", "return", "continue");
 }
 
 @("lexer:keyword_delim_error") unittest {
