@@ -17,7 +17,7 @@ struct Lexer {
 auto scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
     auto strings = new StringTable();
     initialize_token_strings(strings);
-    auto l = Lexer(Cursor(text), delimiter, new StringTable);
+    auto l = Lexer(Cursor(text), delimiter, strings);
     l.popFront();
     return l;
 }
@@ -66,6 +66,15 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
         Token.Integer,
         Token.Name,
     ));
+}
+
+@("lex operators") unittest {
+    auto tokens = "+ - * / ^ & < > = ! <= != >=".scan_tokens;
+    auto strings = ["+", "-", "*", "/", "^", "&", "<", ">", "=", "!", "<=", "!=", ">="];
+
+    import std.range: lockstep;
+    foreach (token, text; lockstep(tokens, strings))
+        assert(tokens.strings.lookup(token.key) == text);
 }
 
 @("lex keywords") unittest {

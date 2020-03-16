@@ -1,13 +1,9 @@
 module arc.syntax.parser;
 
-import std.container.array: Array;
-
-import arc.hash: Key;
-import arc.stringtable: StringTable;
 import arc.syntax.ast: AstNode;
-import arc.syntax.lexer: Cursor, Token, matches_one, scan_token, initialize_token_strings;
+import arc.syntax.lexer: Token, matches_one;
 import arc.source: Span, merge, merge_all;
-import arc.syntax.reporting: SyntaxError, SyntaxWarning;
+import arc.reporting: ArcError, ArcWarning;
 
 enum Precedence {
     None,
@@ -25,22 +21,24 @@ enum Precedence {
 enum max_errors = 20;
 
 struct ParseCtx {
+    import std.container.array: Array;
+    import arc.compilation: Compilation;
+    import arc.stringtable: StringTable;
+    import arc.syntax.lexer: Cursor, scan_token, initialize_token_strings;
+
     Cursor cursor;
     uint span_offset;
 
     Token current;
 
-    StringTable strings;
+    Compilation compilation;
     Array!(Token.Type) delimiter_stack;
 
-    SyntaxError[] errors;
-    SyntaxWarning[] warnings;
-
-    this(const(char)[] source, uint span_offset, StringTable strings) {
+    this(Compilation compilation, const(char)[] source, uint span_offset) {
         cursor = Cursor(source);
         this.span_offset = span_offset;
-        this.strings = strings;
-        initialize_token_strings(strings);
+        this.compilation = compilation;
+        initialize_token_strings(compilation.strings);
         advance();
     }
 
@@ -50,7 +48,7 @@ struct ParseCtx {
 
     void advance() {
         const delimiter = delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid;
-        current = scan_token(cursor, current.type, delimiter , strings);
+        current = scan_token(cursor, current.type, delimiter, compilation.strings);
         current.span.start += span_offset;
     }
 
@@ -58,22 +56,6 @@ struct ParseCtx {
         auto token = current;
         advance();
         return token;
-    }
-
-    void error(Args...)(SyntaxError.Code error_code, string message, Args args) {
-        errors ~= SyntaxError(
-            error_code,
-            current.span.start,
-            tprint(message, args).idup
-        );
-    }
-
-    void warning(Args...)(SyntaxWarning.Code warn_code, string message, Args args) {
-        warnings ~= SyntaxWarning(
-            warn_code,
-            current.span.start,
-            tprint(message, args).idup
-        );
     }
 
     bool skip_token(Token.Type type) {
@@ -102,19 +84,26 @@ AstNode parse_module(ref ParseCtx ctx) {
     ctx.delimiter_stack.insertBack(Token.Semicolon);
 
     AstNode[] statements;
-    while (!ctx.done && ctx.errors.length < max_errors)
+    while (!ctx.done && ctx.compilation.errors.length < max_errors)
         statements ~= parse_statement(ctx);
 
     ctx.delimiter_stack.removeBack();
 
-    if (ctx.errors.length == max_errors && !ctx.done) {
-        ctx.warning(
-            SyntaxWarning.TooManyErrors,
+    if (ctx.compilation.errors.length == max_errors && !ctx.done) {
+        ctx.compilation.warning(
+            ArcWarning.TooManyErrors,
+            ctx.current.span,
             "Too many errors were detected in this file. Aborting parse in case of degenerate error."
         );
     }
 
-    return new AstNode(AstNode.Module, Span(ctx.span_offset, cast(uint) ctx.cursor.text.length), statements);
+    auto span = statements.length > 0 ?
+                    (statements.length > 1 ?
+                        statements[0].span.merge(statements[$-1].span) :
+                        statements[0].span) :
+                    Span();
+
+    return new AstNode(AstNode.Module, span, statements);
 }
 
 AstNode parse_statement(ref ParseCtx ctx) {
@@ -124,8 +113,9 @@ AstNode parse_statement(ref ParseCtx ctx) {
             return parse_if(ctx);
         
         case Token.Else:
-            ctx.error(
-                SyntaxError.UnboundElse,
+            ctx.compilation.error(
+                ArcError.UnboundElse,
+                ctx.current.span,
                 "An else-clause must be bound to an if statement."
             );
             const token_span = ctx.take_token().span;
@@ -154,8 +144,9 @@ AstNode parse_statement(ref ParseCtx ctx) {
             break;
         
         case Token.Semicolon:
-            ctx.warning(
-                SyntaxWarning.LonelySemicolon,
+            ctx.compilation.warning(
+                ArcWarning.LonelySemicolon,
+                ctx.current.span,
                 "A semicolon should not be used to indicate an empty statement. Use an empty block instead ({})."
             );
             return new AstNode(AstNode.Block, ctx.take_token().span);
@@ -173,8 +164,9 @@ AstNode parse_statement(ref ParseCtx ctx) {
         result = new AstNode(AstNode.Invalid, to_free.span);
         ctx.free(to_free);
 
-        ctx.error(
-            SyntaxError.TokenExpectMismatch,
+        ctx.compilation.error(
+            ArcError.TokenExpectMismatch,
+            ctx.current.span,
             "%ss must terminate in a semicolon.",
             result.type
         );
@@ -219,8 +211,9 @@ AstNode parse_def(ref ParseCtx ctx) {
     auto name = parse_key_type!(AstNode.Name)(ctx);
 
     if (!ctx.skip_token(Token.Colon)) {
-        ctx.error(
-            SyntaxError.TokenExpectMismatch,
+        ctx.compilation.error(
+            ArcError.TokenExpectMismatch,
+            ctx.current.span,
             "A definition must have a type specifier (:)."
         );
 
@@ -316,8 +309,9 @@ struct Infix { Precedence precedence; InfixParseFn parselet; }
 
 immutable prefix_parselets = () {
     PrefixParseFn[256] parselets = (ref ctx) {
-        ctx.error(
-            SyntaxError.TokenNotAnExpression,
+        ctx.compilation.error(
+            ArcError.TokenNotAnExpression,
+            ctx.current.span,
             "The token \"%s\" cannot start an expression.",
             ctx.current.type
         );
@@ -326,8 +320,9 @@ immutable prefix_parselets = () {
     };
 
     parselets[Token.Done]       = (ref ctx) {
-        ctx.error(
-            SyntaxError.UnexpectedEndOfFile,
+        ctx.compilation.error(
+            ArcError.UnexpectedEndOfFile,
+            ctx.current.span,
             "Unexpected end of file while parsing source."
         );
 
@@ -430,15 +425,16 @@ AstNode parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)
         ctx.free(members);
         
         bool has_eof_error;
-        foreach (error; ctx.errors)
-            if (error.code == SyntaxError.UnexpectedEndOfFile) {
+        foreach (error; ctx.compilation.errors)
+            if (error.code == ArcError.UnexpectedEndOfFile) {
                 has_eof_error = true;
                 break;
             }
 
         if (!has_eof_error)
-            ctx.error(
-                SyntaxError.UnexpectedEndOfFile,
+            ctx.compilation.error(
+                ArcError.UnexpectedEndOfFile,
+                ctx.current.span,
                 "Unexpected end of file while parsing source."
             );
 
@@ -492,8 +488,9 @@ AstNode parse_block(ref ParseCtx ctx) {
     else {
         assert(close_token.type == Token.Done);
 
-        ctx.error(
-            SyntaxError.UnexpectedEndOfFile,
+        ctx.compilation.error(
+            ArcError.UnexpectedEndOfFile,
+            ctx.current.span,
             "Unexpected end of file while parsing source."
         );
 
@@ -563,8 +560,9 @@ PrefixParseFn get_type_prefix_parselet(Token.Type t) {
 
         default:
             return (ref ctx) {
-                ctx.error(
-                    SyntaxError.TokenNotAnExpression,
+                ctx.compilation.error(
+                    ArcError.TokenNotAnExpression,
+                    ctx.current.span,
                     "The token \"%s\" cannot start an expression.",
                     ctx.current.type
                 );
@@ -627,37 +625,4 @@ AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
         ctx.free(lhs, return_type);
         return new AstNode(AstNode.Invalid, span);
     }
-}
-
-// ----------------------------------------------------------------------
-//   _    _  _    _  _  _  _    _            
-//  | |  | || |  (_)| |(_)| |  (_)           
-//  | |  | || |_  _ | | _ | |_  _   ___  ___ 
-//  | |  | || __|| || || || __|| | / _ \/ __|
-//  | |__| || |_ | || || || |_ | ||  __/\__ \
-//   \____/  \__||_||_||_| \__||_| \___||___/
-// ----------------------------------------------------------------------
-
-const(char[]) tprint(Args...)(string message, Args args) {
-    import std.format: formattedWrite;
-
-    static struct Buffer {
-        char[] data;
-        size_t length;
-
-        void put(char c) {
-            assert(length < data.length);
-            data[length] = c;
-            length++;
-        }
-
-        const(char[]) text() const { return data[0 .. length]; }
-    }
-
-    static char[4096] temp_buffer;
-
-    auto buffer = Buffer(temp_buffer);
-    formattedWrite(buffer, message, args);
-    
-    return buffer.text();
 }

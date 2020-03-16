@@ -22,46 +22,31 @@ struct CompilerOptions {
  *
  * To clean up all the memory of a compilation, just destroy the context.
  */
-struct CompilerContext {
-    import arc.stringtable: StringTable;
-    import arc.source: SourceMap, Source;
+struct Compiler {
+    import arc.compilation: Compilation;
 
-    StringTable strings;
-    SourceMap sources;
-    CompilerOptions options;
+    void execute(CompilerOptions options) {
+        import arc.source: Source;
 
-    this(CompilerOptions options) {
-        this.options = options;
-        sources = new SourceMap();
-        strings = new StringTable();
-    }
+        auto compilation = new Compilation();
 
-    void execute() {
         Source first_source;
         switch (options.execution_mode) with (ExecutionMode) {
             case Immediate:
                 import std.stdio: readln, write;
                 write(":>> ");
-                first_source = sources.put("command line", readln());
+                first_source = compilation.sources.put("command line", readln());
                 break;
             case File:
-                first_source = sources.put(options.first_file, load_file(options.first_file));
+                first_source = compilation.sources.put(options.first_file, load_file(options.first_file));
                 break;
             default:
         }
 
-        compile(first_source);
-    }
-
-    void compile(Source source) {
-        auto syntax = parse(source);
-
-        if (syntax is null)
-            return;
+        auto syntax = compilation.parse(first_source);
 
         if (options.final_pass == TerminalCompilerPass.parse) {
-            dump_ast(syntax);
-            return;
+            dump_ast(compilation, syntax);
         }
     }
 
@@ -72,49 +57,11 @@ struct CompilerContext {
     }
 
     import arc.syntax.ast: AstNode;
-    AstNode parse(Source source) {
-        import std.stdio: writefln;
-        import arc.syntax.parser: ParseCtx, parse_module;
-
-        auto ctx = ParseCtx(source.text, source.start_offset, strings);
-        auto result = parse_module(ctx);
-
-        if (ctx.warnings.length > 0) {
-            foreach (warning; ctx.warnings) {
-                const coords = source.get_loc(warning.location);
-                writefln(
-                    "Warning:\n%s\nAt %s line %s column %s\n",
-                    warning.message,
-                    source.name,
-                    coords.line,
-                    coords.column
-                );
-            }
-        }
-
-        if (ctx.errors.length > 0) {
-            foreach (error; ctx.errors) {
-                const coords = source.get_loc(error.location);
-                writefln(
-                    "Error:\n%s\nAt %s line %s column %s\n",
-                    error.message,
-                    source.name,
-                    coords.line,
-                    coords.column
-                );
-            }
-
-            return null;
-        }
-
-        return result;
-    }
-
-    void dump_ast(AstNode root) {
+    void dump_ast(Compilation compilation, AstNode root) {
         import std.stdio: writeln;
         import arc.output.ast_printer: AstPrinter;
 
-        auto printer = new AstPrinter(sources);
+        auto printer = new AstPrinter(compilation.sources);
         printer.print(root);
         writeln(printer.data);
     }

@@ -31,8 +31,8 @@ void do_cli(string[] args) {
     if ((is_file_mode && args.length > 1) || (!is_file_mode && args.length == 1)) {
         options.first_file = is_file_mode ? args[1] : "";
 
-        auto ctx = CompilerContext(options);
-        ctx.execute();
+        auto ctx = Compiler();
+        ctx.execute(options);
         return;
     }
 

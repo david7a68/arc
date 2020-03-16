@@ -195,12 +195,12 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
         case '}':
         case ',':
         case ';':
+            return make_token(cast(Token.Type) c);
         case '+':
         case '*':
         case '^':
-            return make_token(cast(Token.Type) c);
         case '&':
-            return make_op_token(Token.Ampersand);
+            return make_op_token(cast(Token.Type) c);
         case '-':
             if (!cursor.done && *cursor.current == '>')
                 return make_token(Token.Rarrow, 1);

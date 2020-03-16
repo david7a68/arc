@@ -1,25 +1,25 @@
 module arc.syntax.tests.parser;
 
 import arc.syntax.parser;
-import arc.syntax.lexer: Token;
+import arc.syntax.lexer: Token, initialize_token_strings;
 import arc.syntax.ast: AstNode;
-import arc.syntax.reporting: SyntaxError;
-import arc.stringtable: StringTable;
+import arc.reporting: ArcError;
+import arc.compilation: Compilation;
 
 struct ParseResult {
     AstNode tree;
-    SyntaxError[] errors;
+    ArcError[] errors;
 }
 
 /// Parses a statement.
 /// Info: Don't forget, expressions are statements too!
 auto parse(string category)(const(char)[] text) {
-    auto p = ParseCtx(text, 0, new StringTable);
+    auto p = ParseCtx(new Compilation(), text, 0);
 
     static if (category == "statement")
         p.delimiter_stack.insertBack(Token.Semicolon);
 
-    mixin("return ParseResult(parse_" ~ category ~ "(p), p.errors);");
+    mixin("return ParseResult(parse_" ~ category ~ "(p), p.compilation.errors);");
 }
 
 bool type_equivalent(AstNode tree, AstNode.Type[] types...) {
@@ -59,7 +59,7 @@ bool check_types(ParseResult result, AstNode.Type[] types...) {
     return result.errors.length == 0 && type_equivalent(result.tree, types);
 }
 
-bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[] types...) {
+bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] types...) {
     bool has_error;
     foreach (error; result.errors)
         if (error.code == error_code) {
@@ -179,7 +179,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 }
 
 @("parse invalid statement") unittest {
-    assert(check_error("else {}".parse!"statement", SyntaxError.UnboundElse, AstNode.Invalid));
+    assert(check_error("else {}".parse!"statement", ArcError.UnboundElse, AstNode.Invalid));
 }
 
 // ----------------------------------------------------------------------
@@ -217,7 +217,7 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 @("parse binary") unittest {
     assert(check_types("a + 1".parse!"expression", AstNode.Add, AstNode.Name, AstNode.Integer));
 
-    assert(check_error("a++".parse!"expression", SyntaxError.TokenNotAnExpression, AstNode.Invalid));
+    assert(check_error("a++".parse!"expression", ArcError.TokenNotAnExpression, AstNode.Invalid));
 
     assert(check_types("foo()".parse!"expression", AstNode.Call, AstNode.Name, AstNode.List));
 
@@ -291,11 +291,11 @@ bool check_error(ParseResult result, SyntaxError.Code error_code, AstNode.Type[]
 
 @("parse bad_list") unittest {
     with (AstNode.Type) {
-        assert(check_error("(".parse!"expression", SyntaxError.UnexpectedEndOfFile, Invalid));
-        assert(check_error("(a=".parse!"expression", SyntaxError.UnexpectedEndOfFile, Invalid));
-        assert(check_error("(a=)".parse!"expression", SyntaxError.TokenNotAnExpression, List, Invalid));
-        assert(check_error("(a:=2)".parse!"expression", SyntaxError.TokenNotAnExpression, List, Invalid));
-        assert(check_error("(a++, 2)".parse!"expression", SyntaxError.TokenNotAnExpression,
+        assert(check_error("(".parse!"expression", ArcError.UnexpectedEndOfFile, Invalid));
+        assert(check_error("(a=".parse!"expression", ArcError.UnexpectedEndOfFile, Invalid));
+        assert(check_error("(a=)".parse!"expression", ArcError.TokenNotAnExpression, List, Invalid));
+        assert(check_error("(a:=2)".parse!"expression", ArcError.TokenNotAnExpression, List, Invalid));
+        assert(check_error("(a++, 2)".parse!"expression", ArcError.TokenNotAnExpression,
             List,
                 Invalid,
                 ListMember,

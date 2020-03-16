@@ -1,6 +1,6 @@
-module arc.syntax.reporting;
+module arc.reporting;
 
-struct SyntaxError {
+struct ArcError {
     enum Code {
         NoError,
         UnexpectedEndOfFile,
@@ -17,7 +17,7 @@ struct SyntaxError {
     string message;
 }
 
-struct SyntaxWarning {
+struct ArcWarning {
     enum Code {
         /// A semicolon-only statement should be replaced with an empty block ({})
         LonelySemicolon,
