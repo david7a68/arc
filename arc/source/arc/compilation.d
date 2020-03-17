@@ -48,41 +48,67 @@ final class Compilation {
     }
 
     AstNode parse(Source source) {
-        import std.stdio: writefln;
         import arc.syntax.parser: ParseCtx, parse_module;
 
         auto ctx = ParseCtx(this, source.text, source.start_offset);
         auto result = parse_module(ctx);
 
+        const had_error = report_results(source);
+        if (had_error)
+            return null;
+
+        get_module_declarations(result);
+
+        return result;
+    }
+
+    void get_module_declarations(AstNode syntax) {
+        import arc.semantic.symbol: Symbol, ModuleScope, get_module_declarations;
+
+        auto decls = get_module_declarations(syntax);
+
+        foreach (symbol; decls.symbols.byValue()) {
+            import std.stdio: writefln;
+
+            writefln("%s %s", symbol.kind, strings.lookup(symbol.name));
+        }
+    }
+
+    bool report_results(Source current_source) {
+        import std.stdio: writefln;
+
         if (warnings.length > 0) {
             foreach (warning; warnings) {
-                const coords = source.get_loc(warning.location);
+                const coords = current_source.get_loc(warning.location);
                 writefln(
                     "Warning:\n%s\nAt %s line %s column %s\n",
                     warning.message,
-                    source.name,
+                    current_source.name,
                     coords.line,
                     coords.column
                 );
             }
+
+            warnings = [];
         }
 
-        if (errors.length > 0) {
+        const had_error = errors.length > 0;
+        if (had_error) {
             foreach (error; errors) {
-                const coords = source.get_loc(error.location);
+                const coords = current_source.get_loc(error.location);
                 writefln(
                     "Error:\n%s\nAt %s line %s column %s\n",
                     error.message,
-                    source.name,
+                    current_source.name,
                     coords.line,
                     coords.column
                 );
             }
 
-            return null;
+            errors = [];
         }
 
-        return result;
+        return had_error;
     }
 }
 
