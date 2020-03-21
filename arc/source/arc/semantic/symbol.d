@@ -1,14 +1,14 @@
 module arc.semantic.symbol;
 
+import arc.hash: Key;
 import arc.syntax.ast: AstNode;
+import arc.semantic.type: Type;
 
 struct ModuleScope {
-    Symbol[AstNode] symbols;
+    Symbol*[AstNode] symbols;
 }
 
 struct Symbol {
-    import arc.hash: Key;
-
     enum Kind {
         DefType,
         DefFunction,
@@ -20,6 +20,7 @@ struct Symbol {
 
     Kind kind;
     Key name;
+    Type* type;
 }
 
 ModuleScope get_module_declarations(AstNode root) {
@@ -33,22 +34,22 @@ ModuleScope get_module_declarations(AstNode root) {
                 auto init = decl.get_children()[2];
 
                 if (init.type == Function) {
-                    definitions.symbols[decl] = Symbol(Symbol.DefFunction, name);
+                    definitions.symbols[decl] = new Symbol(Symbol.DefFunction, name);
                     continue; // to the loop
                 }
 
                 if (init.type != None) {
-                    definitions.symbols[decl] = Symbol(Symbol.DefConstant, name);
+                    definitions.symbols[decl] = new Symbol(Symbol.DefConstant, name);
                     continue; // to the loop
                 }
 
                 assert(init.type == None);
                 assert(type.type != InferredType);
-                definitions.symbols[decl] = Symbol(Symbol.DefType, name);
+                definitions.symbols[decl] = new Symbol(Symbol.DefType, name);
                 continue; // to the loop
 
             case Variable:
-                definitions.symbols[decl] = Symbol(Symbol.NewVariable, decl.get_children()[0].get_key());
+                definitions.symbols[decl] = new Symbol(Symbol.NewVariable, decl.get_children()[0].get_key());
                 continue;
             default:
                 continue;
