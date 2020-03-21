@@ -503,6 +503,19 @@ AstNode parse_function(ref ParseCtx ctx, AstNode params) {
     assert(ctx.current.type == Token.Rarrow);
     ctx.advance();
 
+    // name-only parameters are assumed to be a name for a type that is inferred from context
+    foreach (p; params.get_children()) {
+        auto name = p.get_children()[0];
+        auto init = p.get_children()[2];
+
+        if (name.type == AstNode.None) {
+            assert(init.type == AstNode.Name);
+
+            p.get_children()[0] = init;
+            p.get_children()[2] = AstNode.none;
+        }
+    }
+
     const saved_cursor = ctx.cursor.current;
     const saved_token = ctx.current;
 

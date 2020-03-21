@@ -111,9 +111,9 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
             Function,
                 List,
                     ListMember,
-                        None,
-                        InferredType,
                         Name,
+                        InferredType,
+                        None,
                 InferredType,
                 Name
     ));
@@ -323,9 +323,9 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
             Function,
                 List,                   // The parameter list.
                     ListMember,
-                        None,
+                        Name,           // A name-only parameter is assumed to be the name of a parameter whose type is inferred from the context
                         InferredType,   // The type of the member is derived from N (or it fails).
-                        Name,           // 1-element list members are values. In this case, it refers to a variable
+                        None,
                                         // from an enclosing scope.
                     ListMember,
                         Name,           // The name of the variable of the type `c`.
