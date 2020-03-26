@@ -19,7 +19,7 @@ void do_cli(string[] args) {
     auto help = getopt(args,
         "i|immediate", &handle_mode,
         "f|file", &handle_mode,
-        "p|pass", &options.final_pass,
+        "p|print", &options.passes_to_print,
     );
     
     if (help.helpWanted) {

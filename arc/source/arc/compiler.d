@@ -5,14 +5,15 @@ enum ExecutionMode: ubyte {
     Immediate,
 }
 
-enum TerminalCompilerPass: ubyte {
+enum CompilerPass: ubyte {
     all,
     parse,
+    scopes,
 }
 
 struct CompilerOptions {
     ExecutionMode execution_mode;
-    TerminalCompilerPass final_pass;
+    CompilerPass[] passes_to_print;
     const(char)[] first_file;
 }
 
@@ -26,6 +27,7 @@ struct Compiler {
     import arc.compilation: Compilation;
 
     void execute(CompilerOptions options) {
+        import std.algorithm: canFind;
         import arc.source: Source;
 
         auto compilation = new Compilation();
@@ -45,9 +47,13 @@ struct Compiler {
 
         auto syntax = compilation.parse(first_source);
 
-        if (options.final_pass == TerminalCompilerPass.parse) {
+        if (options.passes_to_print.canFind(CompilerPass.parse))
             dump_ast(compilation, syntax);
-        }
+
+        auto scopes = compilation.build_scope_tree(syntax);
+
+        if (options.passes_to_print.canFind(CompilerPass.scopes))
+            dump_scope_tree(compilation, scopes);
     }
 
     const(char)[] load_file(const(char)[] filename) {
@@ -64,5 +70,20 @@ struct Compiler {
         auto printer = new AstPrinter(compilation.sources);
         printer.print(root);
         writeln(printer.data);
+    }
+
+    import arc.semantic.scope_tree: ScopeTree;
+    void dump_scope_tree(Compilation compilation, ScopeTree tree) {
+        import std.stdio: writeln, writefln;
+        import arc.semantic.symbol: Symbol;
+
+        writeln("======== Symbols ========");
+        foreach (symbol; tree.symbols) {
+            // if (symbol.kind == Symbol.Reference)
+            //     writefln("%s %s %s", symbol.kind, compilation.strings.lookup(symbol.name), symbol.referred_symbol);
+            // else
+                writefln("%s %s", symbol.kind, compilation.strings.lookup(symbol.name));
+        }
+        writeln();
     }
 }

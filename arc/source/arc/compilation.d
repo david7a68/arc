@@ -19,6 +19,7 @@ final class Compilation {
     import arc.source: SourceMap, Source, Span;
     import arc.reporting: ArcError, ArcWarning;
     import arc.syntax.ast: AstNode;
+    import arc.semantic.scope_tree: ScopeTree;
 
     SourceMap sources;
     StringTable strings;
@@ -57,25 +58,16 @@ final class Compilation {
         if (had_error)
             return null;
 
-        build_scope_tree(result);
-
         return result;
     }
 
-    void build_scope_tree(AstNode syntax) {
+    ScopeTree build_scope_tree(AstNode syntax) {
         import arc.semantic.scope_tree: ScopeTree, ScopeTreeBuilder, collect_declarations;
 
         auto builder = ScopeTreeBuilder.init();
         collect_declarations(builder, syntax);
 
-        auto tree = builder.scope_tree;
-
-        import std.stdio: writeln, writefln;
-        writeln("======== Symbols ========");
-        foreach (symbol; tree.symbols.byValue()) {
-            writefln("%s %s", symbol.kind, strings.lookup(symbol.name));
-        }
-        writeln();
+        return builder.scope_tree;
     }
 
     bool report_results(Source current_source) {
