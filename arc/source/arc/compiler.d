@@ -63,7 +63,7 @@ struct Compiler {
     }
 
     import arc.syntax.ast: AstNode;
-    void dump_ast(Compilation compilation, AstNode root) {
+    void dump_ast(Compilation compilation, AstNode* root) {
         import std.stdio: writeln;
         import arc.output.ast_printer: AstPrinter;
 

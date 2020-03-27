@@ -3,7 +3,7 @@ module arc.syntax.ast;
 import arc.hash: Key;
 import arc.source: Span;
 
-final class AstNode {
+struct AstNode {
     enum Type : ubyte {
         Invalid,
         None,
@@ -58,8 +58,8 @@ final class AstNode {
 
     union {
         Key _value_key;
-        AstNode _child;
-        AstNode[] _children;
+        AstNode* _child;
+        AstNode*[] _children;
     }
 
     this(Type type, Span span) {
@@ -72,12 +72,12 @@ final class AstNode {
         _value_key = key;
     }
 
-    this(Type type, Span span, AstNode child) {
+    this(Type type, Span span, AstNode* child) {
         this(type, span);
         _child = child;
     }
 
-    this(Type type, Span span, AstNode[] children) {
+    this(Type type, Span span, AstNode*[] children) {
         this(type, span);
         _children = children;
     }
@@ -93,7 +93,7 @@ final class AstNode {
         }
     }
 
-    AstNode[] get_children() {
+    AstNode*[] get_children() {
         switch (type) with (Type) {
         case None:
         case Name:
@@ -116,8 +116,9 @@ final class AstNode {
         }
     }
 
-    static AstNode none;
-    static AstNode inferred_type;
+    // These are pointers because we aren't copying these all over the place
+    static AstNode* none;
+    static AstNode* inferred_type;
 
     bool is_marker() {
         return type == Type.None || type == Type.InferredType;

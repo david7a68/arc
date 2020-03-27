@@ -58,7 +58,7 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode n, string prefix = "") {
+    void print(AstNode* n, string prefix = "") {
         void put_length() {
             str.put(" (");
             str.put(n.get_children().length.to!string);
@@ -108,14 +108,14 @@ struct AstPrinter {
         }
     }
 
-    void write_children(AstNode n, bool numbered = false) {
+    void write_children(AstNode* n, bool numbered = false) {
         str.put("\n");
         foreach (i, child; n.get_children()) {
             write_child(child, i + 1 == n.get_children().length, numbered ? ("#" ~ i.to!string ~ " ") : "");
         }
     }
 
-    void write_named_children(AstNode n, string[] names...) {
+    void write_named_children(AstNode* n, string[] names...) {
         assert(n.get_children().length == names.length);
         
         str.put("\n");
@@ -124,7 +124,7 @@ struct AstPrinter {
         }
     }
 
-    void write_child(AstNode n, bool is_last_child, string prefix) {
+    void write_child(AstNode* n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 
@@ -142,7 +142,7 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SourceMap sources, AstNode node) {
+const(char)[] repr(SourceMap sources, AstNode* node) {
     import std.conv: to;
 
     switch (node.type) with (AstNode.Type) {

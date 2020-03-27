@@ -1,6 +1,7 @@
 module arc.source;
 
 struct SourceLoc {
+    Source* source;
     uint line;
     uint line_position;
     uint column;
@@ -75,7 +76,7 @@ struct Source {
             column++;
         }
 
-        return SourceLoc(line_num, line_pos, column);
+        return SourceLoc(&this, line_num, line_pos, column);
     }
 
     bool opBinaryRight(string op = "in")(Span span) {
@@ -115,9 +116,9 @@ class SourceMap {
         return src;
     }
 
-    const(char)[] get_spanned_text(Span span) {
+    Source get_source(Span span) {
         if (span == Span())
-            return [];
+            return Source();
 
         auto source = () {
             foreach (src; sources)
@@ -126,6 +127,12 @@ class SourceMap {
             assert(false);
         } ();
 
+        return source;
+    }
+
+    const(char)[] get_spanned_text(Span span) {
+        auto source = get_source(span);
+        
         const start = span.start - source.start_offset;
         return source.text[start .. start + span.length];
     }

@@ -6,12 +6,12 @@ import arc.syntax.ast: AstNode;
 struct Scope {
     Scope* outer;
     Scope[] inner;
-    Symbol*[AstNode] symbols;
+    Symbol*[AstNode*] symbols;
 }
 
 struct ScopeTree {
     Scope* root_scope;
-    Symbol[AstNode] symbols;
+    Symbol[AstNode*] symbols;
 }
 
 struct ScopeTreeBuilder {
@@ -34,7 +34,7 @@ struct ScopeTreeBuilder {
     }
 }
 
-void collect_declarations(ScopeTreeBuilder *builder, AstNode root) {
+void collect_declarations(ScopeTreeBuilder *builder, AstNode* root) {
     foreach (node; root.get_children()) {
         switch (node.type) with (AstNode.Type) {
             case Define:

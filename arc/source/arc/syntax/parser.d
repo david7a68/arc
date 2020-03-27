@@ -5,6 +5,8 @@ import arc.syntax.lexer: Token, matches_one;
 import arc.source: Span, merge, merge_all;
 import arc.reporting: ArcError, ArcWarning;
 
+enum max_errors = 20;
+
 enum Precedence {
     None,
     Assign,
@@ -18,54 +20,25 @@ enum Precedence {
     Primary
 }
 
-enum max_errors = 20;
-
 struct ParseCtx {
-    import std.container.array: Array;
-    import arc.compilation: Compilation;
-    import arc.stringtable: StringTable;
-    import arc.syntax.lexer: Cursor, scan_token, initialize_token_strings;
+    import arc.reporting: Reporter;
+    import arc.syntax.lexer: Lexer;
 
-    Cursor cursor;
-    uint span_offset;
+    Lexer tokens;
+    Reporter* reporter;
 
-    Token current;
+    this(Lexer tokens, Reporter* reporter) {
+        this.tokens = tokens;
+        this.tokens.advance();
 
-    Compilation compilation;
-    Array!(Token.Type) delimiter_stack;
-
-    this(Compilation compilation, const(char)[] source, uint span_offset) {
-        cursor = Cursor(source);
-        this.span_offset = span_offset;
-        this.compilation = compilation;
-        initialize_token_strings(compilation.strings);
-        advance();
+        this.reporter = reporter;
     }
 
     bool done() {
-        return current.type == Token.Done;
+        return tokens.done;
     }
 
-    void advance() {
-        const delimiter = delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid;
-        current = scan_token(cursor, current.type, delimiter, compilation.strings);
-        current.span.start += span_offset;
-    }
-
-    Token take_token() {
-        auto token = current;
-        advance();
-        return token;
-    }
-
-    bool skip_token(Token.Type type) {
-        if (current.type != type)
-            return false;
-        advance();
-        return true;
-    }
-
-    void free(AstNode[] nodes...) {
+    void free(AstNode*[] nodes...) {
         import std.algorithm: filter;
 
         foreach (node; nodes.filter!(a => !a.is_marker)) {
@@ -75,24 +48,25 @@ struct ParseCtx {
     }
 
     /// Constructs an array from a comma-separated list of nodes
-    AstNode[] node_array(AstNode[] nodes...) {
+    AstNode*[] node_array(AstNode*[] nodes...) {
         return nodes.dup;
     }
 }
 
-AstNode parse_module(ref ParseCtx ctx) {
-    ctx.delimiter_stack.insertBack(Token.Semicolon);
 
-    AstNode[] statements;
-    while (!ctx.done && ctx.compilation.errors.length < max_errors)
+AstNode* parse_module(ref ParseCtx ctx) {
+    ctx.tokens.push_delimiter(Token.Semicolon);
+
+    AstNode*[] statements;
+    while (!ctx.done && ctx.reporter.errors.length < max_errors)
         statements ~= parse_statement(ctx);
 
-    ctx.delimiter_stack.removeBack();
+    ctx.tokens.pop_delimiter();
 
-    if (ctx.compilation.errors.length == max_errors && !ctx.done) {
-        ctx.compilation.warning(
+    if (ctx.reporter.errors.length == max_errors && !ctx.done) {
+        ctx.reporter.warn(
             ArcWarning.TooManyErrors,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "Too many errors were detected in this file. Aborting parse in case of degenerate error."
         );
     }
@@ -106,19 +80,19 @@ AstNode parse_module(ref ParseCtx ctx) {
     return new AstNode(AstNode.Module, span, statements);
 }
 
-AstNode parse_statement(ref ParseCtx ctx) {
-    AstNode result;
-    switch (ctx.current.type) {
+AstNode* parse_statement(ref ParseCtx ctx) {
+    AstNode* result;
+    switch (ctx.tokens.current.type) {
         case Token.If:
             return parse_if(ctx);
         
         case Token.Else:
-            ctx.compilation.error(
+            ctx.reporter.error(
                 ArcError.UnboundElse,
-                ctx.current.span,
+                ctx.tokens.current.span,
                 "An else-clause must be bound to an if statement."
             );
-            const token_span = ctx.take_token().span;
+            const token_span = ctx.tokens.take().span;
             auto else_body = parse_else(ctx);
             const span = token_span.merge(else_body.span);
             ctx.free(else_body);
@@ -144,29 +118,31 @@ AstNode parse_statement(ref ParseCtx ctx) {
             break;
         
         case Token.Semicolon:
-            ctx.compilation.warning(
+            ctx.reporter.warn(
                 ArcWarning.LonelySemicolon,
-                ctx.current.span,
+                ctx.tokens.current.span,
                 "A semicolon should not be used to indicate an empty statement. Use an empty block instead ({})."
             );
-            return new AstNode(AstNode.Block, ctx.take_token().span);
+            return new AstNode(AstNode.Block, ctx.tokens.take().span);
 
         default:
             result = parse_expression(ctx);
     }
 
-    if (ctx.current.type == Token.Semicolon)
-        ctx.advance();
-    else if (result.type == AstNode.Invalid)
+    if (ctx.tokens.current.type == Token.Semicolon) {
+        ctx.tokens.advance();
+    }
+    else if (result.type == AstNode.Invalid) {
         return result;
+    }
     else {
-        auto to_free = result;
-        result = new AstNode(AstNode.Invalid, to_free.span);
-        ctx.free(to_free);
+        auto freed_span = result.span;
+        ctx.free(result);
+        result = new AstNode(AstNode.Invalid, freed_span);
 
-        ctx.compilation.error(
+        ctx.reporter.error(
             ArcError.TokenExpectMismatch,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "%ss must terminate in a semicolon.",
             result.type
         );
@@ -175,20 +151,20 @@ AstNode parse_statement(ref ParseCtx ctx) {
     return result;
 }
 
-AstNode parse_expression(ref ParseCtx ctx, Precedence precedence = Precedence.Assign) {
-    auto expression = prefix_parselets[ctx.current.type](ctx);
+AstNode* parse_expression(ref ParseCtx ctx, Precedence precedence = Precedence.Assign) {
+    auto expression = prefix_parselets[ctx.tokens.current.type](ctx);
 
-    while (precedence <= infix_parselets[ctx.current.type].precedence)
-        expression = infix_parselets[ctx.current.type].parselet(ctx, expression);
+    while (precedence <= infix_parselets[ctx.tokens.current.type].precedence)
+        expression = infix_parselets[ctx.tokens.current.type].parselet(ctx, expression);
 
     return expression;
 }
 
-AstNode parse_type(ref ParseCtx ctx, Precedence precedence = Precedence.Call) {
-    auto expression = get_type_prefix_parselet(ctx.current.type)(ctx);
+AstNode* parse_type(ref ParseCtx ctx, Precedence precedence = Precedence.Call) {
+    auto expression = get_type_prefix_parselet(ctx.tokens.current.type)(ctx);
 
-    while (precedence <= get_type_infix_parselet(ctx.current.type).precedence)
-        expression = get_type_infix_parselet(ctx.current.type).parselet(ctx, expression);
+    while (precedence <= get_type_infix_parselet(ctx.tokens.current.type).precedence)
+        expression = get_type_infix_parselet(ctx.tokens.current.type).parselet(ctx, expression);
 
     return expression;
 }
@@ -205,15 +181,15 @@ private:
 //
 // ----------------------------------------------------------------------
 
-AstNode parse_def(ref ParseCtx ctx) {
-    const start_span = ctx.take_token().span;
+AstNode* parse_def(ref ParseCtx ctx) {
+    const start_span = ctx.tokens.take().span;
 
     auto name = parse_key_type!(AstNode.Name)(ctx);
 
-    if (!ctx.skip_token(Token.Colon)) {
-        ctx.compilation.error(
+    if (!ctx.tokens.skip(Token.Colon)) {
+        ctx.reporter.error(
             ArcError.TokenExpectMismatch,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "A definition must have a type specifier (:)."
         );
 
@@ -222,11 +198,11 @@ AstNode parse_def(ref ParseCtx ctx) {
         return result;
     }
 
-    auto type = ctx.current.type != Token.Equals ?
+    auto type = ctx.tokens.current.type != Token.Equals ?
                 parse_type(ctx) :
                 AstNode.inferred_type;
 
-    auto value = ctx.skip_token(Token.Equals) ?
+    auto value = ctx.tokens.skip(Token.Equals) ?
                  parse_expression(ctx) :
                  AstNode.none;
 
@@ -234,16 +210,16 @@ AstNode parse_def(ref ParseCtx ctx) {
     return new AstNode(AstNode.Define, span, ctx.node_array(name, type, value));
 }
 
-AstNode parse_var(ref ParseCtx ctx, AstNode lhs) {
-    ctx.advance();
+AstNode* parse_var(ref ParseCtx ctx, AstNode* lhs) {
+    ctx.tokens.advance();
 
     assert(lhs.type == AstNode.Name);
 
-    auto type = ctx.current.type != Token.Equals ?
+    auto type = ctx.tokens.current.type != Token.Equals ?
                 parse_type(ctx) :
                 AstNode.inferred_type;
 
-    auto value = ctx.skip_token(Token.Equals) ?
+    auto value = ctx.tokens.skip(Token.Equals) ?
                  parse_expression(ctx) : 
                  AstNode.none;
 
@@ -251,22 +227,22 @@ AstNode parse_var(ref ParseCtx ctx, AstNode lhs) {
     return new AstNode(AstNode.Variable, span, ctx.node_array(lhs, type, value));
 }
 
-AstNode parse_loop(ref ParseCtx ctx) {
-    auto start_span = ctx.take_token().span;
+AstNode* parse_loop(ref ParseCtx ctx) {
+    auto start_span = ctx.tokens.take().span;
 
     auto body = parse_statement(ctx);
 
     return new AstNode(AstNode.Loop, start_span.merge(body.span), body);
 }
 
-AstNode parse_if(ref ParseCtx ctx) {
-    const start_span = ctx.take_token().span;
+AstNode* parse_if(ref ParseCtx ctx) {
+    const start_span = ctx.tokens.take().span;
 
     auto condition = parse_expression(ctx);
 
     auto body = parse_statement(ctx);
     
-    auto else_branch = ctx.skip_token(Token.Else) ?
+    auto else_branch = ctx.tokens.skip(Token.Else) ?
                        parse_else(ctx) :
                        AstNode.none;
     
@@ -276,11 +252,11 @@ AstNode parse_if(ref ParseCtx ctx) {
 
 alias parse_else = parse_statement;
 
-AstNode parse_escape(AstNode.Type Type, Token.Type ttype, bool with_value)(ref ParseCtx ctx) {
-    auto start_span = ctx.take_token().span;
+AstNode* parse_escape(AstNode.Type Type, Token.Type ttype, bool with_value)(ref ParseCtx ctx) {
+    auto start_span = ctx.tokens.take().span;
 
     static if (with_value) {
-        auto value = prefix_parselets[ctx.current.type] != prefix_parselets[Token.Invalid] ?
+        auto value = prefix_parselets[ctx.tokens.current.type] != prefix_parselets[Token.Invalid] ?
                      parse_expression(ctx) :
                      AstNode.none;
 
@@ -302,31 +278,31 @@ AstNode parse_escape(AstNode.Type Type, Token.Type ttype, bool with_value)(ref P
 //                |_|                                               
 // ----------------------------------------------------------------------
 
-alias PrefixParseFn = AstNode function(ref ParseCtx ctx);
-alias InfixParseFn = AstNode function(ref ParseCtx ctx, AstNode lhs);
+alias PrefixParseFn = AstNode* function(ref ParseCtx ctx);
+alias InfixParseFn = AstNode* function(ref ParseCtx ctx, AstNode* lhs);
 
 struct Infix { Precedence precedence; InfixParseFn parselet; }
 
 immutable prefix_parselets = () {
     PrefixParseFn[256] parselets = (ref ctx) {
-        ctx.compilation.error(
+        ctx.reporter.error(
             ArcError.TokenNotAnExpression,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "The token \"%s\" cannot start an expression.",
-            ctx.current.type
+            ctx.tokens.current.type
         );
 
-        return new AstNode(AstNode.Invalid, ctx.current.span);
+        return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
     };
 
     parselets[Token.Done]       = (ref ctx) {
-        ctx.compilation.error(
+        ctx.reporter.error(
             ArcError.UnexpectedEndOfFile,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "Unexpected end of file while parsing source."
         );
 
-        return new AstNode(AstNode.Invalid, ctx.current.span);
+        return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
     };
 
     parselets[Token.Name]       = &parse_key_type!(AstNode.Name);
@@ -374,20 +350,20 @@ immutable infix_parselets = () {
 } ();
 
 auto parse_key_type(AstNode.Type type)(ref ParseCtx ctx) {
-    auto t = ctx.take_token();
+    auto t = ctx.tokens.take();
     return new AstNode(type, t.span, t.key);
 }
 
 auto parse_unary(AstNode.Type type)(ref ParseCtx ctx) {
-    auto op_span = ctx.take_token().span;
+    auto op_span = ctx.tokens.take().span;
     auto operand = parse_expression(ctx);
 
     return new AstNode(type, op_span.merge(operand.span), operand);
 }
 
-AstNode parse_binary(AstNode.Type type, int precedence, bool skip_operator)(ref ParseCtx ctx, AstNode lhs) {
+AstNode* parse_binary(AstNode.Type type, int precedence, bool skip_operator)(ref ParseCtx ctx, AstNode* lhs) {
     static if (skip_operator)
-        ctx.advance();
+        ctx.tokens.advance();
     
     auto rhs = parse_expression(ctx, cast(Precedence) precedence);
 
@@ -400,21 +376,21 @@ AstNode parse_binary(AstNode.Type type, int precedence, bool skip_operator)(ref 
     }
 }
 
-AstNode parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)(ref ParseCtx ctx) {
-    ctx.delimiter_stack.insertBack(Token.Comma);
-    const open_span = ctx.take_token().span;
+AstNode* parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)(ref ParseCtx ctx) {
+    ctx.tokens.push_delimiter(Token.Comma);
+    const open_span = ctx.tokens.take().span;
 
-    ctx.skip_token(Token.Comma);
+    ctx.tokens.skip(Token.Comma);
 
-    AstNode[] members;
-    while (!ctx.current.type.matches_one(close_delim, Token.Done)) {
+    AstNode*[] members;
+    while (!ctx.tokens.current.type.matches_one(close_delim, Token.Done)) {
         members ~= parse_member(ctx);
 
-        ctx.skip_token(Token.Comma);
+        ctx.tokens.skip(Token.Comma);
     }
 
-    ctx.delimiter_stack.removeBack();
-    const close_token = ctx.take_token();
+    ctx.tokens.pop_delimiter();
+    const close_token = ctx.tokens.take();
 
     if (close_token.type == close_delim) {
         return new AstNode(type, open_span.merge(close_token.span), members);
@@ -425,16 +401,16 @@ AstNode parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)
         ctx.free(members);
         
         bool has_eof_error;
-        foreach (error; ctx.compilation.errors)
+        foreach (error; ctx.reporter.errors)
             if (error.code == ArcError.UnexpectedEndOfFile) {
                 has_eof_error = true;
                 break;
             }
 
         if (!has_eof_error)
-            ctx.compilation.error(
+            ctx.reporter.error(
                 ArcError.UnexpectedEndOfFile,
-                ctx.current.span,
+                ctx.tokens.current.span,
                 "Unexpected end of file while parsing source."
             );
 
@@ -442,19 +418,19 @@ AstNode parse_seq(AstNode.Type type, alias parse_member, Token.Type close_delim)
     }
 }
 
-AstNode parse_list_member(ref ParseCtx ctx) {
+AstNode* parse_list_member(ref ParseCtx ctx) {
     auto first = parse_expression(ctx, Precedence.Logic);
 
     const is_name = first.type == AstNode.Name;
-    auto name = is_name && ctx.current.type.matches_one(Token.Equals, Token.Colon) ?
+    auto name = is_name && ctx.tokens.current.type.matches_one(Token.Equals, Token.Colon) ?
                 first :
                 AstNode.none;
     
-    auto type = ctx.skip_token(Token.Colon) ?
+    auto type = ctx.tokens.skip(Token.Colon) ?
                 parse_type(ctx) :
                 AstNode.inferred_type;
     
-    auto expr = ctx.skip_token(Token.Equals) ?
+    auto expr = ctx.tokens.skip(Token.Equals) ?
                 parse_expression(ctx) :
                 name.type == AstNode.None ?
                     first :
@@ -470,17 +446,17 @@ AstNode parse_list_member(ref ParseCtx ctx) {
     }
 }
 
-AstNode parse_block(ref ParseCtx ctx) {
-    ctx.delimiter_stack.insertBack(Token.Semicolon);
-    const open_span = ctx.take_token().span;
+AstNode* parse_block(ref ParseCtx ctx) {
+    ctx.tokens.push_delimiter(Token.Semicolon);
+    const open_span = ctx.tokens.take().span;
 
-    AstNode[] statements;
-    while (!ctx.current.type.matches_one(Token.Done, Token.Rbrace)) {
+    AstNode*[] statements;
+    while (!ctx.tokens.current.type.matches_one(Token.Done, Token.Rbrace)) {
         statements ~= parse_statement(ctx);
     }
 
-    ctx.delimiter_stack.removeBack();
-    const close_token = ctx.take_token();
+    ctx.tokens.pop_delimiter();
+    const close_token = ctx.tokens.take();
 
     if (close_token.type == Token.Rbrace) {
         return new AstNode(AstNode.Block, open_span.merge(close_token.span), statements);
@@ -488,9 +464,9 @@ AstNode parse_block(ref ParseCtx ctx) {
     else {
         assert(close_token.type == Token.Done);
 
-        ctx.compilation.error(
+        ctx.reporter.error(
             ArcError.UnexpectedEndOfFile,
-            ctx.current.span,
+            ctx.tokens.current.span,
             "Unexpected end of file while parsing source."
         );
 
@@ -499,35 +475,33 @@ AstNode parse_block(ref ParseCtx ctx) {
     }
 }
 
-AstNode parse_function(ref ParseCtx ctx, AstNode params) {
-    assert(ctx.current.type == Token.Rarrow);
-    ctx.advance();
+AstNode* parse_function(ref ParseCtx ctx, AstNode* params) {
+    assert(ctx.tokens.current.type == Token.Rarrow);
+    ctx.tokens.advance();
 
     // name-only parameters are assumed to be a name for a type that is inferred from context
     foreach (p; params.get_children()) {
-        auto name = p.get_children()[0];
-        auto init = p.get_children()[2];
+        const name = p.get_children()[0].type;
+        const init = p.get_children()[2].type;
 
-        if (name.type == AstNode.None) {
-            assert(init.type == AstNode.Name);
+        if (name == AstNode.None) {
+            assert(init == AstNode.Name);
 
-            p.get_children()[0] = init;
+            p.get_children()[0] = p.get_children()[2];
             p.get_children()[2] = AstNode.none;
         }
     }
 
-    const saved_cursor = ctx.cursor.current;
-    const saved_token = ctx.current;
+    auto saved_lexer = ctx.tokens;
 
     // Cleanup: We don't ignore any errors generated during this time...
     auto maybe_body = parse_expression(ctx);
 
-    AstNode ret_type, fun_body;
+    AstNode* ret_type, fun_body;
 
     // the maybe_body is a type expression
-    if (ctx.current.type == Token.Lbrace) {
-        ctx.cursor.current = saved_cursor;
-        ctx.current = saved_token;
+    if (ctx.tokens.current.type == Token.Lbrace) {
+        ctx.tokens = saved_lexer;
         ctx.free(maybe_body);
         ret_type = parse_type(ctx);
         fun_body = parse_expression(ctx);
@@ -573,13 +547,13 @@ PrefixParseFn get_type_prefix_parselet(Token.Type t) {
 
         default:
             return (ref ctx) {
-                ctx.compilation.error(
+                ctx.reporter.error(
                     ArcError.TokenNotAnExpression,
-                    ctx.current.span,
+                    ctx.tokens.current.span,
                     "The token \"%s\" cannot start an expression.",
-                    ctx.current.type
+                    ctx.tokens.current.type
                 );
-                return new AstNode(AstNode.Invalid, ctx.current.span);
+                return new AstNode(AstNode.Invalid, ctx.tokens.current.span);
             };
     }
 }
@@ -602,14 +576,14 @@ Infix get_type_infix_parselet(Token.Type t) {
     }
 }
 
-AstNode parse_type_list_member(ref ParseCtx ctx) {
+AstNode* parse_type_list_member(ref ParseCtx ctx) {
     auto first = parse_type(ctx);
 
-    auto name = first.type == AstNode.Name && ctx.current.type == Token.Colon ?
+    auto name = first.type == AstNode.Name && ctx.tokens.current.type == Token.Colon ?
                 first :
                 AstNode.none;
     
-    auto type = ctx.skip_token(Token.Colon) ?
+    auto type = ctx.tokens.skip(Token.Colon) ?
                 parse_type(ctx) :
                 first ;
 
@@ -623,10 +597,10 @@ AstNode parse_type_list_member(ref ParseCtx ctx) {
     }
 }
 
-AstNode parse_function_type(ref ParseCtx ctx, AstNode lhs) {
+AstNode* parse_function_type(ref ParseCtx ctx, AstNode* lhs) {
     assert(lhs.type == AstNode.TypeList || lhs.type == AstNode.Invalid);
-    assert(ctx.current.type == Token.Rarrow);
-    ctx.advance();
+    assert(ctx.tokens.current.type == Token.Rarrow);
+    ctx.tokens.advance();
 
     auto return_type = parse_type(ctx);
     const span = lhs.span.merge(return_type.span);

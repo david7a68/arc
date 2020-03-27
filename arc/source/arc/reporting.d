@@ -30,3 +30,50 @@ struct ArcWarning {
     uint location;
     string message;
 }
+
+struct Reporter {
+    import arc.source: Span;
+
+    ArcError[] errors;
+    ArcWarning[] warnings;
+
+    void error(Args...)(ArcError.Code error_code, Span span, string message, Args args) {
+        errors ~= ArcError(
+            error_code,
+            span.start,
+            tprint(message, args).idup
+        );
+    }
+
+    void warn(Args...)(ArcWarning.Code warn_code, Span span, string message, Args args) {
+        warnings ~= ArcWarning(
+            warn_code,
+            span.start,
+            tprint(message, args).idup
+        );
+    }
+
+    const(char[]) tprint(Args...)(string message, Args args) {
+        import std.format: formattedWrite;
+
+        static struct Buffer {
+            char[] data;
+            size_t length;
+
+            void put(char c) {
+                assert(length < data.length);
+                data[length] = c;
+                length++;
+            }
+
+            const(char[]) text() const { return data[0 .. length]; }
+        }
+
+        static char[4096] temp_buffer;
+
+        auto buffer = Buffer(temp_buffer);
+        formattedWrite(buffer, message, args);
+        
+        return buffer.text();
+    }
+}

@@ -1,54 +1,49 @@
 module arc.syntax.tests.lexer;
 
-import arc.syntax.lexer: Cursor, Token, scan_token, scan_type, initialize_token_strings;
+import arc.syntax.lexer: Lexer, Token;
 import arc.source: Span;
-import arc.stringtable: StringTable;
-
-struct Lexer {
-    Cursor cursor;
-    Token.Type delimiter;
-    StringTable strings;
-
-    Token front;
-    bool empty() { return front.type == Token.Done; }
-    void popFront() { front = scan_token(cursor, front.type, delimiter, strings); }
-}
 
 auto scan_tokens(const(char)[] text, Token.Type delimiter = Token.Invalid) {
+    import arc.syntax.lexer: initialize_token_strings;
+    import arc.stringtable: StringTable;
+
     auto strings = new StringTable();
     initialize_token_strings(strings);
-    auto l = Lexer(Cursor(text), delimiter, strings);
-    l.popFront();
+
+    auto l = Lexer(text, strings, 0);
+    l.push_delimiter(delimiter);
+    l.advance();
+
     return l;
 }
 
 bool seq_equivalent(string expr, T)(Lexer lexer, T[] ts...) {
-    while (lexer.front.type != Token.Done) {
+    while (lexer.current.type != Token.Done) {
         if (ts.length == 0)
             return false;
         mixin("const eq = " ~ expr ~ " == ts[0];");
         if (!eq) {
             import std.stdio: writefln;
-            writefln("Tokens not equal: %s and %s", lexer.front.type, ts[0]);
+            writefln("Tokens not equal: %s and %s", lexer.current.type, ts[0]);
             return false;
         }
 
         ts = ts[1 .. $];
-        lexer.popFront();
+        lexer.advance();
     }
     
-    return ts.length == 0 && lexer.empty;
+    return ts.length == 0 && lexer.done;
 }
 
-alias type_equivalent = seq_equivalent!("lexer.front.type", Token.Type);
-alias token_equivalent = seq_equivalent!("lexer.front", Token);
+alias type_equivalent = seq_equivalent!("lexer.current.type", Token.Type);
+alias token_equivalent = seq_equivalent!("lexer.current", Token);
 
 @("lex empty") unittest {
-    assert("".scan_tokens.empty);
+    assert("".scan_tokens.done);
 }
 
 @("lex whitespace") unittest {
-    assert("  \t\t\t\t    ".scan_tokens.empty);
+    assert("  \t\t\t\t    ".scan_tokens.done);
 }
 
 @("lex compact") unittest {
@@ -109,8 +104,8 @@ alias token_equivalent = seq_equivalent!("lexer.front", Token);
     static test_tokens(string[] strings...) {
         foreach (s; strings) {
             auto lexer = s.scan_tokens(Token.Comma);
-            lexer.popFront();
-            const token = lexer.front;
+            lexer.advance();
+            const token = lexer.current;
             assert(token.type == Token.Comma);
             assert(token.span == Span(cast(uint) (s.length), 0));
         }

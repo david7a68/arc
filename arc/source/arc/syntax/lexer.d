@@ -4,6 +4,7 @@ import arc.hash: Key, digest;
 import arc.source: Span;
 import arc.stringtable: StringTable;
 
+
 struct Token {
     enum Type: ubyte {
         Invalid, Done, Eol = '\n',
@@ -29,12 +30,14 @@ struct Token {
     Key key;
 }
 
+
 bool matches_one(Token.Type type, const Token.Type[] types...) {
     foreach (t; types)
         if (type == t)
             return true;
     return false;
 }
+
 
 void initialize_token_strings(StringTable strings) {
     static immutable tokens = [
@@ -59,18 +62,66 @@ void initialize_token_strings(StringTable strings) {
         strings.insert(t);
 }
 
+
+struct Lexer {
+    import std.container.array: Array;
+
+    uint offset;
+    Token current;
+    Cursor cursor;
+    StringTable strings;
+    Array!(Token.Type) delimiter_stack;
+
+    this(const(char)[] text, StringTable strings, uint offset) {
+        this.offset = offset;
+        this.strings = strings;
+
+        cursor = Cursor(text);
+    }
+
+    alias empty = done;
+    alias front = current;
+    alias popFront = advance;
+
+    bool done() { return current.type == Token.Done; }
+
+    void advance() {
+        const delimiter = delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid;
+        current = scan_token(cursor, current.type, delimiter, strings);
+        current.span.start += offset;
+    }
+
+    Token take() {
+        auto token = current;
+        advance();
+        return token;
+    }
+
+    bool skip(Token.Type type) {
+        if (current.type != type)
+            return false;
+        advance();
+        return true;
+    }
+
+    void push_delimiter(Token.Type delim) {
+        delimiter_stack.insertBack(delim);
+    }
+
+    void pop_delimiter() {
+        delimiter_stack.removeBack();
+    }
+}
+
+
 struct Cursor {
-    const char* start;
+    const (char)* start;
     const (char)* current;
-    const char* end;
+    const (char)* end;
 
     this(const(char)[] text) {
         start = current = text.ptr;
         end = start + text.length;
-    }
-
-    const(char)[] text() {
-        return start[0 .. end - start];
     }
 
     uint index() in (current - start <= uint.max) {
@@ -92,12 +143,14 @@ struct Cursor {
     }
 }
 
+
 immutable end_of_section_tokens = [
     Token.Rbrace,
     Token.Eol,
     Token.Done,
     Token.Else
 ];
+
 
 Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim, StringTable strings) {
     const start = cursor;
@@ -138,6 +191,7 @@ Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim, Strin
     return scan;
 }
 
+
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;
 
@@ -152,6 +206,7 @@ shared static this() {
     keywords[digest("continue")] = Token.Continue;
     keywords[digest("def")] = Token.Def;
 }
+
 
 /**
  * Identifies the first valid token in the text sequence from `*cursor.current` to 
