@@ -52,7 +52,7 @@ final class Compilation {
     ScopeTree build_scope_tree(AstNode* syntax) {
         import arc.semantic.scope_tree: ScopeTree, ScopeTreeBuilder, collect_declarations;
 
-        auto builder = ScopeTreeBuilder.init();
+        auto builder = ScopeTreeBuilder.initialize();
         collect_declarations(builder, syntax);
 
         return builder.scope_tree;

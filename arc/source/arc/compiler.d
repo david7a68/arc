@@ -7,7 +7,7 @@ enum ExecutionMode: ubyte {
 
 enum CompilerPass: ubyte {
     all,
-    parse,
+    ast,
     scopes,
 }
 
@@ -47,7 +47,7 @@ struct Compiler {
 
         auto syntax = compilation.parse(first_source);
 
-        if (options.passes_to_print.canFind(CompilerPass.parse))
+        if (options.passes_to_print.canFind(CompilerPass.ast))
             dump_ast(compilation, syntax);
 
         auto scopes = compilation.build_scope_tree(syntax);
