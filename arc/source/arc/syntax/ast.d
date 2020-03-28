@@ -41,6 +41,7 @@ struct AstNode {
         Divide,
         Power,
         Call,
+        Access,
         Function,
         Variable,
         // Type expressions

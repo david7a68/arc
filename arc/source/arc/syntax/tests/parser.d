@@ -217,7 +217,7 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
         assert(check_types("-var".parse!"expression", Negate, Name));
         assert(check_types("*int".parse!"expression", Pointer, Name));
         assert(check_types("&int".parse!"expression", GetRef, Name));
-        assert(check_types("&a.b".parse!"expression", GetRef, Call, Name, Name));
+        assert(check_types("&a.b".parse!"expression", GetRef, Access, Name, Name));
     }
 }
 
@@ -228,7 +228,7 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
 
     assert(check_types("foo()".parse!"expression", AstNode.Call, AstNode.Name, AstNode.List));
 
-    assert(check_types("a.b".parse!"expression", AstNode.Call, AstNode.Name, AstNode.Name));
+    assert(check_types("a.b".parse!"expression", AstNode.Access, AstNode.Name, AstNode.Name));
 
     with (AstNode.Type)
     assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
@@ -391,55 +391,55 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
 //         |___/ |_|               
 // ----------------------------------------------------------------------
 
-// @("parse type_name") unittest {
-//     assert(check_types("T".parse!"type", AstNode.Name));
-// }
+@("parse type_name") unittest {
+    assert(check_types("T".parse!"type", AstNode.Name));
+}
 
-// @("parse pointer_type") unittest {
-//     assert(check_types("*Y".parse!"type", AstNode.PointerType, AstNode.Name));
-// }
+@("parse pointer_type") unittest {
+    assert(check_types("*Y".parse!"type", AstNode.PointerType, AstNode.Name));
+}
 
-// @("parse type_list") unittest {
-//     with (AstNode.Type) {
-//         assert(check_types("(int, named: int)".parse!"type",
-//             TypeList,
-//                 TypeListMember,
-//                     None,           // The member does not have a name.
-//                     Name,           // 1-element type list members are types.
-//                 TypeListMember,
-//                     Name,           // The name of the member.
-//                     Name,           // The type of the member.
-//         ));
-//     }
-// }
+@("parse type_list") unittest {
+    with (AstNode.Type) {
+        assert(check_types("(int, named: int)".parse!"type",
+            TypeList,
+                TypeListMember,
+                    None,           // The member does not have a name.
+                    Name,           // 1-element type list members are types.
+                TypeListMember,
+                    Name,           // The name of the member.
+                    Name,           // The type of the member.
+        ));
+    }
+}
 
-// @("parse call_result_type") unittest {
-//     with (AstNode.Type)
-//     assert(check_types("a.b()".parse!"type",
-//         Call,
-//             Call,
-//                 Name,
-//                 Name,
-//             List,
-//     ));
-// }
+@("parse call_result_type") unittest {
+    with (AstNode.Type)
+    assert(check_types("a.b()".parse!"type",
+        Call,
+            Call,
+                Name,
+                Name,
+            List,
+    ));
+}
 
-// @("parse function_types") unittest {
-//     with (AstNode.Type) {
-//         assert(check_types("() -> T".parse!"type",
-//             FunctionType,
-//                 TypeList,           // There are no parameters for this function.
-//                 Name,               // The return type.
-//         ));
+@("parse function_types") unittest {
+    with (AstNode.Type) {
+        assert(check_types("() -> T".parse!"type",
+            FunctionType,
+                TypeList,           // There are no parameters for this function.
+                Name,               // The return type.
+        ));
 
-//         assert(check_types("() -> A.B()".parse!"type",
-//             FunctionType,
-//                 TypeList,           // There are no parameters for this function.
-//                 Call,               // The return type is the result of a call expression.
-//                     Call,
-//                         Name,
-//                         Name,
-//                     List
-//         ));
-//     }
-// }
+        assert(check_types("() -> A.B()".parse!"type",
+            FunctionType,
+                TypeList,           // There are no parameters for this function.
+                Call,               // The return type is the result of a call expression.
+                    Call,
+                        Name,
+                        Name,
+                    List
+        ));
+    }
+}

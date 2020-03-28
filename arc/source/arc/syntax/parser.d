@@ -340,7 +340,7 @@ immutable infix_parselets = () {
     set!(AstNode.Multiply,      Token.Star,         Precedence.Product  )();
     set!(AstNode.Divide,        Token.Slash,        Precedence.Product  )();
     set!(AstNode.Power,         Token.Caret,        Precedence.Power,   false)();
-    set!(AstNode.Call,          Token.Dot,          Precedence.Call     )();
+    set!(AstNode.Access,        Token.Dot,          Precedence.Call     )();
     set!(AstNode.Call,          Token.Lparen,       Precedence.Call,    true, false)();
     set!(AstNode.Call,          Token.Lbracket,     Precedence.Call,    true, false)();
     parselets[Token.Colon]  = Infix(Precedence.Assign, &parse_var);
