@@ -3,6 +3,7 @@ module arc.reporter;
 struct ArcError {
     enum Code {
         NoError,
+        DebugError,
         UnexpectedEndOfFile,
         TokenExpectMismatch,
         TokenNotAnExpression,

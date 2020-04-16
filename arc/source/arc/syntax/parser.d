@@ -137,12 +137,12 @@ final class Parser {
     }
 
     void sync_to_semicolon() {
-        while (current.type.matches_one(Token.Semicolon, Token.Done))
+        while (!done && !current.type.matches_one(Token.Semicolon))
             advance();
     }
 
     void sync_to_token(Token.Type type) {
-        while (current.type.matches_one(type, Token.Semicolon, Token.Done))
+        while (!done && !current.type.matches_one(type, Token.Semicolon))
             advance();
     }
 
@@ -225,8 +225,11 @@ AstNode parse_define(Parser p) {
 
     auto value = p.skip(Token.Equals) ?
                  parse_expression(p) :
-                AstNode.inferred;
+                 AstNode.inferred;
     
+    if (!type.is_valid || !value.is_valid)
+        p.sync_to_semicolon();
+
     const semicolon = p.current;    // this might not actually be a semicolon. We find out if it is one with had_semicolon
     const had_semicolon = p.skip_required_delim(Token.Semicolon);
 
@@ -234,7 +237,7 @@ AstNode parse_define(Parser p) {
                  start.merge(semicolon.span) :
                  merge_all(start, name.span, type.span, value.span);
 
-    if (name.is_valid && type.is_valid && value.is_valid && had_semicolon) {
+    if (had_semicolon) {
         if (value.kind != AstNode.Kind.Inferred) // type may or may not be inferred, we don't care
             return p.alloc!ConstantDeclaration(span, name, type, value);
         else
@@ -242,9 +245,7 @@ AstNode parse_define(Parser p) {
     }
     else {
         p.free(name, type, value);
-        p.sync_to_semicolon();
-
-        return p.alloc!Invalid(span.merge(p.done ? p.current.span : p.take().span));
+        return p.alloc!Invalid(span);
     }
 }
 
@@ -298,8 +299,6 @@ immutable prefixes = () {
             "The token \"%s\" cannot start a prefix expression.",
             p.current.type
         );
-
-        p.sync_to_semicolon();
 
         return p.alloc!Invalid(p.current.span);
     };
@@ -363,18 +362,18 @@ immutable infixes = () {
 } ();
 
 AstNode parse_infix_expression(Parser p, AstNode prefix, Precedence prec = Precedence.Assign) {
-    if (!prefix.is_valid) {
-        p.sync_to_semicolon();
-        
-        p.free(prefix);
-        return p.alloc!Invalid(prefix.span);
+    auto expr = prefix;
+    while (prec <= infixes[p.current.type].prec) {
+        if (!expr.is_valid) {
+            const span = expr.span;
+            p.free(expr);
+            return p.alloc!Invalid(span);
+        }
+
+        expr = infixes[p.current.type].parser(p, expr);
     }
-    else {
-        auto expr = prefix;
-        while (prec <= infixes[p.current.type].prec)
-            expr = infixes[p.current.type].parser(p, expr);
-        return expr;
-    }
+
+    return expr;
 }
 
 auto parse_value(T)(Parser p) {
@@ -383,15 +382,21 @@ auto parse_value(T)(Parser p) {
 }
 
 auto parse_unary(Parser p) {
-    const start = p.current.span;
-    
     auto op = parse_value!Name(p);
     auto operand = parse_expression(p);
 
-    return p.alloc!Unary(start.merge(operand.span), op, operand);
+    const span = op.span.merge(operand.span);
+    if (!operand.is_valid) {
+        p.free(op, operand);
+        return p.alloc!Invalid(span);
+    }
+
+    return p.alloc!Unary(span, op, operand);
 }
 
 auto parse_binary(int precedence)(Parser p, AstNode lhs) {
+    assert(lhs.is_valid);
+
     auto op = parse_value!Name(p);
     auto rhs = parse_expression(p, cast(Precedence) precedence);
 
@@ -485,7 +490,13 @@ AstNode parse_list_member(bool parsing_typelist)(Parser p) {
     const is_name = first.kind == AstNode.Kind.Name;
     const is_varexpr = p.skip(Token.Colon);
 
-    if (is_name && is_varexpr) {
+    Span span = first.span;
+
+    if (!first.is_valid) {
+        p.free(first);
+        return p.alloc!Invalid(span);
+    }
+    else if (is_name && is_varexpr) {
         auto type = p.current.type != Token.Equals ?
                     parse_type_expr(p) :
                     AstNode.inferred;
@@ -494,8 +505,8 @@ AstNode parse_list_member(bool parsing_typelist)(Parser p) {
                     parse_expression(p, Precedence.Logic) :
                     AstNode.inferred;
 
-        const span = merge_all(first.span, type.span, expr.span);
-        if (first.is_valid && type.is_valid && expr.is_valid)
+        span = merge_all(span, type.span, expr.span);
+        if (type.is_valid && expr.is_valid)
             return p.alloc!Variable(span, first, type, expr);
         else {
             p.free(type, expr);
@@ -504,10 +515,10 @@ AstNode parse_list_member(bool parsing_typelist)(Parser p) {
     }
     else
         static if (parsing_typelist) {
-            return p.alloc!Variable(first.span, AstNode.none, first, AstNode.inferred);
+            return p.alloc!Variable(span, AstNode.none, first, AstNode.inferred);
         }
         else {
-            return p.alloc!Variable(first.span, AstNode.none, AstNode.inferred, first);
+            return p.alloc!Variable(span, AstNode.none, AstNode.inferred, first);
         }
 }
 
@@ -560,8 +571,6 @@ AstNode parse_type_expr(Parser p) {
     auto expr = prefix(p);
 
     if (!expr.is_valid) {
-        p.sync_to_semicolon();
-        
         const span = expr.span.merge(p.current.span);
         p.free(expr);
         return p.alloc!Invalid(span);

@@ -84,6 +84,32 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
                             Inferred
             ));
         }
+
+        {
+            auto error = "def T : (!);".parse!"statement"();
+            assert(error.span == Span(0, 12));
+            assert(type_equivalent(error,
+                TypeDeclaration,
+                    Name,
+                    List,
+                        Invalid
+            ));
+        }
+    }
+}
+
+@("parse constdecl") unittest {
+    with (AstNode.Kind) {
+        {
+            auto error = "def T := +;".parse!"statement"();
+            assert(error.span == Span(0, 11));
+            assert(type_equivalent(error,
+                ConstantDeclaration,
+                    Name,
+                    Inferred,
+                    Invalid
+            ));
+        }
     }
 }
 
