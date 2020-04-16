@@ -1,80 +1,48 @@
 module arc.syntax.tests.parser;
 
-import arc.syntax.parser: ParseCtx, parse_expression, parse_statement, parse_type;
+import arc.data.ast;
+import arc.data.source: Span;
+import arc.reporter;
 import arc.syntax.lexer: Token;
-import arc.syntax.ast: AstNode;
-import arc.reporting: Reporter, ArcError;
+import arc.syntax.parser: Parser, parse_expression, parse_statement, parse_type_expr;
 
-struct ParseResult {
-    AstNode* tree;
-    Reporter reporter;
+// Thread-local module variables
+Reporter reporter;
+Parser parser;
+
+static this() {
+    parser = new Parser(&reporter);
 }
 
-/// Parses a statement.
-/// Info: Don't forget, expressions are statements too!
-auto parse(string category)(const(char)[] text) {
-    import arc.stringtable: StringTable;
-    import arc.syntax.lexer: Token, Lexer, initialize_token_strings;
+auto parse(string op)(string text) {
+    parser.reset(text);
+    reporter.clear();
 
-    auto s = new StringTable();
-    initialize_token_strings(s);
-    auto l = Lexer(text, s, 0);
-
-    auto r = Reporter();
-    auto p = ParseCtx(l, &r);
-
-    static if (category == "statement")
-        p.tokens.push_delimiter(Token.Semicolon);
-
-    mixin("return ParseResult(parse_" ~ category ~ "(p), *p.reporter);");
+    mixin("return parse_" ~ op ~ "(parser);");
 }
 
-bool type_equivalent(AstNode* tree, AstNode.Type[] types...) {
-    import std.stdio: writefln;
+bool type_equivalent(AstNode tree, AstNode.Kind[] types...) {
+    import std.algorithm: equal;
 
-    AstNode.Type[] flattened_tree;
+    AstNode.Kind[] flattened_tree;
 
-    void flatten(AstNode* n) {
+    void flatten(AstNode n) {
         if (!n) return; // To accomodate for development where a parse fn returns null.
-        flattened_tree ~= n.type;
-        foreach (child; n.get_children())
+        flattened_tree ~= n.kind;
+        foreach (child; n.children)
             flatten(child);
     }
 
     flatten(tree);
 
-    if (flattened_tree.length != types.length) {
-        writefln(
-            "The number of nodes (%s) in the tree and the number of types (%s) do not match!",
-            flattened_tree.length,
-            types.length
-        );
-        return false;
-    }
-
-    foreach (i, type; types) {
-        if (type != flattened_tree[i]) {
-            writefln("The types do not match at Tree (%s) and List (%s)", flattened_tree[i], types[i]);
-            return false;
-        }
-    }
-
-    return true;
+    return equal(flattened_tree, types);
 }
 
-bool check_types(ParseResult result, AstNode.Type[] types...) {
-    return result.reporter.errors.length == 0 && type_equivalent(result.tree, types);
-}
+bool check_types(AstNode node, AstNode.Kind[] types...) {
+    const had_errors = reporter.errors.length > 0;
+    if (had_errors) reporter.clear();
 
-bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] types...) {
-    bool has_error;
-    foreach (error; result.reporter.errors)
-        if (error.code == error_code) {
-            has_error = true;
-            break;
-        }
-    
-    return has_error && type_equivalent(result.tree, types);
+    return !had_errors && type_equivalent(node, types);
 }
 
 // ----------------------------------------------------------------------
@@ -87,106 +55,73 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
 //
 // ----------------------------------------------------------------------
 
-@("parse def") unittest {
-    with (AstNode.Type)
-    assert(check_types("def a := 3".parse!"statement",
-        Define,
-            Name,
-            InferredType,
-            Integer
-    ));
-
-    with (AstNode.Type)
-    assert(check_types("def T :\n(int\nint)".parse!"statement",
-        Define,
-            Name,
-            TypeList,
-                TypeListMember,
-                    None,
+@("parse typedecl") unittest {
+    with (AstNode.Kind) {
+        {
+            auto type = "def T : T2;".parse!"statement"();
+            assert(type.span == Span(0, 11));
+            assert(check_types(type,
+                TypeDeclaration,
                     Name,
-                TypeListMember,
-                    None,
+                    Name
+            ));
+        }
+
+        {
+            auto type = "def T : (u32, k: u32);".parse!"statement"();
+            assert(type.span == Span(0, 22));
+            assert(check_types(type,
+                TypeDeclaration,
                     Name,
-            None
-    ));
-
-    with (AstNode.Type)
-    assert(check_types("def f : F = (a) -> a".parse!"statement",
-        Define,
-            Name,
-            Name,
-            Function,
-                List,
-                    ListMember,
-                        Name,
-                        InferredType,
-                        None,
-                InferredType,
-                Name
-    ));
-}
-
-@("parse if") unittest {
-    with (AstNode.Type) {
-        assert(check_types("if a {}".parse!"statement", If, Name, Block, None));
-
-        assert(check_types("if a {} else {}".parse!"statement", If, Name, Block, Block));
-
-        assert(check_types("if a {} else {}".parse!"statement",
-            If,
-                Name,
-                Block,
-                Block
-        ));
-
-        assert(check_types("if a {} else if c {} else {}".parse!"statement",
-            If,
-                Name,
-                Block,
-                If,
-                    Name,
-                    Block,
-                    Block
-        ));
-        
-        assert(check_types("if a {}\nelse {}".parse!"statement",
-            If,
-                Name,
-                Block,
-                Block
-        ));
+                    List,
+                        Variable,
+                            None,
+                            Name,
+                            Inferred,
+                        Variable,
+                            Name,
+                            Name,
+                            Inferred
+            ));
+        }
     }
 }
 
-@("bad if") unittest {
-    assert(check_types("if a \n {}".parse!"statement", AstNode.If, AstNode.Name, AstNode.Block, AstNode.None));
-}
+@("parse vardecl") unittest {
+    with (AstNode.Kind) {
+        {
+            auto var = "a : T = 3;".parse!"statement"();
+            assert(var.span == Span(0, 9));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Name,
+                    Integer
+            ));
+        }
 
-@("parse break") unittest {
-    assert(check_types("break".parse!"statement", AstNode.Break));
-}
+        {
+            auto var = "a := 3;".parse!"statement"();
+            assert(var.span == Span(0, 6));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Inferred,
+                    Integer
+            ));
+        }
 
-@("parse return") unittest {
-    assert(check_types("return".parse!"statement", AstNode.Return, AstNode.None));
-
-    assert(check_types("return a".parse!"statement", AstNode.Return, AstNode.Name));
-
-    assert(check_types("{return}".parse!"statement", AstNode.Block, AstNode.Return, AstNode.None));
-}
-
-@("parse continue") unittest {
-    assert(check_types("continue".parse!"statement", AstNode.Continue));
-}
-
-@("parse loop") unittest {
-    assert(check_types("loop {}".parse!"statement", AstNode.Loop, AstNode.Block));
-    
-    with (AstNode.Type)
-    assert(check_types("loop a = a + 1".parse!"statement", Loop, Assign, Name, Add, Name, Integer));
-}
-
-@("parse invalid statement") unittest {
-    assert(check_error("else {}".parse!"statement", ArcError.UnboundElse, AstNode.Invalid));
+        {
+            auto var = "a : T;".parse!"statement"();
+            assert(var.span == Span(0, 5));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Name,
+                    Inferred
+            ));
+        }
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -201,183 +136,121 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
 // ----------------------------------------------------------------------
 
 @("parse name") unittest {
-    assert(check_types("a_name".parse!"expression", AstNode.Name));
+    assert(check_types("a_name".parse!"expression", AstNode.Kind.Name));
 }
 
 @("parse int") unittest {
-    assert(check_types("20".parse!"expression", AstNode.Integer));
+    assert(check_types("20".parse!"expression", AstNode.Kind.Integer));
 }
 
 @("parse char") unittest {
-    assert(check_types("'a'".parse!"expression", AstNode.Char));
+    assert(check_types("'a'".parse!"expression", AstNode.Kind.Char));
 }
 
 @("parse unary") unittest {
-    with (AstNode.Type) {
-        assert(check_types("-var".parse!"expression", Negate, Name));
-        assert(check_types("*int".parse!"expression", Pointer, Name));
-        assert(check_types("&int".parse!"expression", GetRef, Name));
-        assert(check_types("&a.b".parse!"expression", GetRef, Access, Name, Name));
+    with (AstNode.Kind) {
+        assert(check_types("-var".parse!"expression", Unary, Name, Name));
     }
 }
 
 @("parse binary") unittest {
-    assert(check_types("a + 1".parse!"expression", AstNode.Add, AstNode.Name, AstNode.Integer));
+    with (AstNode.Kind) {
+        assert(check_types("1 + 1".parse!"expression", Binary, Name, Integer, Integer));
+        assert(check_types("a ^ 2".parse!"expression", Binary, Name, Name, Integer));
 
-    assert(check_error("a++".parse!"expression", ArcError.TokenNotAnExpression, AstNode.Invalid));
-
-    assert(check_types("foo()".parse!"expression", AstNode.Call, AstNode.Name, AstNode.List));
-
-    assert(check_types("a.b".parse!"expression", AstNode.Access, AstNode.Name, AstNode.Name));
-
-    with (AstNode.Type)
-    assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
-        Add,
-            Subtract,
+        assert(check_types("a - -3".parse!"expression",
+            Binary,
                 Name,
                 Name,
-            Divide,
-                Multiply,
-                    Name,
-                    Power,
-                        Name,
-                        Power,
-                            Name,
-                            Name,
-                Name
-    ));
-
-    assert(check_types("a = 3".parse!"expression", AstNode.Assign, AstNode.Name, AstNode.Integer));
-}
-
-@("parse list0") unittest {
-    with (AstNode.Type) {
-        assert(check_types("()".parse!"expression", List));
-        
-        assert(check_types("(,0, b:b1, c = 3, d : d1 = 4,)".parse!"expression",
-            List,
-                ListMember,
-                    None,
-                    InferredType,
-                    Integer,
-                ListMember,
-                    Name,
-                    Name,
-                    None,
-                ListMember,
-                    Name,
-                    InferredType,
-                    Integer,
-                ListMember,
-                    Name,
+                Unary,
                     Name,
                     Integer
         ));
 
-        assert(check_types("[0, b:b1, c = 3, d : d1 = 4]".parse!"expression",
-            List,
-                ListMember,
-                    None,
-                    InferredType,
-                    Integer,
-                ListMember,
-                    Name,
-                    Name,
-                    None,
-                ListMember,
-                    Name,
-                    InferredType,
-                    Integer,
-                ListMember,
-                    Name,
-                    Name,
-                    Integer
+        assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
+            Binary,
+                Name,                       // +
+                Binary,
+                    Name,                   // -
+                    Name,                   // b
+                    Name,                   // c
+                Binary,
+                    Name,                   // /
+                    Binary,
+                        Name,               // *
+                        Name,               // d
+                        Binary,
+                            Name,           // ^
+                            Name,           // e
+                            Binary,
+                                Name,       // ^
+                                Name,       // f
+                                Name,       // g
+                    Name                    // h
         ));
     }
 }
 
-@("parse bad_list") unittest {
-    with (AstNode.Type) {
-        assert(check_error("(".parse!"expression", ArcError.UnexpectedEndOfFile, Invalid));
-        assert(check_error("(a=".parse!"expression", ArcError.UnexpectedEndOfFile, Invalid));
-        assert(check_error("(a=)".parse!"expression", ArcError.TokenNotAnExpression, List, Invalid));
-        assert(check_error("(a:=2)".parse!"expression", ArcError.TokenNotAnExpression, List, Invalid));
-        assert(check_error("(a++, 2)".parse!"expression", ArcError.TokenNotAnExpression,
-            List,
-                Invalid,
-                ListMember,
-                    None,
-                    InferredType,
-                    Integer
+@("parse call") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("a()".parse!"expression"(), Call, Name, List));
+        assert(check_types("a * b()".parse!"expression"(),
+            Binary,
+                Name,
+                Name,
+                Call,
+                    Name,
+                    List
         ));
     }
 }
 
-@("parse block") unittest {
-    assert(check_types("{}".parse!"expression", AstNode.Block));
-}
+@("parse list") unittest {
+    with (AstNode.Kind) {
+        {
+            auto list = "()".parse!"expression"();
+            assert(list.span == Span(0, 2));
+            assert(check_types(list, List));
+        }
 
-@("parse function") unittest {
-    with (AstNode.Type) {
-        assert(check_types("() -> 1".parse!"expression",
-            Function,
-                List,               // There are no parameters in this function.
-                InferredType,       // The return type of the function is derived from the function body.
-                Integer             // The function's expression body.
-        ));
-
-        assert(check_types("(a, b:c) -> a".parse!"expression",
-            Function,
-                List,                   // The parameter list.
-                    ListMember,
-                        Name,           // A name-only parameter is assumed to be the name of a parameter whose type is inferred from the context
-                        InferredType,   // The type of the member is derived from N (or it fails).
-                        None,
-                                        // from an enclosing scope.
-                    ListMember,
-                        Name,           // The name of the variable of the type `c`.
-                        Name,           // The type of the member is derived from N (or it fails).
-                        None,
-                InferredType,           // The function's return type is derived from the type of a (must match return type of N).
-                Name,                   // The function's expression body.
-        ));
-
-        assert(check_types("() -> { blah() }".parse!"expression",
-            Function,
+        {
+            auto list = "(a:= 2, 3, c:T=blah)".parse!"expression"();
+            assert(list.span == Span(0, 20));
+            assert(check_types(list,
                 List,
-                InferredType,
-                Block,
-                    Call,
+                    Variable,
                         Name,
-                        List,
-        ));
+                        Inferred,
+                        Integer,
+                    Variable,
+                        None,
+                        Inferred,
+                        Integer,
+                    Variable,
+                        Name,
+                        Name,
+                        Name
+            ));
+        }
+
+        {
+            auto err = "(a = b)".parse!"expression"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(reporter.errors.length == 1);
+            check_types(err, Invalid);
+        }
     }
 }
 
-@("parse variable") unittest {
-    with (AstNode.Type)
-    assert(check_types("a : = b".parse!"expression",
-        Variable,
-            Name,
-            InferredType,
-            Name
-    ));
-
-    with (AstNode.Type)
-    assert(check_types("a : b".parse!"expression",
-        Variable,
-            Name,
-            Name,
-            None,
-    ));
-
-    with (AstNode.Type)
-    assert(check_types("a : b = c".parse!"expression",
-        Variable,
-            Name,
-            Name,
-            Name,
-    ));
+@("parse errors") unittest {
+    with (AstNode.Kind) {
+        {
+            auto err = "a = = b".parse!"expression"();
+            assert(err.span == Span(0, 7));
+            assert(err.kind == Invalid);
+            assert(reporter.errors[0].code == ArcError.TokenNotAnExpression);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------
@@ -391,55 +264,27 @@ bool check_error(ParseResult result, ArcError.Code error_code, AstNode.Type[] ty
 //         |___/ |_|               
 // ----------------------------------------------------------------------
 
-@("parse type_name") unittest {
-    assert(check_types("T".parse!"type", AstNode.Name));
-}
+@("parse types") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("a".parse!"type_expr"(), Name));
 
-@("parse pointer_type") unittest {
-    assert(check_types("*Y".parse!"type", AstNode.PointerType, AstNode.Name));
-}
+        assert(check_types("a.b".parse!"type_expr"(), Binary, Name, Name, Name));
 
-@("parse type_list") unittest {
-    with (AstNode.Type) {
-        assert(check_types("(int, named: int)".parse!"type",
-            TypeList,
-                TypeListMember,
-                    None,           // The member does not have a name.
-                    Name,           // 1-element type list members are types.
-                TypeListMember,
-                    Name,           // The name of the member.
-                    Name,           // The type of the member.
-        ));
+        assert(check_types("(a)".parse!"type_expr"(), List, Variable, None, Name, Inferred));
+
+        assert(check_types("(a:b)".parse!"type_expr"(), List, Variable, Name, Name, Inferred));
+
+        assert(check_types("(a := 3)".parse!"type_expr"(), List, Variable, Name, Inferred, Integer));
     }
 }
 
-@("parse call_result_type") unittest {
-    with (AstNode.Type)
-    assert(check_types("a.b()".parse!"type",
-        Call,
-            Call,
-                Name,
-                Name,
-            List,
-    ));
-}
-
-@("parse function_types") unittest {
-    with (AstNode.Type) {
-        assert(check_types("() -> T".parse!"type",
-            FunctionType,
-                TypeList,           // There are no parameters for this function.
-                Name,               // The return type.
-        ));
-
-        assert(check_types("() -> A.B()".parse!"type",
-            FunctionType,
-                TypeList,           // There are no parameters for this function.
-                Call,               // The return type is the result of a call expression.
-                    Call,
-                        Name,
-                        Name,
-                    List
-        ));
+@("parse bad types") unittest {
+    with (AstNode.Kind) {
+        {
+            auto err = "(a = b)".parse!"type_expr"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(reporter.errors.length == 1);
+            check_types(err, Invalid);
+        }
     }
 }

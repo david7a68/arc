@@ -1,39 +1,29 @@
-',' = ','+ // comma deduplication implemented in lexer
-';' = ';'+ // semicolon deduplication implemented in lexer
-
 statement = def ';'
-          | break ';'
-          | return ';'
-          | continue ';'
-          | label ';'
-          | block ';'
-          | if ';'
-          | loop ';'
           | expr ';'
+          | block
+          | primary '=' expr ';'
           ;
 
     def = 'def' name ':' type? ((type ('=' expr)?) | ('=' expr)) ;
 
-    break = 'break' expr? ;
-    return = 'return' expr? ;
-    continue = 'continue' ;
+    block = '{' statement* '}' ;
 
-    block = '{' stmt* '}' ;
+    expr = primary | prefix | binary;
 
-    if = 'if' expr block (else statement)? ;
-
-    loop = 'loop' block ;
-
-    expr = primary | unary | binary;
-
-        primary = name
-                | integer
+        primary = access
+                | call
                 | char
                 | list
                 | function
-                | call
+                | integer
+                | name
+                | path
                 | var
                 ;
+
+            access = prefix '.' name ;
+
+            call = prefix list ;
 
             list = list_open ','* (list_member ',')* list_close ;
                 list_member = expr
@@ -44,16 +34,14 @@ statement = def ';'
 
             function = list '->' expr block? ;
 
-            call = (list | name) '.'? (list | name)
-                 | call '.'? call
-                 ;
+            path = name ('::' name)* ;
 
             var = name ':' ((type ('=' expr)?) | ('=' expr)) ;
 
-        unary = '-' primary
-              | '*' primary
-              | '&' primary
-              ;
+        prefix = '-' primary
+               | '!' primary
+               | 'import' path
+               ;
 
         binary = expr op expr
             op = '+'
@@ -73,16 +61,10 @@ statement = def ';'
                | '='
                ;
 
-type = name
-     | call
-     | pointer_type
-     | type_list
+type = access
+     | list
      | function_type
+     | name
      ;
-
-    type_list = list_open ','* (type_list_member ',')* list_close ;
-        type_list_member = type
-                         | name ':' type
-                         ;
 
     function_type = type_list '->' type ;

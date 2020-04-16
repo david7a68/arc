@@ -1,7 +1,7 @@
-module arc.syntax.ast;
+module arc.ast;
 
 import arc.hash: Key;
-import arc.source: Span;
+import arc.data.source: Span;
 
 struct AstNode {
     enum Type : ubyte {
@@ -56,7 +56,7 @@ struct AstNode {
 
     const Type type;
     const Span span;
-
+    
     union {
         Key _value_key;
         AstNode* _child;

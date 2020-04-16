@@ -28,7 +28,7 @@ struct Compiler {
 
     void execute(CompilerOptions options) {
         import std.algorithm: canFind;
-        import arc.source: Source;
+        import arc.data.source: Source;
 
         auto compilation = new Compilation();
 
@@ -51,6 +51,7 @@ struct Compiler {
             dump_ast(compilation, syntax);
 
         auto scopes = compilation.build_scope_tree(syntax);
+        compilation.resolve_local_symbols(&scopes);
 
         if (options.passes_to_print.canFind(CompilerPass.scopes))
             dump_scope_tree(compilation, scopes);
@@ -62,7 +63,7 @@ struct Compiler {
         return readText(filename);
     }
 
-    import arc.syntax.ast: AstNode;
+    import arc.ast: AstNode;
     void dump_ast(Compilation compilation, AstNode* root) {
         import std.stdio: writeln;
         import arc.output.ast_printer: AstPrinter;
@@ -75,14 +76,14 @@ struct Compiler {
     import arc.semantic.scope_tree: ScopeTree;
     void dump_scope_tree(Compilation compilation, ScopeTree tree) {
         import std.stdio: writeln, writefln;
-        import arc.semantic.symbol: Symbol;
+        import arc.semantic.symbol;
 
         writeln("======== Symbols ========");
-        foreach (symbol; tree.symbols) {
-            // if (symbol.kind == Symbol.Reference)
-            //     writefln("%s %s %s", symbol.kind, compilation.strings.lookup(symbol.name), symbol.referred_symbol);
-            // else
-                writefln("%s %s", symbol.kind, compilation.strings.lookup(symbol.name));
+        foreach (i, symbol; tree.symbols) {
+            if (symbol.kind == Symbol.Reference)
+                writefln("%3s %s %s %s", i, symbol.kind, compilation.strings.lookup(symbol.name), (cast(ReferenceSymbol) symbol).parent);
+            else
+                writefln("%3s %s %s", i, symbol.kind, compilation.strings.lookup(symbol.name));
         }
         writeln();
     }

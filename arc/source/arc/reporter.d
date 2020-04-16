@@ -1,4 +1,4 @@
-module arc.reporting;
+module arc.reporter;
 
 struct ArcError {
     enum Code {
@@ -7,13 +7,14 @@ struct ArcError {
         TokenExpectMismatch,
         TokenNotAnExpression,
         UnboundElse,
+        IncompleteDefine
     }
 
     alias Code this;
 
     Code code;
     // Source parsed_file;
-    uint location;
+    size_t location;
     string message;
 }
 
@@ -27,7 +28,7 @@ struct ArcWarning {
     alias Code this;
 
     Code code;
-    uint location;
+    size_t location;
     string message;
 }
 
@@ -51,6 +52,19 @@ struct Reporter {
             span.start,
             tprint(message, args).idup
         );
+    }
+
+    void clear() {
+        errors.length = 0;
+        warnings.length = 0;
+    }
+
+    bool has_error(ArcError.Code ecode) {
+        foreach (error; errors)
+            if (error.code == ecode)
+                return true;
+        
+        return false;
     }
 
     const(char[]) tprint(Args...)(string message, Args args) {

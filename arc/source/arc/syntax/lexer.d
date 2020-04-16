@@ -1,13 +1,11 @@
 module arc.syntax.lexer;
 
-import arc.hash: Key, digest;
-import arc.source: Span;
-import arc.stringtable: StringTable;
-
+import arc.data.hash: Key, digest;
+import arc.data.source: Span;
 
 struct Token {
     enum Type: ubyte {
-        Invalid, Done, Eol = '\n',
+        Invalid, Done,
 
         Lparen = '(', Rparen = ')', Lbracket = '[', Rbracket = ']', Lbrace = '{', Rbrace = '}',
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',
@@ -30,7 +28,6 @@ struct Token {
     Key key;
 }
 
-
 bool matches_one(Token.Type type, const Token.Type[] types...) {
     foreach (t; types)
         if (type == t)
@@ -38,81 +35,21 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
+Token[] read_tokens(const(char)[] text, Token[] buffer) {
+    auto cursor = Cursor(text);
 
-void initialize_token_strings(StringTable strings) {
-    static immutable tokens = [
-        ".",
-        "&",
-        "+",
-        "-",
-        "/",
-        "*",
-        "^",
-        "=",
-        "<",
-        ">",
-        "!",
-        "<=",
-        ">=",
-        "==",
-        "!=",
-    ];
+    // get first token
+    buffer[0] = scan_token(cursor);
 
-    static foreach (t; tokens)
-        strings.insert(t);
+    // if the previous token was not EOF, and there is space in the buffer, scan token
+    size_t i = 1;
+    for (; buffer[i - 1].type != Token.Done && i < buffer.length; i++) 
+        buffer[i] = scan_token(cursor);
+
+    return buffer[0 .. i];
 }
 
-
-struct Lexer {
-    import std.container.array: Array;
-
-    uint offset;
-    Token current;
-    Cursor cursor;
-    StringTable strings;
-    Array!(Token.Type) delimiter_stack;
-
-    this(const(char)[] text, StringTable strings, uint offset) {
-        this.offset = offset;
-        this.strings = strings;
-
-        cursor = Cursor(text);
-    }
-
-    alias empty = done;
-    alias front = current;
-    alias popFront = advance;
-
-    bool done() { return current.type == Token.Done; }
-
-    void advance() {
-        const delimiter = delimiter_stack.length > 0 ? delimiter_stack.back : Token.Invalid;
-        current = scan_token(cursor, current.type, delimiter, strings);
-        current.span.start += offset;
-    }
-
-    Token take() {
-        auto token = current;
-        advance();
-        return token;
-    }
-
-    bool skip(Token.Type type) {
-        if (current.type != type)
-            return false;
-        advance();
-        return true;
-    }
-
-    void push_delimiter(Token.Type delim) {
-        delimiter_stack.insertBack(delim);
-    }
-
-    void pop_delimiter() {
-        delimiter_stack.removeBack();
-    }
-}
-
+private:
 
 struct Cursor {
     const (char)* start;
@@ -144,54 +81,6 @@ struct Cursor {
 }
 
 
-immutable end_of_section_tokens = [
-    Token.Rbrace,
-    Token.Eol,
-    Token.Done,
-    Token.Else
-];
-
-
-Token scan_token(ref Cursor cursor, Token.Type previous, Token.Type delim, StringTable strings) {
-    const start = cursor;
-    auto scan = scan_type(cursor, strings);
-
-    if (scan.type.matches_one(end_of_section_tokens) && delim != Token.Invalid) {
-        switch (previous) with (Token.Type) {
-            case Rbrace:
-            case Rparen:
-            case Rbracket:
-            case Name:
-            case Integer:
-            case Char:
-            case Break:
-            case Return:
-            case Continue:
-                cursor.current = start.current; // reset the cursor so we don't overwrite it
-                return Token(delim, Span(cursor.index, 0));
-            case Done:
-                assert(scan.type == Token.Done && cursor.done);
-                return Token(Token.Invalid);
-            default:
-                while (scan.type == Token.Eol)
-                    scan = scan_type(cursor, strings);
-        }
-    }
-    else if (scan.type == Token.Eol) {
-        do {
-            scan = scan_type(cursor, strings);
-        } while (scan.type == Token.Eol);
-    }
-    else if (scan.type == previous && (previous == Token.Comma || previous == Token.Semicolon)) {
-        do {
-            scan = scan_type(cursor, strings);
-        } while (scan.type == previous);
-    }
-
-    return scan;
-}
-
-
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;
 
@@ -207,7 +96,6 @@ shared static this() {
     keywords[digest("def")] = Token.Def;
 }
 
-
 /**
  * Identifies the first valid token in the text sequence from `*cursor.current` to 
  * `end`. If the first character in the text is not a valid start of a token,
@@ -215,7 +103,7 @@ shared static this() {
  *
  * This function will identify keywords as distinct from symbols.
  */
-Token scan_type(ref Cursor cursor, StringTable strings) {
+Token scan_token(ref Cursor cursor) {
     auto start = cursor;
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
@@ -231,7 +119,7 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
 
     switch_start:
     if (cursor.done)
-        return Token(Token.Done); 
+        return Token(Token.Done, Span(start.index, 0)); 
 
     const c = *cursor.current;
     cursor.advance();
@@ -239,9 +127,9 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
         case ' ':
         case '\t':
         case '\r':
+        case '\n':
             start.advance();
             goto switch_start;
-        case '\n':
         case '(':
         case ')':
         case '[':
@@ -297,6 +185,7 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
             if (cursor.done)
                 return make_token(Token.Invalid);
             else if (*cursor.current == '\\') {
+                auto key = digest(cursor.current[0 .. 2]);
                 cursor.advance(2);
 
                 if (*cursor.current == '\'')
@@ -308,9 +197,10 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
                 return make_token(Token.Invalid);
             }
             else {
+                auto key = digest(cursor.current[0 .. 1]);
                 cursor.advance();
                 if (*cursor.current == '\'')
-                    return make_token(Token.Char, 1);
+                    return make_token(Token.Char, 1, key);
                 else
                     return make_token(Token.Invalid);
             }
@@ -329,9 +219,6 @@ Token scan_type(ref Cursor cursor, StringTable strings) {
 
             const key = digest(start.spanned_text(cursor));
             const type = keywords.get(key, Token.Name);
-
-            if (type == Token.Name)
-                strings.insert(start.spanned_text(cursor), key);
             
             return make_token(type, 0, key);
         case '0': .. case '9':

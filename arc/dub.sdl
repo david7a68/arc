@@ -1,15 +1,6 @@
 name "arc"
 description "A minimal D application."
 authors "David"
-copyright "Copyright © 2019, David"
+copyright "Copyright © 2020, David"
 license "proprietary"
-
-configuration "executable" {
-    mainSourceFile "source/app.d"
-    targetType "executable"
-}
-
-configuration "unittest" {
-    dependency "silly" version="~>1.0.0"
-    excludedSourceFiles "source/app.d"
-}
+dependency "silly" version="~>1.0.2"

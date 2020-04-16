@@ -1,7 +1,16 @@
 module arc.output.ast_printer;
 
-import arc.syntax.ast;
-import arc.source: SourceMap;
+import arc.data.ast;
+import arc.data.source_map;
+
+const(char[]) print_ast(SourceMap sources, AstNode[] nodes...) {
+    auto printer = AstPrinter(sources);
+
+    foreach (node; nodes)
+        printer.print(node);
+
+    return printer.data;
+}
 
 /**
  * AstVisitor that generates a string representation of the syntax tree.
@@ -58,16 +67,16 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode* n, string prefix = "") {
+    void print(AstNode n, string prefix = "") {
         void put_length() {
             str.put(" (");
-            str.put(n.get_children().length.to!string);
+            str.put(n.children.length.to!string);
             str.put(")");
         }
 
         str.put(prefix);
         str.put(repr(sources, n));
-        switch (n.type) with (AstNode.Type) {
+        switch (n.kind) with (AstNode.Kind) {
         case Invalid:
             str.put(" \"");
             str.put(sources.get_spanned_text(n.span));
@@ -75,15 +84,8 @@ struct AstPrinter {
             write_children(n);
             break;
         case List:
-        case TypeList:
             put_length();
             write_children(n, true);
-            break;
-        case ListMember:
-            write_named_children(n, "Name: ", "Type: ", "Value: ");
-            break;
-        case TypeListMember:
-            write_named_children(n, "Name: ", "Type: ");
             break;
         case Function:
             write_named_children(n, "Params: ", "Return Type: ", "Body: ");
@@ -91,40 +93,43 @@ struct AstPrinter {
         case Call:
             write_named_children(n, "Target: ", "Arguments: ");
             break;
-        case Define:
+        case TypeDeclaration:
+            write_named_children(n, "Name: ", "Type: ");
+            break;
+        case ConstantDeclaration:
             write_named_children(n, "Name: ", "Type: ", "Value: ");
             break;
         case Variable:
-            write_named_children(n, "Pattern: ", "Type: ", "Value: ");
+            write_named_children(n, "Name: ", "Type: ", "Value: ");
             break;
-        case If:
-            write_named_children(n, "Cond: ", "Body: ", "Else: ");
+        case Unary:
+            write_named_children(n, "Op: ", "Operand: ");
             break;
-        case Return:
-            write_named_children(n, "Value: ");
+        case Binary:
+            write_named_children(n, "Op: ", "Left: ", "Right: ");
             break;
         default:
             write_children(n);
         }
     }
 
-    void write_children(AstNode* n, bool numbered = false) {
+    void write_children(AstNode n, bool numbered = false) {
         str.put("\n");
-        foreach (i, child; n.get_children()) {
-            write_child(child, i + 1 == n.get_children().length, numbered ? ("#" ~ i.to!string ~ " ") : "");
+        foreach (i, child; n.children) {
+            write_child(child, i + 1 == n.children.length, numbered ? ("#" ~ i.to!string ~ " ") : "");
         }
     }
 
-    void write_named_children(AstNode* n, string[] names...) {
-        assert(n.get_children().length == names.length);
+    void write_named_children(AstNode n, string[] names...) {
+        assert(n.children.length == names.length);
         
         str.put("\n");
-        foreach (i, child; n.get_children()) {
-            write_child(child, i + 1 == n.get_children().length, names[i]);
+        foreach (i, child; n.children) {
+            write_child(child, i + 1 == n.children.length, names[i]);
         }
     }
 
-    void write_child(AstNode* n, bool is_last_child, string prefix) {
+    void write_child(AstNode n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 
@@ -142,16 +147,15 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SourceMap sources, AstNode* node) {
+const(char)[] repr(SourceMap sources, AstNode node) {
     import std.conv: to;
 
-    switch (node.type) with (AstNode.Type) {
+    switch (node.kind) with (AstNode.Kind) {
         case Name:
-            return "Name(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
         case Integer:
         case Char:
-            return sources.get_spanned_text(node.span);
+            return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
         default:
-            return node.type.to!string;
+            return node.kind.to!string;
     }
 }

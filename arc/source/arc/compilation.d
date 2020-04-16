@@ -16,9 +16,9 @@ module arc.compilation;
  */
 final class Compilation {
     import arc.stringtable: StringTable;
-    import arc.source: SourceMap, Source, Span;
+    import arc.data.source: SourceMap, Source, Span;
     import arc.reporting: Reporter;
-    import arc.syntax.ast: AstNode;
+    import arc.ast: AstNode;
     import arc.semantic.scope_tree: ScopeTree;
 
     SourceMap sources;
@@ -50,12 +50,18 @@ final class Compilation {
     }
 
     ScopeTree build_scope_tree(AstNode* syntax) {
-        import arc.semantic.scope_tree: ScopeTree, ScopeTreeBuilder, collect_declarations;
+        import arc.semantic.scope_tree: ScopeTree, ScopeTreeBuilder, collect_symbols;
 
         auto builder = ScopeTreeBuilder.initialize();
-        collect_declarations(builder, syntax);
+        collect_symbols(builder, syntax);
 
         return builder.scope_tree;
+    }
+
+    void resolve_local_symbols(ScopeTree* tree) {
+        // import arc.semantic.scope_tree: resolve_symbols;
+
+        // resolve_symbols(tree.symbols, tree.root_scope);
     }
 
     bool report_results(Source current_source) {

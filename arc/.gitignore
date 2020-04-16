@@ -1,4 +1,8 @@
-*/.dub
+.dub
+docs.json
+__dummy.html
+docs/
+/arc
 arc.so
 arc.dylib
 arc.dll
@@ -9,5 +13,3 @@ arc-test-*
 *.o
 *.obj
 *.lst
-*/.vs
-*/*.sln

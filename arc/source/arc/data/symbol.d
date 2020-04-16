@@ -1,0 +1,1 @@
+module arc.data.symbol;
