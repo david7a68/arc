@@ -570,7 +570,7 @@ AstNode parse_type_expr(Parser p) {
         while (Precedence.Call <= infix_parser_for(p.current.type).prec)
             expr = infix_parser_for(p.current.type).parser(p, expr);
 
-        if (!expr.is_valid || !p.current.type.matches_one(Token.Equals, Token.Semicolon, Token.Done)) {
+        if (!expr.is_valid) {
             p.reporter.error(
                 ArcError.TokenExpectMismatch,
                 expr.span,
@@ -578,8 +578,6 @@ AstNode parse_type_expr(Parser p) {
                 p.current.type
             );
 
-            p.sync_to_semicolon();
-            
             const span = expr.span.merge(p.current.span);
             p.free(expr);
             return p.alloc!Invalid(span);
