@@ -8,7 +8,7 @@ import arc.syntax.parser;
 void main(string[] args) {
 	auto map = new SourceMap();
 	// auto src = map.put("", "def T : (a : u32, b : u32) : (1, 2);");
-	auto src = map.put("", "def T := +;");
+	auto src = map.put("", "a : T = 3;");
 	auto rep = Reporter();
 	auto prs = new Parser(&rep);
 

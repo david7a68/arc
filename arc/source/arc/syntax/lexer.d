@@ -35,7 +35,7 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
-Token[] read_tokens(const(char)[] text, Token[] buffer) {
+size_t read_tokens(const(char)[] text, Token[] buffer) {
     auto cursor = Cursor(text);
 
     // get first token
@@ -46,7 +46,7 @@ Token[] read_tokens(const(char)[] text, Token[] buffer) {
     for (; buffer[i - 1].type != Token.Done && i < buffer.length; i++) 
         buffer[i] = scan_token(cursor);
 
-    return buffer[0 .. i];
+    return cursor.current - text.ptr;
 }
 
 private:

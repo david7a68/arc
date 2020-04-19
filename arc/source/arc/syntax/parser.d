@@ -52,25 +52,54 @@ enum Precedence {
 }
 
 final class Parser {
-    Token[1024] token_buffer;
-    Token[] tokens;
-    size_t token_index;
+    struct TokenBuffer {
+        Token[4] buffer;
+        size_t token_index;
 
-    const(char)[] text;
-    size_t next_buffer_start_index;
+        const(char)[] text;
+        size_t next_buffer_start_index;
+
+        void reset(const(char)[] text) {
+            this.text = text;
+            token_index = 0;
+            next_buffer_start_index = 0;
+            fill_buffer();
+        }
+
+        void advance() {
+            if (token_index + 1 < buffer.length)
+                token_index++;
+            else {
+                fill_buffer();
+                token_index = 0;
+            }
+        }
+
+        auto current() { return buffer[token_index]; }
+
+        auto done() { return current.type == Token.Done; }
+
+        void fill_buffer() {
+            auto read = read_tokens(text[next_buffer_start_index .. $], buffer);
+            
+            for (size_t i; i < buffer.length; i++) {
+                buffer[i].span.start = next_buffer_start_index + buffer[i].span.start;
+                
+                if (buffer[i].type == Token.Done)
+                    break;
+            }
+
+            next_buffer_start_index += read;
+        }
+    }
+
+    TokenBuffer buffer;
+    alias buffer this;
 
     Reporter* reporter;
 
     this(Reporter* reporter) {
         this.reporter = reporter;
-    }
-
-    void reset(const(char)[] text) {
-        this.text = text;
-        tokens = [];
-        token_index = 0;
-        next_buffer_start_index = 0;
-        fill_buffer();
     }
 
     AstNode[] parse_text(const(char)[] text) {
@@ -83,32 +112,15 @@ final class Parser {
         return result;
     }
 
-    Token current() { 
-        return tokens[token_index];
-    }
-
-    bool done() {
-        return token_index == tokens.length || tokens[token_index].type == Token.Done;
-    }
-
-    void advance() {
-        if (token_index < tokens.length) {
-            token_index++;
-        }
-        else {
-            fill_buffer();
-            token_index = 0;
-        }
-    }
-
     void drop_all(Token.Type type) {
         while (current.type != Token.Done && current.type == type)
             advance();
     }
 
     Token take() {
+        auto token = current;
         advance();
-        return tokens[token_index - 1];
+        return token;
     }
 
     bool skip(Token.Type type) {
@@ -125,12 +137,20 @@ final class Parser {
             return true;
         }
         else {
-            reporter.error(
-                ArcError.TokenExpectMismatch,
-                current.span,
-                "An unexpected token was encountered: Expected (%s), Encountered (%s)",
-                type, text[current.span.start .. current.span.start + current.span.length]
-            );
+            if (done)
+                reporter.error(
+                    ArcError.UnexpectedEndOfFile,
+                    current.span,
+                    "The file ended unexpectedly. A %s was expected.",
+                    type
+                );
+            else
+                reporter.error(
+                    ArcError.TokenExpectMismatch,
+                    current.span,
+                    "An unexpected token was encountered: Expected (%s), Encountered (%s)",
+                    type, text[current.span.start .. current.span.start + current.span.length]
+                );
 
             return false;
         }
@@ -138,11 +158,6 @@ final class Parser {
 
     void sync_to_semicolon() {
         while (!done && !current.type.matches_one(Token.Semicolon))
-            advance();
-    }
-
-    void sync_to_token(Token.Type type) {
-        while (!done && !current.type.matches_one(type, Token.Semicolon))
             advance();
     }
 
@@ -156,11 +171,6 @@ final class Parser {
                 free(node.children);
                 destroy(node);
             }
-    }
-
-    void fill_buffer() {
-        tokens = read_tokens(text[next_buffer_start_index .. $], token_buffer);
-        next_buffer_start_index += tokens.length;
     }
 }
 
@@ -383,7 +393,7 @@ auto parse_value(T)(Parser p) {
 
 auto parse_unary(Parser p) {
     auto op = parse_value!Name(p);
-    auto operand = parse_expression(p);
+    auto operand = parse_expression(p, Precedence.Call);
 
     const span = op.span.merge(operand.span);
     if (!operand.is_valid) {
@@ -432,7 +442,11 @@ auto parse_list(Token.Type closing_delim, bool parsing_typelist)(Parser p) {
             // here, we rely on parse_list_member to catch other invalid tokens
             members ~= parse_list_member!parsing_typelist(p);
 
-            if (p.current.type.matches_one(closing_delim, Token.Done)) {
+            if (!members[$-1].is_valid) {
+                p.free(members);
+                return p.alloc!Invalid(open);
+            }
+            else if (p.current.type.matches_one(closing_delim, Token.Done)) {
                 break;
             }
             else {
@@ -443,13 +457,8 @@ auto parse_list(Token.Type closing_delim, bool parsing_typelist)(Parser p) {
                         break;
                 }
                 else { // e.g: (a a)
-                    import std.algorithm: map, fold;
-
-                    auto span = merge_all(open, members.map!(a => a.span).fold!merge, p.current.span);
                     p.free(members);
-
-                    p.sync_to_semicolon();
-                    return p.alloc!Invalid(span);
+                    return p.alloc!Invalid(open);
                 }
             }
         }

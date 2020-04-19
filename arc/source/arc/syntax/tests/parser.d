@@ -91,8 +91,7 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
             assert(type_equivalent(error,
                 TypeDeclaration,
                     Name,
-                    List,
-                        Invalid
+                    Invalid
             ));
         }
     }
@@ -100,6 +99,26 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
 
 @("parse constdecl") unittest {
     with (AstNode.Kind) {
+        {
+            auto decl = "def T := 1;".parse!"statement"();
+            assert(check_types(decl,
+                ConstantDeclaration,
+                    Name,
+                    Inferred,
+                    Integer,
+            ));
+        }
+
+        {
+            auto decl = "def T : a = b;".parse!"statement"();
+            assert(check_types(decl,
+                ConstantDeclaration,
+                    Name,
+                    Name,
+                    Name,
+            ));
+        }
+
         {
             auto error = "def T := +;".parse!"statement"();
             assert(error.span == Span(0, 11));
@@ -272,7 +291,6 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
     with (AstNode.Kind) {
         {
             auto err = "a = = b".parse!"expression"();
-            assert(err.span == Span(0, 7));
             assert(err.kind == Invalid);
             assert(reporter.errors[0].code == ArcError.TokenNotAnExpression);
         }
@@ -308,6 +326,13 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
     with (AstNode.Kind) {
         {
             auto err = "(a = b)".parse!"type_expr"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(reporter.errors.length == 1);
+            check_types(err, Invalid);
+        }
+
+        {
+            auto err = "(a : !)".parse!"type_expr"();
             assert(reporter.has_error(ArcError.TokenExpectMismatch));
             assert(reporter.errors.length == 1);
             check_types(err, Invalid);

@@ -6,10 +6,10 @@ import arc.syntax.lexer: Token, read_tokens;
 Token[64] token_buffer;
 
 auto scan_tokens(const(char)[] text) {
-    auto buffer = read_tokens(text, token_buffer);
-    assert(buffer.length > 0 && buffer[$-1].type == Token.Done, "Exceeded max test length");
+    auto read = read_tokens(text, token_buffer);
+    assert(read == text.length, "Exceeded max test length");
 
-    return buffer;
+    return token_buffer[];
 }
 
 bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
@@ -17,20 +17,21 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
     import std.range: zip;
     import std.format: format;
 
-    tokens = tokens[0 .. $ - 1];
+    size_t length;
+    for (; tokens[length].type != Token.Done && length < tokens.length; length++) {}
 
     static if (compare_type)
-        return tokens.map!(a => a.type).equal(ts);
+        return tokens[0 .. length].map!(a => a.type).equal(ts);
     else
-        return tokens.equal(ts);
+        return tokens[0 .. length].equal(ts);
 }
 
 @("lex empty") unittest {
-    assert("".scan_tokens.length == 1);
+    assert("".scan_tokens[0].type == Token.Done);
 }
 
 @("lex whitespace") unittest {
-    assert("  \t\t\t\t    ".scan_tokens.length == 1);
+    assert("  \t\t\t\t    ".scan_tokens[0].type == Token.Done);
 }
 
 @("lex compact") unittest {
