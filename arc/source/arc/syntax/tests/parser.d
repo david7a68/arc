@@ -203,6 +203,15 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
         assert(check_types("1 + 1".parse!"expression", Binary, Name, Integer, Integer));
         assert(check_types("a ^ 2".parse!"expression", Binary, Name, Name, Integer));
 
+        assert(check_types("-a * b".parse!"expression",
+            Binary,
+                Name,
+                Unary,
+                    Name,
+                    Name,
+                Name
+        ));
+
         assert(check_types("a - -3".parse!"expression",
             Binary,
                 Name,
