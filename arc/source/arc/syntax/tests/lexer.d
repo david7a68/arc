@@ -1,17 +1,21 @@
 module arc.syntax.tests.lexer;
 
 import arc.data.source: Span;
-import arc.syntax.lexer: Token, read_tokens;
+import arc.syntax.lexer: Token, TokenBuffer;
 
-Token[64] token_buffer;
+/// Thread-local global token buffer so we don't have to allocate a whole bunch
+/// of these. Also makes the interface of `scan_tokens(text)` simpler.
+TokenBuffer!64 token_buffer;
 
+/// Read all tokens from text, up to `token_buffer.length`.
 auto scan_tokens(const(char)[] text) {
-    auto read = read_tokens(text, token_buffer);
-    assert(read == text.length, "Exceeded max test length");
+    token_buffer = TokenBuffer!64(text);
+    assert(token_buffer.next_buffer_index == text.length, "Exceeded max test length");
 
-    return token_buffer[];
+    return token_buffer.tokens[];
 }
 
+/// Tests that the tokens provided are equivalent in type or value to `ts`.
 bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
     import std.algorithm: equal, map;
     import std.range: zip;

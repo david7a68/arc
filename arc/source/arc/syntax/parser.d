@@ -36,7 +36,7 @@ module arc.syntax.parser;
 import arc.data.ast;
 import arc.data.source: Span, merge, merge_all;
 import arc.reporter;
-import arc.syntax.lexer: Token, read_tokens, matches_one;
+import arc.syntax.lexer: Token, TokenBuffer, matches_one;
 
 enum Precedence {
     None,
@@ -52,54 +52,17 @@ enum Precedence {
 }
 
 final class Parser {
-    struct TokenBuffer {
-        Token[4] buffer;
-        size_t token_index;
-
-        const(char)[] text;
-        size_t next_buffer_start_index;
-
-        void reset(const(char)[] text) {
-            this.text = text;
-            token_index = 0;
-            next_buffer_start_index = 0;
-            fill_buffer();
-        }
-
-        void advance() {
-            if (token_index + 1 < buffer.length)
-                token_index++;
-            else {
-                fill_buffer();
-                token_index = 0;
-            }
-        }
-
-        auto current() { return buffer[token_index]; }
-
-        auto done() { return current.type == Token.Done; }
-
-        void fill_buffer() {
-            auto read = read_tokens(text[next_buffer_start_index .. $], buffer);
-            
-            for (size_t i; i < buffer.length; i++) {
-                buffer[i].span.start = next_buffer_start_index + buffer[i].span.start;
-                
-                if (buffer[i].type == Token.Done)
-                    break;
-            }
-
-            next_buffer_start_index += read;
-        }
-    }
-
-    TokenBuffer buffer;
+    TokenBuffer!4 buffer;
     alias buffer this;
 
     Reporter* reporter;
 
     this(Reporter* reporter) {
         this.reporter = reporter;
+    }
+
+    void reset(const(char)[] text) {
+        buffer = TokenBuffer!4(text);
     }
 
     AstNode[] parse_text(const(char)[] text) {
@@ -149,7 +112,7 @@ final class Parser {
                     ArcError.TokenExpectMismatch,
                     current.span,
                     "An unexpected token was encountered: Expected (%s), Encountered (%s)",
-                    type, text[current.span.start .. current.span.start + current.span.length]
+                    type, source_text[current.span.start .. current.span.start + current.span.length]
                 );
 
             return false;

@@ -43,31 +43,62 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
 }
 
 /**
- Eagerly consumes the text to produce up to `buffer.length` tokens, inserts the
- tokens into `buffer`, and returns the number of characters read. All tokens'
- spans are relative to the beginning of the text provided. If you want to adjust
- the spans' locations, simply add an offset to `span.start`.
-
- Upon reaching the end of the file, this function will insert a 0-length Done
- token to indicate the end of the document.
+ A TokenBuffer offers a buffered 1-token window over a source text.
  */
-size_t read_tokens(const(char)[] text, Token[] buffer) {
-    auto base = cast(size_t) text.ptr;
-    auto current = text.ptr;
-    auto end = current + text.length;
+struct TokenBuffer(size_t buffer_size) {
+    /// A block-buffer for read tokens.
+    Token[buffer_size] tokens;
+    ///
+    size_t current_token_index;
+    ///
+    const(char)[] source_text;
+    ///
+    size_t next_buffer_index;
+    ///
+    size_t buffer_span_offset;
 
-    // get first token
-    buffer[0] = scan_token(base, current, end);
+    this(const(char)[] text, size_t span_offset = 0) {
+        source_text = text;
+        buffer_span_offset = span_offset;
+        fill_buffer(&this);
+    }
 
-    // if the previous token was not EOF, and there is space in the buffer, scan token
-    size_t i = 1;
-    for (; buffer[i - 1].type != Token.Done && i < buffer.length; i++) 
-        buffer[i] = scan_token(base, current, end);
+    void advance() {
+        if (current_token_index + 1 < tokens.length)
+            current_token_index++;
+        else {
+            fill_buffer(&this);
+            current_token_index = 0;
+        }
+    }
 
-    return current - text.ptr;
+    auto current() { return tokens[current_token_index]; }
+
+    auto done() { return current.type == Token.Done; }
 }
 
 private:
+
+void fill_buffer(size_t n)(TokenBuffer!n* buffer) {
+    auto base = buffer.source_text.ptr;
+    auto current = buffer.source_text.ptr + buffer.next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
+    auto end = buffer.source_text.length + base;
+    
+    buffer.tokens[] = Token.init;
+    
+    // get first token
+    buffer.tokens[0] = scan_token(base, current, end);
+
+    // if the previous token was not EOF, and there is space in the buffer, scan token
+    size_t i = 1;
+    for (; buffer.tokens[i - 1].type != Token.Done && i < buffer.tokens.length; i++) {
+        buffer.tokens[i] = scan_token(base, current, end);
+        buffer.tokens[i].span.start += buffer.buffer_span_offset;
+    }
+    
+    const read = current - (buffer.source_text.ptr + buffer.next_buffer_index);
+    buffer.next_buffer_index += read;
+}
 
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;
@@ -92,10 +123,10 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
+Token scan_token(const char* base, ref const(char)* current, ref const(char*) end) {
     auto start = current;
 
-    auto final_span() { return Span((cast(size_t) start) - base, current - start); }
+    auto final_span() { return Span(start - base, current - start); }
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
         current += advance_n;
@@ -110,7 +141,7 @@ Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
 
     switch_start:
     if (current >= end)
-        return Token(Token.Done, Span((cast(size_t) start) - base, 0)); 
+        return Token(Token.Done, Span(start - base, 0)); 
     
     const c = *current;
     current++;
