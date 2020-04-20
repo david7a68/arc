@@ -151,7 +151,7 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
     with (AstNode.Kind) {
         {
             auto var = "a : T = 3;".parse!"statement"();
-            assert(var.span == Span(0, 9));
+            assert(var.span == Span(0, 10));
             assert(check_types(var,
                 Variable,
                     Name,
@@ -162,7 +162,7 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
 
         {
             auto var = "a := 3;".parse!"statement"();
-            assert(var.span == Span(0, 6));
+            assert(var.span == Span(0, 7));
             assert(check_types(var,
                 Variable,
                     Name,
@@ -173,13 +173,46 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
 
         {
             auto var = "a : T;".parse!"statement"();
-            assert(var.span == Span(0, 5));
+            assert(var.span == Span(0, 6));
             assert(check_types(var,
                 Variable,
                     Name,
                     Name,
                     Inferred
             ));
+        }
+    }
+}
+
+@("parse block") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("{}".parse!"statement"(), Block));
+
+        {
+            auto block = "{ a; }".parse!"statement"();
+            assert(block.span == Span(0, 6));
+            assert(check_types(block, Block, Name));
+        }
+
+        {
+            auto block = "{ ".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            auto block = "{ a }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            auto block = "( a, { ) }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            auto block = "{ ( } )".parse!"statement"();
+            assert(!block.is_valid);
+            assert(parser.current.type != Token.Done);
         }
     }
 }
