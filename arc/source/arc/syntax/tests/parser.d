@@ -212,7 +212,7 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
         {
             auto block = "{ ( } )".parse!"statement"();
             assert(!block.is_valid);
-            assert(parser.current.type != Token.Done);
+            assert(parser.current.type == Token.Done);
         }
     }
 }

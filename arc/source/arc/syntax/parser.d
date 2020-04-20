@@ -153,14 +153,14 @@ AstNode parse_statement(Parser p) {
             if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
                 return continue_variable(p, prefix);
             else {
-                auto expr = parse_infix_expression(p, prefix);
+                auto expr = prefix.is_valid ? parse_infix_expression(p, prefix) : prefix;
 
                 if (expr.is_valid && p.skip_required_delim(Token.Semicolon))
                     return expr;
                 else {
                     p.sync_to_semicolon();
                     
-                    const span = expr.span.merge(p.take().span);
+                    const span = expr.span.merge(p.take_required_delim(Token.Semicolon).span);
                     p.free(expr);
 
                     return p.alloc!Invalid(span);
@@ -506,7 +506,7 @@ AstNode parse_type_expr(Parser p) {
                     p.current.type
                 );
 
-                return p.alloc!Invalid(p.current.span);
+                return p.alloc!Invalid(p.take().span);
         }
     }
 
@@ -522,26 +522,12 @@ AstNode parse_type_expr(Parser p) {
     }
 
     auto expr = prefix(p);
+    while (expr.is_valid && Precedence.Call <= infix_parser_for(p.current.type).prec)
+        expr = infix_parser_for(p.current.type).parser(p, expr);
 
-    if (expr.is_valid) {
-        while (Precedence.Call <= infix_parser_for(p.current.type).prec)
-            expr = infix_parser_for(p.current.type).parser(p, expr);
-
-        if (!expr.is_valid) {
-            p.reporter.error(
-                ArcError.TokenExpectMismatch,
-                expr.span,
-                "An unexpected %s was encountered while parsing a type.",
-                p.current.type
-            );
-
-            scope(exit) p.free(expr);
-            return p.alloc!Invalid(expr.span.merge(p.current.span));
-        }
-
+    if (expr.is_valid)
         return expr;
-    }
-
+    
     scope(exit) p.free(expr);
     return p.alloc!Invalid(expr.span.merge(p.current.span));
 }
