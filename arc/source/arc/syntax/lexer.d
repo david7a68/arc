@@ -3,7 +3,10 @@ module arc.syntax.lexer;
 import arc.data.hash: Key, digest;
 import arc.data.source: Span;
 
+/// A `Token` is the smallest discrete unit of the source text that the compiler
+/// operates on.
 struct Token {
+    /// Represents the distinct classes of tokens that the are used in the compiler.
     enum Type: ubyte {
         Invalid, Done,
 
@@ -23,11 +26,15 @@ struct Token {
 
     alias Type this;
 
+    ///
     Type type;
+    ///
     Span span;
+    ///
     Key key;
 }
 
+/// Returns `true` if `type` matches one of the types in `types`.
 bool matches_one(Token.Type type, const Token.Type[] types...) {
     foreach (t; types)
         if (type == t)
@@ -35,6 +42,15 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
+/**
+ Eagerly consumes the text to produce up to `buffer.length` tokens, inserts the
+ tokens into `buffer`, and returns the number of characters read. All tokens'
+ spans are relative to the beginning of the text provided. If you want to adjust
+ the spans' locations, simply add an offset to `span.start`.
+
+ Upon reaching the end of the file, this function will insert a 0-length Done
+ token to indicate the end of the document.
+ */
 size_t read_tokens(const(char)[] text, Token[] buffer) {
     auto base = cast(size_t) text.ptr;
     auto current = text.ptr;
@@ -79,21 +95,22 @@ shared static this() {
 Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
     auto start = current;
 
+    auto final_span() { return Span((cast(size_t) start) - base, current - start); }
+
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
         current += advance_n;
-        return Token(t, Span((cast(size_t) start) - base, current - start), key);
+        return Token(t, final_span(), key);
     }
 
     auto make_op_token(Token.Type t, int advance_n = 0) {
         current += advance_n;
         const key = digest(start[0 .. current - start]);
-        return Token(t, Span((cast(size_t) start) - base, current - start), key);
+        return Token(t, final_span(), key);
     }
 
     switch_start:
-    if (current >= end) {
+    if (current >= end)
         return Token(Token.Done, Span((cast(size_t) start) - base, 0)); 
-    }
     
     const c = *current;
     current++;
@@ -146,7 +163,7 @@ Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
         case '=':
             if (current < end && *current == '=')
                 return make_op_token(Token.EqualEqual, 1);
-            else // skip advancing here because we've already done it
+            else
                 return make_op_token(Token.Equals);
 
         case '<':
@@ -171,20 +188,11 @@ Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
             if (current >= end) {
                 return make_token(Token.Invalid);
             }
-            else if (*current == '\\') {
-                const key = digest(current[0 .. 2]);
-                current += 2;
-                if (*current == '\'')
-                    return make_token(Token.Char, 1, key);
-                
-                while (current < end && *current != '\'')
-                    current++;
-                
-                return make_token(Token.Invalid);
-            }
             else {
-                const key = digest(current[0 .. 1]);
-                current++;
+                const content_length = *current == '\\' ? 2 : 1;
+                const key = digest(current[0 .. content_length]);
+                current += content_length;
+
                 if (*current == '\'')
                     return make_token(Token.Char, 1, key);
                 else
