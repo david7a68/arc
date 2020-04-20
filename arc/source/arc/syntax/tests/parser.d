@@ -6,14 +6,21 @@ import arc.reporter;
 import arc.syntax.lexer: Token;
 import arc.syntax.parser: Parser, parse_expression, parse_statement, parse_type_expr;
 
-// Thread-local module variables
+/// The reporter holds the list of errors encountered during parsing.
+/// This is reset automatically every time `parse(text)` is used. This is a
+/// thread-local global variable.
 Reporter reporter;
+
+/// The parser context, reused for every parsing operation in the current
+/// thread. This is a thread-local global variable.
 Parser parser;
 
 static this() {
     parser = new Parser(&reporter);
 }
 
+/// Resets the parser and reporter, then parses the string and returns the
+/// resulting tree.
 auto parse(string op)(string text) {
     parser.reset(text);
     reporter.clear();
@@ -21,6 +28,10 @@ auto parse(string op)(string text) {
     mixin("return parse_" ~ op ~ "(parser);");
 }
 
+/**
+ Checks that the types of the nodes in the tree, traversed depth-first match the
+ types provided.
+ */
 bool type_equivalent(AstNode tree, AstNode.Kind[] types...) {
     import std.algorithm: equal;
 
@@ -38,6 +49,10 @@ bool type_equivalent(AstNode tree, AstNode.Kind[] types...) {
     return equal(flattened_tree, types);
 }
 
+/**
+ Checks that the types are equivalent as in `type_equivalent()` and that there
+ were no errors when parsing.
+ */
 bool check_types(AstNode node, AstNode.Kind[] types...) {
     const had_errors = reporter.errors.length > 0;
     if (had_errors) reporter.clear();
@@ -299,7 +314,7 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
 @("parse errors") unittest {
     with (AstNode.Kind) {
         {
-            auto err = "a = = b".parse!"expression"();
+            const err = "a = = b".parse!"expression"();
             assert(err.kind == Invalid);
             assert(reporter.errors[0].code == ArcError.TokenNotAnExpression);
         }

@@ -36,50 +36,22 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
 }
 
 size_t read_tokens(const(char)[] text, Token[] buffer) {
-    auto cursor = Cursor(text);
+    auto base = cast(size_t) text.ptr;
+    auto current = text.ptr;
+    auto end = current + text.length;
 
     // get first token
-    buffer[0] = scan_token(cursor);
+    buffer[0] = scan_token(base, current, end);
 
     // if the previous token was not EOF, and there is space in the buffer, scan token
     size_t i = 1;
     for (; buffer[i - 1].type != Token.Done && i < buffer.length; i++) 
-        buffer[i] = scan_token(cursor);
+        buffer[i] = scan_token(base, current, end);
 
-    return cursor.current - text.ptr;
+    return current - text.ptr;
 }
 
 private:
-
-struct Cursor {
-    const (char)* start;
-    const (char)* current;
-    const (char)* end;
-
-    this(const(char)[] text) {
-        start = current = text.ptr;
-        end = start + text.length;
-    }
-
-    uint index() in (current - start <= uint.max) {
-        return cast(uint) (current - start);
-    }
-
-    bool done() {
-        return current >= end;
-    }
-
-    void advance(uint n = 1) in (current + n <= end) {
-        current += n;
-    }
-
-    const(char)[] spanned_text(ref Cursor other) {
-        const lo = current < other.current ? current : other.current;
-        const hi = current > other.current ? current : other.current;
-        return lo[0 .. hi - lo];
-    }
-}
-
 
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;
@@ -97,39 +69,43 @@ shared static this() {
 }
 
 /**
- * Identifies the first valid token in the text sequence from `*cursor.current` to 
- * `end`. If the first character in the text is not a valid start of a token,
- * a token of type `Invalid` will be returned.
- *
- * This function will identify keywords as distinct from symbols.
+ Identifies the first valid token in the text sequence from `*current` to
+ `end`. If the first character in the text is not a valid start of a token, a
+ token of type `Invalid` will be returned. Note that this function does no
+ currently process multiple `Invalid` characters as a single token.
+
+ This function will identify keywords as distinct from symbols.
  */
-Token scan_token(ref Cursor cursor) {
-    auto start = cursor;
+Token scan_token(size_t base, ref const(char)* current, ref const(char*) end) {
+    auto start = current;
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
-        cursor.advance(advance_n);
-        return Token(t, Span(start.index, cursor.index - start.index), key);
+        current += advance_n;
+        return Token(t, Span((cast(size_t) start) - base, current - start), key);
     }
 
     auto make_op_token(Token.Type t, int advance_n = 0) {
-        cursor.advance(advance_n);
-        const key = digest(start.spanned_text(cursor));
-        return Token(t, Span(start.index, cursor.index - start.index), key);
+        current += advance_n;
+        const key = digest(start[0 .. current - start]);
+        return Token(t, Span((cast(size_t) start) - base, current - start), key);
     }
 
     switch_start:
-    if (cursor.done)
-        return Token(Token.Done, Span(start.index, 0)); 
+    if (current >= end) {
+        return Token(Token.Done, Span((cast(size_t) start) - base, 0)); 
+    }
+    
+    const c = *current;
+    current++;
 
-    const c = *cursor.current;
-    cursor.advance();
     switch (c) {
         case ' ':
         case '\t':
         case '\r':
         case '\n':
-            start.advance();
+            start++;
             goto switch_start;
+
         case '(':
         case ')':
         case '[':
@@ -139,92 +115,104 @@ Token scan_token(ref Cursor cursor) {
         case ',':
         case ';':
             return make_token(cast(Token.Type) c);
+
         case '+':
         case '*':
         case '^':
         case '&':
             return make_op_token(cast(Token.Type) c);
+
         case '-':
-            if (!cursor.done && *cursor.current == '>')
+            if (current < end && *current == '>')
                 return make_token(Token.Rarrow, 1);
             return make_op_token(Token.Minus);
+
         case '.':
             return make_op_token(Token.Dot);
+
         case ':':
-            if (!cursor.done && *cursor.current == ':')
+            if (current < end && *current == ':')
                 return make_token(Token.ColonColon, 1);
             else
                 return make_token(Token.Colon);
+
         case '/':
-            if (!cursor.done && *cursor.current == '/') {
-                while (*cursor.current != '\n') cursor.advance();
+            if (current < end && *current == '/') {
+                while (*current != '\n') current++;
                 goto switch_start;
             }
             else return make_op_token(Token.Slash);
+
         case '=':
-            if (!cursor.done && *cursor.current == '=')
+            if (current < end && *current == '=')
                 return make_op_token(Token.EqualEqual, 1);
             else // skip advancing here because we've already done it
                 return make_op_token(Token.Equals);
+
         case '<':
-            if (!cursor.done && *cursor.current == '=')
+            if (current < end && *current == '=')
                 return make_op_token(Token.LessEqual, 1);
             else
                 return make_op_token(Token.Less);
+
         case '>':
-            if (!cursor.done && *cursor.current == '=')
+            if (current < end && *current == '=')
                 return make_op_token(Token.GreaterEqual, 1);
             else
                 return make_op_token(Token.Greater);
+
         case '!':
-            if (!cursor.done && *cursor.current == '=')
+            if (current < end && *current == '=')
                 return make_op_token(Token.BangEqual, 1);
             else
                 return make_op_token(Token.Bang);
-        case '\'':
-            if (cursor.done)
-                return make_token(Token.Invalid);
-            else if (*cursor.current == '\\') {
-                auto key = digest(cursor.current[0 .. 2]);
-                cursor.advance(2);
 
-                if (*cursor.current == '\'')
-                    return make_token(Token.Char, 1);
+        case '\'':
+            if (current >= end) {
+                return make_token(Token.Invalid);
+            }
+            else if (*current == '\\') {
+                const key = digest(current[0 .. 2]);
+                current += 2;
+                if (*current == '\'')
+                    return make_token(Token.Char, 1, key);
                 
-                while (!cursor.done && *cursor.current != '\'')
-                    cursor.advance();
+                while (current < end && *current != '\'')
+                    current++;
                 
                 return make_token(Token.Invalid);
             }
             else {
-                auto key = digest(cursor.current[0 .. 1]);
-                cursor.advance();
-                if (*cursor.current == '\'')
+                const key = digest(current[0 .. 1]);
+                current++;
+                if (*current == '\'')
                     return make_token(Token.Char, 1, key);
                 else
                     return make_token(Token.Invalid);
             }
+
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
         case '_':
-            loop_start: if (!cursor.done) switch (*cursor.current) {
+            loop_start: if (current < end) switch (*current) {
                 case 'a': .. case 'z':
                 case 'A': .. case 'Z':
                 case '0': .. case '9':
                 case '_':
-                    cursor.advance();
+                    current++;
                     goto loop_start;
                 default:
             }
 
-            const key = digest(start.spanned_text(cursor));
+            const key = digest(start[0 .. current - start]);
             const type = keywords.get(key, Token.Name);
-            
             return make_token(type, 0, key);
+
         case '0': .. case '9':
-            while (!cursor.done && (('0' <= *cursor.current && *cursor.current <= '9') || *cursor.current == '_'))
-                cursor.advance();
+            while (current < end && (('0' <= *current && *current <= '9') || *current == '_'))
+                current++;
             return make_token(Token.Integer, 0);
+
         default:
             return make_token(Token.Invalid, 1);
     }

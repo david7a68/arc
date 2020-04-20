@@ -79,6 +79,6 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 @("lex char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Char));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Char, Span(0, 4))
+        Token(Token.Char, Span(0, 4), 16287058411698249816UL)
     ));
 }
