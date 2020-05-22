@@ -51,7 +51,7 @@ abstract class AstNode {
 
     AstNode[] children() { return[]; }
 
-    bool is_valid() { return kind != Kind.Invalid; }
+    bool is_valid() const { return kind != Kind.Invalid; }
 }
 
 static this() {
@@ -137,8 +137,9 @@ final class Operator(AstNode.Kind op_kind, size_t n_parts) : AstNode {
 
     AstNode[n_parts] operands;
 
-    this(Span span, AstNode[] operands...) in (n_parts == operands.length) {
-        super(op_kind, span);
+    this(AstNode[] operands...) in (n_parts == operands.length) {
+        import arc.data.source : merge;
+        super(op_kind, operands[0].span.merge(operands[$ - 1].span));
         this.operands[] = operands;
     }
 

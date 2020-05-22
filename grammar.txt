@@ -4,7 +4,7 @@ statement = def ';'
           | primary '=' expr ';'
           ;
 
-    def = 'def' name ':' type? ((type ('=' expr)?) | ('=' expr)) ;
+    def = 'def' name ':' ((type ('=' expr)?) | ('=' expr)) ;
 
     block = '{' statement* '}' ;
 
@@ -41,6 +41,7 @@ statement = def ';'
         prefix = '-' primary
                | '!' primary
                | 'import' path
+               | primary
                ;
 
         binary = expr op expr

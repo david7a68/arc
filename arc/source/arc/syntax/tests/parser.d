@@ -45,6 +45,7 @@ bool type_equivalent(AstNode tree, AstNode.Kind[] types...) {
     }
 
     flatten(tree);
+    import std.stdio; writeln(flattened_tree);
 
     return equal(flattened_tree, types);
 }
@@ -181,6 +182,26 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
                     Inferred
             ));
         }
+
+        {
+            auto var = "a : !;".parse!"statement"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(type_equivalent(var,
+                Variable,
+                    Name,
+                    Invalid,
+                    Inferred
+            ));
+        }
+
+        
+        {
+            auto var = "a : !".parse!"statement"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(type_equivalent(var,
+                Invalid
+            ));
+        }
     }
 }
 
@@ -195,22 +216,22 @@ bool check_types(AstNode node, AstNode.Kind[] types...) {
         }
 
         {
-            auto block = "{ ".parse!"statement"();
+            const block = "{ ".parse!"statement"();
             assert(!block.is_valid);
         }
 
         {
-            auto block = "{ a }".parse!"statement"();
+            const block = "{ a }".parse!"statement"();
             assert(!block.is_valid);
         }
 
         {
-            auto block = "( a, { ) }".parse!"statement"();
+            const block = "( a, { ) }".parse!"statement"();
             assert(!block.is_valid);
         }
 
         {
-            auto block = "{ ( } )".parse!"statement"();
+            const block = "{ ( } )".parse!"statement"();
             assert(!block.is_valid);
             assert(parser.current.type == Token.Done);
         }
