@@ -273,16 +273,15 @@ immutable prefixes = () {
         return p.alloc!Invalid(p.current.span);
     };
 
-    with (Token.Type) {
-        foreach (t; [Minus, Bang])
-            parsers[t] = &parse_unary;
+    parsers[Token.Name]         = &parse_value!Name;
+    parsers[Token.Integer]      = &parse_value!Integer;
+    parsers[Token.Char]         = &parse_value!Char;
 
-        parsers[Name]         = &parse_value!(arc.data.ast.Name);
-        parsers[Integer]      = &parse_value!(arc.data.ast.Integer);
-        parsers[Char]         = &parse_value!(arc.data.ast.Char);
-        parsers[Lparen]       = &parse_list!(Rparen, false);
-        parsers[Lbracket]     = &parse_list!(Rbracket, false);
-    }
+    foreach (t; [Token.Minus, Token.Bang])
+        parsers[t] = &parse_unary;
+
+    parsers[Token.Lparen]       = &parse_list!(Token.Rparen, false);
+    parsers[Token.Lbracket]     = &parse_list!(Token.Rbracket, false);
 
     return parsers;
 } ();
@@ -325,7 +324,7 @@ AstNode parse_infix_expression(Parser p, AstNode prefix, Precedence prec = Prece
 
     if (expr.is_valid)
         return expr;
-
+    
     scope (exit) p.free(expr);
     return p.alloc!Invalid(expr.span);
 }

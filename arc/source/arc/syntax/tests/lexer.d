@@ -68,21 +68,21 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("lex keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
-        Token(Token.And,        Span(0, 3), 2779594451),
-        Token(Token.Or,         Span(4, 2), 117848935),
-        Token(Token.If,         Span(7, 2), 491396510),
-        Token(Token.Else,       Span(10, 4), 4025523449),
-        Token(Token.Loop,       Span(15, 4), 3830345903),
-        Token(Token.Break,      Span(20, 5), 1271411175),
-        Token(Token.Return,     Span(26, 6), 1430125705),
-        Token(Token.Continue,   Span(33, 8), 3783755232),
-        Token(Token.Def,        Span(42, 3), 4118380002)
+        Token(Token.And,        Span(0, 3), 17648556366517412293UL),
+        Token(Token.Or,         Span(4, 2), 4116612837551264357UL),
+        Token(Token.If,         Span(7, 2), 10245967140023949179UL),
+        Token(Token.Else,       Span(10, 4), 15206279584842378246UL),
+        Token(Token.Loop,       Span(15, 4), 14974296207267515915UL),
+        Token(Token.Break,      Span(20, 5), 587566040553785743UL),
+        Token(Token.Return,     Span(26, 6), 17660342674565394361UL),
+        Token(Token.Continue,   Span(33, 8), 16371828708454923059UL),
+        Token(Token.Def,        Span(42, 3), 9791288970560527259UL)
     ));
 }
 
 @("lex char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Char));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Char, Span(0, 4), 1676188941)
+        Token(Token.Char, Span(0, 4), 16287058411698249816UL)
     ));
 }
