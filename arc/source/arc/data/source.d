@@ -10,9 +10,9 @@ module arc.data.source;
  */
 struct Span {
     /// The global index of the first character in this span
-    size_t start;
+    uint start;
     /// The number of characters in this span
-    size_t length;
+    uint length;
 
     /// The index of the last character in this span + 1
     auto end() const { return start + length; }
@@ -83,19 +83,19 @@ final class Source {
     const char[] text;
     /// The global index of the first character in the source file. This should
     /// never be 0.
-    size_t start_offset;
+    uint start_offset;
 
-    this(const char[] path, const char[] text, size_t start_offset) {
+    this(const char[] path, const char[] text, uint start_offset) {
         this.path = path;
         this.text = text;
         this.start_offset = start_offset;
     }
 
     /// The span encompassing this source file.
-    auto span() const { return Span(start_offset, text.length); }
+    auto span() const { return Span(start_offset, cast(uint) text.length); }
 
     /// Retrieve the source location of this global position.
-    SourceLoc get_loc(size_t position) in (start_offset <= position && position <= span.end) {
+    SourceLoc get_loc(uint position) in (start_offset <= position && position <= span.end) {
         uint line_num = 1;
         uint column;
 

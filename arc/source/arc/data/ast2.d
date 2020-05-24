@@ -30,19 +30,40 @@ struct AstNode {
         FunctionType,
     }
 
-    Span span;
+    /// The span of text used to derive this syntax node, including all of its
+    /// children.
+    Span span; // This is currently the largest part of the node, can we shrink it by putting them elsewhere?
+    
+    /// Discriminant, provides information for how to interpret this AST node
     Kind kind;
 
-    ubyte[4] padding;
+    /// Padding, may be used for internal purposes. DO NOT USE.
+    ubyte[7] padding;   // liveness marking really only needs 1 bit, we could add a parent or prev pointer here.
 
+    /// The index of the next sibling. These form a singly linked list.
     AstNodeIndex next = InvalidAstNodeIndex;
+
+    /// The index of the data-type associated with this node. This is empty until
+    /// until the typechecking phase.
     ArcTypeIndex type = InvalidArcTypeIndex;
 
     union {
+        /// The first child of this node. Children are represented as singly
+        /// linked lists.
         AstNodeIndex first_child = InvalidAstNodeIndex;
+
+        /// The interned symbol name for this node.
         Key name;
+
+        /// The key to the string value represented by this node.
+        Key string_value;
+
+        /// The integral value represented by this value.
+        ulong int_value;
     }
 }
+
+static assert(AstNode.sizeof == 32);
 
 /**
  * A simple helper struct for constructing a list of AST nodes. It can be a bit
@@ -80,7 +101,15 @@ struct AstNodeList {
 }
 
 /**
- * 
+ * A free-list allocator backed by virtual memory. This allocator will not
+ * return memory to the operating system until the allocator itself is destroyed
+ * much like a Region.
+ *
+ * The goals for this allocator are to provide a simple, fast allocator for
+ * creating nodes that may be 'destroyed' at any time as parts of the tree are
+ * found to be invalid during parsing or semantic analysis. Additionally, passes
+ * over the tree may rewrite parts of it, requiring that nodes by quickly and
+ * efficiently freed or allocated without wasting too many computer resources.
  */
 struct AstNodeAllocator {
     import arc.memory: IndexedRegion;
@@ -121,6 +150,9 @@ struct AstNodeAllocator {
 
     /**
      * Allocates a node from the pool.
+     *
+     * This function makes use of the padding space in AstNodes. Do not modify
+     * this space!
      */
     AstNodeIndex alloc() in (!is_at_capacity) {
         // Invariant: When num_allocated < nodes.num_allocated, there are
@@ -133,10 +165,15 @@ struct AstNodeAllocator {
         if (num_allocated < nodes.num_allocated) {
             auto index = first_free_node;
             first_free_node = nodes.get(first_free_node).next;
+
+            // Fill padding to indicate that this node is 'live'
+            nodes.get(index).padding[] = 255;
             return index;
         }
 
         auto index = nodes.alloc();
+        // Fill padding to indicate that this node is 'live'
+        nodes.get(index).padding[] = 255;
         return index;
     }
 
@@ -147,10 +184,18 @@ struct AstNodeAllocator {
      * Do not call this function in a loop unless you know that there are no
      * repeating references to any node. Attempting to free a node multiple
      * times is an error, but is not currently caught programmatically.
+     *
+     * This function makes use of the padding space in AstNodes, and may
+     * overwrite anything you put there.
      */
     void free(AstNodeIndex node_index) {
         for (AstNodeIndex current = node_index, next; current != InvalidAstNodeIndex; current = next) {
             auto node = nodes.get(current);
+
+            // Check that the node has not been freed previously... unless it
+            // has and then been reallocated.
+            assert(node.padding == [255, 255, 255, 255, 255, 255, 255]);
+
             next = node.next;
 
             // Free the node's children, adding them to the free list
@@ -162,6 +207,10 @@ struct AstNodeAllocator {
             // Add self to the free list
             node.next = first_free_node;
             first_free_node = current;
+            
+            // Freed nodes have empty padding
+            node.padding[0 .. 2] = 0;
+            
             num_allocated--;
         }
     }

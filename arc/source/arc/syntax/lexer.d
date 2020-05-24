@@ -126,7 +126,7 @@ shared static this() {
 Token scan_token(const char* base, ref const(char)* current, ref const(char*) end) {
     auto start = current;
 
-    auto final_span() { return Span(start - base, current - start); }
+    auto final_span() { return Span(cast(uint) (start - base), cast(uint) (current - start)); }
 
     auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
         current += advance_n;
@@ -141,7 +141,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
 
     switch_start:
     if (current >= end)
-        return Token(Token.Done, Span(start - base, 0)); 
+        return Token(Token.Done, Span(cast(uint) (start - base), 0)); 
     
     const c = *current;
     current++;
