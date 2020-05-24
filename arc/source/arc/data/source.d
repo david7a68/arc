@@ -85,7 +85,8 @@ final class Source {
     /// never be 0.
     uint start_offset;
 
-    this(const char[] path, const char[] text, uint start_offset) {
+    this(const char[] path, const char[] text, uint start_offset)
+            in (text.length <= uint.max && start_offset + text.length <= uint.max) {
         this.path = path;
         this.text = text;
         this.start_offset = start_offset;
@@ -95,7 +96,8 @@ final class Source {
     auto span() const { return Span(start_offset, cast(uint) text.length); }
 
     /// Retrieve the source location of this global position.
-    SourceLoc get_loc(uint position) in (start_offset <= position && position <= span.end) {
+    SourceLoc get_loc(uint position)
+            in (start_offset <= position && position <= span.end) {
         uint line_num = 1;
         uint column;
 
