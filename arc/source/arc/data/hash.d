@@ -1,6 +1,6 @@
 module arc.data.hash;
 
-alias Key = ulong;
+alias Key = uint;
 
 /**
  * Hashes text and returns (key: ubyte[8], text: const(char)[])
@@ -8,7 +8,7 @@ alias Key = ulong;
 Key digest(const(char)[] text) pure {
     import std.digest.murmurhash: hash = digest, MurmurHash3;
 
-    ubyte[16] key = hash!(MurmurHash3!(128))(text);
+    ubyte[4] key = hash!(MurmurHash3!(32))(text);
 
-    return (cast(ulong*) key.ptr)[0];
+    return (cast(uint*) key.ptr)[0];
 }

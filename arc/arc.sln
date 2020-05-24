@@ -1,14 +1,14 @@
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{A071D741-2E0F-453B-9042-D7C31DEBE7DE}") = "arc", ".dub/arc.visualdproj", "{7B02AB86-FF05-490C-BB10-EC41E8F398D7}"
+Project("{9D55BAF1-402B-4A29-9E41-F521E65583D5}") = "arc", ".dub/arc.visualdproj", "{8033CCA1-1C1C-45B7-ABF9-91C7CDB9998F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		debug|x64 = debug|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{7B02AB86-FF05-490C-BB10-EC41E8F398D7}.debug|x64.ActiveCfg = debug|x64
-		{7B02AB86-FF05-490C-BB10-EC41E8F398D7}.debug|x64.Build.0 = debug|x64
+		{8033CCA1-1C1C-45B7-ABF9-91C7CDB9998F}.debug|x64.ActiveCfg = debug|x64
+		{8033CCA1-1C1C-45B7-ABF9-91C7CDB9998F}.debug|x64.Build.0 = debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

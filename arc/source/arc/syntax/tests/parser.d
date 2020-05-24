@@ -45,7 +45,6 @@ bool type_equivalent(AstNode tree, AstNode.Kind[] types...) {
     }
 
     flatten(tree);
-    import std.stdio; writeln(flattened_tree);
 
     return equal(flattened_tree, types);
 }

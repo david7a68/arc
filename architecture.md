@@ -3,6 +3,9 @@
 ## Considerations
 
 * A compiler has a minimum complexity bounded by the language specification.
+* The compiler should impose reasonable limits on program size and complexity.
+  * Is 4 billion AST nodes sufficient for a source tree? That's ~128 Gib of data.
+  * Using these short 'pointers' requires a single offset pointer
 
 ## Stuff
 
