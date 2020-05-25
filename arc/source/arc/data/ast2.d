@@ -95,7 +95,7 @@ struct AstNode {
             case Name: case Integer: case Char:
                 return 0;
             case Negate: case Not:
-                return _children !is null;
+                return _child !is null;
             default:
                 return _children.length;
         }

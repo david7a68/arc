@@ -171,6 +171,8 @@ public:
             static assert(false, "Platform not supported.");
     }
 
+    @disable this(this);
+
     ~this() {
         version (Windows) {
             import core.sys.windows.windows: VirtualFree, MEM_RELEASE;
