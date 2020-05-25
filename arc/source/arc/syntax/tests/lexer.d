@@ -9,7 +9,7 @@ TokenBuffer!64 token_buffer;
 
 /// Read all tokens from text, up to `token_buffer.length`.
 auto scan_tokens(const(char)[] text) {
-    token_buffer = TokenBuffer!64(text);
+    token_buffer.begin(text);
     assert(token_buffer.next_buffer_index == text.length, "Exceeded max test length");
 
     return token_buffer.tokens[];

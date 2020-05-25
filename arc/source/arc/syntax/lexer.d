@@ -58,13 +58,13 @@ struct TokenBuffer(size_t buffer_size) {
     size_t buffer_span_offset;
 
     this(const(char)[] text, size_t span_offset = 0) {
-        begin(text, span_offset);
-    }
-
-    void begin(const(char)[] text, size_t span_offset = 0) {
         source_text = text;
         buffer_span_offset = span_offset;
         fill_buffer(&this);
+    }
+
+    void begin(const(char)[] text, size_t span_offset = 0) {
+        this = typeof(this)(text, span_offset);
     }
 
     void advance() {
