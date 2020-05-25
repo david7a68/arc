@@ -19,7 +19,7 @@ struct Token {
         
         Name, Integer, Char,
 
-        And, Or,
+        And, Or, Not,
         If, Else, Loop, Break, Return, Continue,
         Def,
     }
@@ -58,6 +58,10 @@ struct TokenBuffer(size_t buffer_size) {
     size_t buffer_span_offset;
 
     this(const(char)[] text, size_t span_offset = 0) {
+        begin(text, span_offset);
+    }
+
+    void begin(const(char)[] text, size_t span_offset = 0) {
         source_text = text;
         buffer_span_offset = span_offset;
         fill_buffer(&this);
@@ -106,6 +110,7 @@ immutable Token.Type[Key] keywords;
 shared static this() {
     keywords[digest("and")] = Token.And;
     keywords[digest("or")] = Token.Or;
+    keywords[digest("not")] = Token.Not;
     keywords[digest("if")] = Token.If;
     keywords[digest("else")] = Token.Else;
     keywords[digest("loop")] = Token.Loop;
@@ -125,6 +130,13 @@ shared static this() {
  */
 Token scan_token(const char* base, ref const(char)* current, ref const(char*) end) {
     auto start = current;
+
+    string case_of(const char[] c) {
+        import std.algorithm: map;
+        import std.array: join;
+        import std.conv: to;
+        return c.map!(v => "case "d ~ v.to!int.to!dstring ~ ": "d).join().to!string;
+    }
 
     auto final_span() { return Span(cast(uint) (start - base), cast(uint) (current - start)); }
 
@@ -147,27 +159,14 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
     current++;
 
     switch (c) {
-        case ' ':
-        case '\t':
-        case '\r':
-        case '\n':
+        mixin(case_of(" \t\r\n"));
             start++;
             goto switch_start;
 
-        case '(':
-        case ')':
-        case '[':
-        case ']':
-        case '{':
-        case '}':
-        case ',':
-        case ';':
+        mixin(case_of("()[]{},;"));
             return make_token(cast(Token.Type) c);
 
-        case '+':
-        case '*':
-        case '^':
-        case '&':
+        mixin(case_of("+*^&"));
             return make_op_token(cast(Token.Type) c);
 
         case '-':

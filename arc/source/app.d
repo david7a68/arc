@@ -9,17 +9,6 @@ import arc.data.ast2;
 import arc.memory;
 
 void main(string[] args) {
-	auto nodes = AstNodeAllocator.initialize();
-
-    auto list = AstNodeList(&nodes, nodes.alloc());
-    for (int i = 0; i < 31; i++) // for 32 nodes total
-        list.add(nodes.alloc());
-
-    assert(nodes.num_allocated == 32);
-
-	nodes.free(list.head);
-
-    assert(nodes.num_allocated == 0);
 	// auto map = new SourceMap();
 	// // auto src = map.put("", "(a = b)");
 	// auto src = map.put("", "a : !;");
@@ -36,4 +25,14 @@ void main(string[] args) {
 
 	// auto txt = print_ast(map, ast);
 	// writeln(txt);
+}
+
+void f() {
+	import arc.data.ast2;
+	import arc.syntax.parser2;
+	import arc.syntax.tests.parser2;
+	
+	with (AstNode.Kind) {
+        assert(check_types("-var".parse!"expression", Negate, Name));
+    }
 }

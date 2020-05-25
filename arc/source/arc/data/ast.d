@@ -37,10 +37,10 @@ abstract class AstNode {
         FunctionType,
     }
 
-    const Kind kind;
     const Span span;
-
     ArcType type;
+
+    const Kind kind;
 
     static AstNode none, inferred;
 

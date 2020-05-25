@@ -1,7 +1,6 @@
 statement = def ';'
-          | expr ';'
+          | expr '=' expr ';'
           | block
-          | primary '=' expr ';'
           ;
 
     def = 'def' name ':' ((type ('=' expr)?) | ('=' expr)) ;
@@ -11,7 +10,6 @@ statement = def ';'
     expr = primary | prefix | binary;
 
         primary = access
-                | call
                 | char
                 | list
                 | function
@@ -22,8 +20,6 @@ statement = def ';'
                 ;
 
             access = prefix '.' name ;
-
-            call = prefix list ;
 
             list = list_open ','* (list_member ',')* list_close ;
                 list_member = expr
@@ -45,6 +41,9 @@ statement = def ';'
                ;
 
         binary = expr op expr
+               | expr expr
+               ;
+
             op = '+'
                | '-'
                | '*'

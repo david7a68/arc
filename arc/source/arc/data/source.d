@@ -16,6 +16,23 @@ struct Span {
 
     /// The index of the last character in this span + 1
     auto end() const { return start + length; }
+
+    auto merge(Span rhs) const {
+        import std.algorithm: min, max;
+
+        if (this == Span())
+            return rhs == Span() ? this : rhs;
+
+        const lo = min(start, rhs.start);
+        return Span(lo, max(end, rhs.end) - lo);
+    }
+
+    /// Compare starting positions for these spans
+    int opCmp(Span rhs) {
+        if (start < rhs.start) return -1;
+        if (start > rhs.start) return 1;
+        return 0;
+    }
 }
 
 /**
