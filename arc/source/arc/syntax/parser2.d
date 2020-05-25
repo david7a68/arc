@@ -116,6 +116,7 @@ struct ParsingContext {
 
 AstNode* parse_symbol(ParsingContext* p) {
     auto t = p.take();
+    import std.stdio; writeln("ps: ", token_map[t.type].kind);
     return p.nodes.alloc(token_map[t.type].kind, t.span, t.key);
 }
 
@@ -200,13 +201,13 @@ MapItem[256] token_map = () {
     MapItem[256] map;
     with (Token.Type) {
         // values (they can be used as a call in a binary expr, hence their precedence)
-        map[Name]           = MapItem(AstNode.Name,         cast(Precedence) (Precedence.Call + 1));
-        map[Integer]        = MapItem(AstNode.Integer,      cast(Precedence) (Precedence.Call + 1));
-        map[Char]           = MapItem(AstNode.Char,         cast(Precedence) (Precedence.Call + 1));
+        map[Name]           = MapItem(AstNode.Name,         Precedence.Prefix);
+        map[Integer]        = MapItem(AstNode.Integer,      Precedence.Prefix);
+        map[Char]           = MapItem(AstNode.Char,         Precedence.Prefix);
         // unary operators (ditto)
-        map[Minus]          = MapItem(AstNode.Negate,       cast(Precedence) (Precedence.Call + 1));
-        map[Bang]           = MapItem(AstNode.Not,          cast(Precedence) (Precedence.Call + 1));
-        map[Not]            = MapItem(AstNode.Not,          cast(Precedence) (Precedence.Call + 1));
+        map[Minus]          = MapItem(AstNode.Negate,       Precedence.Prefix);
+        map[Bang]           = MapItem(AstNode.Not,          Precedence.Prefix);
+        map[Not]            = MapItem(AstNode.Not,          Precedence.Prefix);
         // binary operators
         map[Plus]           = MapItem(AstNode.Add,          cast(Precedence) (Precedence.Sum + 1));
         map[Minus]          = MapItem(AstNode.Subtract,     cast(Precedence) (Precedence.Sum + 1));

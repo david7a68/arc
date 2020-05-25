@@ -39,23 +39,18 @@ struct AstNode {
 
     alias Kind this;
 
-    /// The span of text used to derive this syntax node, including all of its
-    /// children.
-    Span span; // This is currently the largest part of the node, can we shrink it by putting them elsewhere?
-    
-    /// Discriminant, provides information for how to interpret this AST node
+    Span span;
     Kind kind;
 
     // Make the padding in this struct explicit
     // Note: Since x86 pointers are 48-bits, we could use this padding as a type pointer.
     //       This is also true for AArch64.
-    ubyte[7] padding;
+    // TODO: Make use of unused top 16 bits on x64 (and Aarch64) to store
 
     union {
         private AstNode*[] _children;
         private AstNode* _child;
 
-        /// The interned symbol name for this node.
         Key symbol;
     }
 
@@ -81,7 +76,7 @@ struct AstNode {
 
     bool is_valid() {
         return kind != AstNode.Invalid;
-    }
+    bool is_valid() { return kind != Kind.Invalid; }
 
     AstNode* as_invalid(Span span) in (num_children == 0) {
         kind = Kind.Invalid;
