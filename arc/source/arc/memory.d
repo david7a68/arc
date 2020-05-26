@@ -145,17 +145,13 @@ struct ObjectPool(T) {
     T* alloc(Args...)(Args args) {
         auto object = cast(T*) pool.alloc().ptr;
 
-        static if (args.length > 0)
-            *object = T(args);
-        else
-            *object = T.init;
+        static if (args.length) *object = T(args);
+        else                    *object = T.init;
         
         return object;
     }
 
-    void free(T* t) {
-        pool.free((cast(void*) t)[0 .. T.sizeof]);
-    }
+    void free(T* t) { pool.free(t[0 .. 1]); }
 }
 
 @("Virtual Allocator and Object Pool")

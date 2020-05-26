@@ -172,7 +172,7 @@ public:
 
     AstNode*[] alloc_sequence(SequenceBuffer seq) {
         auto array = alloc_sequence(seq[]);
-        sequence_pools[seq.size_class].free(cast(void[]) seq._nodes);
+        sequence_pools[seq.size_class].free(seq._nodes);
         return array;
     }
 
