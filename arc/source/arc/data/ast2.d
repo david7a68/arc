@@ -78,6 +78,9 @@ struct AstNode {
         _children = parts;
     }
 
+    static inferred()   { return &_inferred; }
+    static none()       { return &_none; }
+
     bool is_valid() { return kind != Kind.Invalid; }
 
     AstNode* as_invalid(Span span) return in (children.length == 0) {
@@ -98,6 +101,9 @@ struct AstNode {
     }
 }
 
+private auto _inferred = AstNode(AstNode.Inferred, Span());
+private auto _none = AstNode(AstNode.None, Span());
+
 struct SequenceBuffer {
 private:
     AstNode*[] _nodes;
@@ -115,7 +121,9 @@ public:
         _count++;
     }
 
-    AstNode*[] opSlice() { return _nodes[0 .. _count]; }
+    AstNode*[] opIndex()        { return _nodes[0 .. _count]; }
+    AstNode* opIndex(size_t n)  { return _nodes[n]; }
+    size_t opDollar()           { return _count; }
 
     void copy(SequenceBuffer* buffer) in (buffer.capacity < capacity) {
         _nodes[0 .. buffer.length] = (*buffer)[];
@@ -161,12 +169,19 @@ public:
         return SequenceBuffer(cast(AstNode*[]) sequence_pools[0].alloc(), 0);
     }
 
+    void abort(SequenceBuffer seq) {
+        foreach (node; seq[]) free(node);
+        sequence_pools[seq.size_class].free(seq._nodes);
+    }
+
     SequenceBuffer upgrade_sequence_buffer(SequenceBuffer old) {
         const new_size_class = old.size_class + 1;
         assert(new_size_class < sequence_pools.length);
 
         auto large = SequenceBuffer(cast(AstNode*[]) sequence_pools[new_size_class].alloc(), new_size_class);
         large.copy(&old);
+        
+        sequence_pools[old.size_class].free(old._nodes);
         return large;
     }
 

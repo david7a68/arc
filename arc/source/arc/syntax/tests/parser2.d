@@ -1,6 +1,7 @@
 module arc.syntax.tests.parser2;
 
 import arc.data.ast2;
+import arc.data.source: Span;
 import arc.syntax.parser2;
 import arc.reporter;
 
@@ -15,6 +16,7 @@ static this() {
 
 struct ParseResult {
     AstNode* tree;
+    alias tree this;
     string text;
 }
 
@@ -120,5 +122,62 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
                                 Name,       // g
                     Name                    // h
         ));
+    }
+}
+
+@("Parse Empty List") unittest {
+    with (AstNode.Kind) {
+        auto list = "()".parse!"expression"();
+        assert(list.span == Span(0, 2));
+        assert(check_types(list, List));
+    }
+}
+
+@("Parse List Members") unittest {
+    with (AstNode.Kind) {
+        auto list = "[a:= 2, 3, c:T=blah.b]".parse!"expression"();
+        assert(list.span == Span(0, 22));
+        assert(check_types(list,
+            List,
+                Variable,
+                    Name,
+                    Inferred,
+                    Integer,
+                Variable,
+                    None,
+                    Inferred,
+                    Integer,
+                Variable,
+                    Name,
+                    Name,
+                    Access,
+                        Name,
+                        Name
+        ));
+    }
+}
+
+@("Parse List Error") unittest {
+        auto err = "(a = b)".parse!"expression"();
+        assert(reporter.has_error(ArcError.TokenExpectMismatch));
+        assert(reporter.errors.length == 1);
+        check_types(err, AstNode.Invalid);
+}
+
+@("Parse Call") unittest {
+    with (AstNode.Kind) {
+        // a -3 -> a - 3, not a call
+        assert(check_types("a 4".parse!"expression"(), Call, Name, Integer));
+        
+        assert(check_types("a * b()".parse!"expression"(),
+            Multiply,
+                Name,
+                Call,
+                    Name,
+                    List
+        ));
+
+        // a b c -> a (b c)
+        assert(check_types("a b c".parse!"expression"(), Call, Name, Call, Name, Name));
     }
 }

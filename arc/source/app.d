@@ -33,9 +33,12 @@ void f() {
 	import arc.data.ast2;
 	import arc.syntax.parser2;
 	import arc.syntax.tests.parser2;
+	import arc.reporter;
 	
 	with (AstNode.Kind) {
-		check_types("1 + 1".parse!"expression", Add, Integer, Integer);
-        check_types("a ^ 2".parse!"expression", Power, Name, Integer);
+		auto err = "(a = b)".parse!"expression"();
+        assert(reporter.has_error(ArcError.TokenExpectMismatch));
+        assert(reporter.errors.length == 1);
+        check_types(err, AstNode.Invalid);
     }
 }

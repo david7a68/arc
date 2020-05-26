@@ -52,11 +52,14 @@ enum Precedence {
 }
 
 struct ParsingContext {
-    AstNodeAllocator* nodes;
     TokenBuffer!4096 tokens;
+
+    AstNodeAllocator* nodes;
     Reporter* reporter;
 
     int indentation_level;
+
+    alias nodes this;
 
     this(Reporter* reporter, AstNodeAllocator* node_allocator) {
         this.reporter = reporter;
@@ -64,6 +67,8 @@ struct ParsingContext {
     }
 
     void begin(const char[] source_text) { tokens.begin(source_text); }
+
+    Token current() { return tokens.current; }
 
     void advance() {
         tokens.advance();
@@ -114,9 +119,18 @@ struct ParsingContext {
     void resynchronize() { while (indentation_level > 0 && !tokens.done) advance(); }
 }
 
+auto parse_optional_type(ParsingContext* p) {
+    // return p.current.type != Token.Equals ? parse_type_expr(p) : AstNode.inferred;
+    return p.current.type != Token.Equals ? parse_expression(p) : AstNode.inferred;
+}
+
+auto parse_optional_expr(ParsingContext* p) {
+    return p.skip(Token.Equals) ? parse_expression(p, Precedence.Logic) : AstNode.inferred;
+}
+
 AstNode* parse_symbol(AstNode.Kind kind)(ParsingContext* p) {
     auto t = p.take();
-    return p.nodes.alloc(kind, t.span, t.key);
+    return p.alloc(kind, t.span, t.key);
 }
 
 AstNode* parse_unary(AstNode.Kind kind)(ParsingContext* p) {
@@ -124,9 +138,71 @@ AstNode* parse_unary(AstNode.Kind kind)(ParsingContext* p) {
     auto operand = parse_expression(p, Precedence.Call);
 
     if (operand.is_valid)
-        return p.nodes.alloc(kind, t.span, operand);
+        return p.alloc(kind, t.span, operand);
 
     return operand.as_invalid(t.span);
+}
+
+AstNode* parse_list(Token.Type closing)(ParsingContext* p) {
+    static parse_member(ParsingContext* p) {
+        auto first = parse_expression(p, Precedence.Logic);
+
+        if (!first.is_valid) {
+            p.free(first.children);
+            return first.as_invalid(first.span);
+        }
+
+        auto span = first.span;
+        if (p.skip(Token.Colon)) {
+            auto type = parse_optional_type(p);
+            auto expr = parse_optional_expr(p);
+            span = merge_all(span, type.span, expr.span);
+
+            if (first.kind == AstNode.Kind.Name && type.is_valid && expr.is_valid)
+                return p.alloc(AstNode.Variable, span, p.alloc_sequence(first, type, expr));
+            
+            p.free(type, expr);
+            p.free(first.children);
+            return first.as_invalid(first.span);
+        }
+
+        return p.alloc(AstNode.Variable, span, p.alloc_sequence(AstNode.none, AstNode.inferred, first));
+    }
+
+    const begin = p.take().span;
+    while (p.current.type == Token.Comma) p.advance();
+
+    auto seq = p.alloc_sequence_buffer();
+    if (!p.current.type.matches_one(closing, Token.Done)) while (true) {
+        seq.add(parse_member(p));
+
+        if (!seq[$ - 1].is_valid) {
+            scope (exit) p.abort(seq);
+            return p.alloc(AstNode.Invalid, begin.merge(seq[$ - 1].span));
+        }
+        else if (p.current.type.matches_one(closing, Token.Done)) {
+            break;
+        }
+        else {
+            if (!p.skip_required(Token.Comma)) {
+                scope (exit) p.abort(seq);
+                return p.alloc(AstNode.Invalid, begin.merge(seq[$ - 1].span));
+            }
+
+            while (p.current.type == Token.Comma) p.advance();
+            if (p.current.type.matches_one(closing, Token.Done)) break;
+        }
+    }
+
+    const end = p.current.span;
+
+    if (p.skip_required(closing)) {
+        auto members = p.alloc_sequence(seq);
+        return p.alloc(AstNode.List, begin.merge(end), members);
+    }
+
+    p.abort(seq);
+    return p.alloc(AstNode.Invalid, begin.merge(end));
 }
 
 AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
@@ -134,22 +210,22 @@ AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
 
     auto rhs = parse_expression(p, cast(Precedence) (op.prec + op.is_left_associative));
     if (rhs.is_valid)
-        return p.nodes.alloc(op.kind, p.nodes.alloc_sequence(lhs, rhs));
+        return p.alloc(op.kind, p.alloc_sequence(lhs, rhs));
 
-    auto node = p.nodes.alloc(AstNode.Invalid, lhs.span.merge(rhs.span));
-    p.nodes.free(lhs, rhs);
+    auto node = p.alloc(AstNode.Invalid, lhs.span.merge(rhs.span));
+    p.free(lhs, rhs);
     return node;
 }
 
 AstNode* parse_expression(ParsingContext* p, Precedence prec = Precedence.Assign) {
-    auto expr = prefixes[p.tokens.current.type](p);
+    auto expr = prefixes[p.current.type](p);
 
-    for (Infix i = infixes[p.tokens.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.tokens.current.type])
+    for (Infix i = infixes[p.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.current.type])
         expr = parse_binary(p, expr, i);
 
     if (expr.is_valid) return expr;
 
-    p.nodes.free(expr.children);
+    p.free(expr.children);
     return expr.as_invalid(expr.span);
 }
 
@@ -158,17 +234,17 @@ alias PrefixFn = AstNode* function(ParsingContext*);
 immutable prefixes = () {
     PrefixFn[256] parsers   = (p) {
         p.reporter.error(
-            ArcError.TokenNotAnExpression, p.tokens.current.span,
+            ArcError.TokenNotAnExpression, p.current.span,
             "The token \"%s\" cannot start a prefix expression.",
-            p.tokens.current.type);
-        return p.nodes.alloc(AstNode.Kind.Invalid, p.take().span);
+            p.current.type);
+        return p.alloc(AstNode.Kind.Invalid, p.take().span);
     };
 
     parsers[Token.Done]     = (p) {
         p.reporter.error(
-            ArcError.UnexpectedEndOfFile, p.tokens.current.span,
+            ArcError.UnexpectedEndOfFile, p.current.span,
             "Unexpected end of file while parsing source.");
-        return p.nodes.alloc(AstNode.Kind.Invalid, p.tokens.current.span);
+        return p.alloc(AstNode.Kind.Invalid, p.current.span);
     };
 
     with (Token.Type) {
@@ -180,8 +256,8 @@ immutable prefixes = () {
         parsers[Integer]    = &parse_symbol!(AstNode.Integer);
         parsers[Char]       = &parse_symbol!(AstNode.Char);
 
-        // parsers[Lparen]       = &parse_list!(Rparen, false);
-        // parsers[Lbracket]     = &parse_list!(Rbracket, false);
+        parsers[Lparen]     = &parse_list!Rparen;
+        parsers[Lbracket]   = &parse_list!Rbracket;
     }
 
     return parsers;
@@ -207,8 +283,13 @@ immutable infixes = () {
         ops[Slash]          = Infix(Product,    true,   true,   AstNode.Divide);
         ops[Caret]          = Infix(Power,      false,  true,   AstNode.Power);
         ops[Dot]            = Infix(Call,       true,   true,   AstNode.Access);
-        // ops[Lparen]         = Infix(Call,       &parse_call!(Rparen));
-        // ops[Lbracket]       = Infix(Call,       &parse_call!(Rparen));
+
+
+        ops[Name]           = Infix(Call,       false,  false,  AstNode.Call);
+        ops[Integer]        = Infix(Call,       true,   false,  AstNode.Call);
+        ops[Char]           = Infix(Call,       true,   false,  AstNode.Call);
+        ops[Lparen]         = Infix(Call,       true,   false,  AstNode.Call);
+        ops[Lbracket]       = Infix(Call,       true,   false,  AstNode.Call);
     }
 
     return ops;
