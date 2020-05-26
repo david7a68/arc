@@ -80,12 +80,12 @@ struct AstNode {
 
     bool is_valid() { return kind != Kind.Invalid; }
 
-    AstNode* as_invalid(Span span) in (children.length == 0) {
+    AstNode* as_invalid(Span span) return in (children.length == 0) {
         this = AstNode(Kind.Invalid, span);
         return &this;
     }
 
-    AstNode*[] children() {
+    AstNode*[] children() return {
         switch (kind) with (Kind) {
             case None: case Invalid: case Inferred:
             case Name: case Integer: case Char:
@@ -98,16 +98,17 @@ struct AstNode {
     }
 }
 
-alias SequenceBuffer = SizedSequenceBuffer!4096; // 128 kib
-alias LargeSequenceBuffer = SizedSequenceBuffer!16384; // 512 kib
-
-struct SizedSequenceBuffer(size_t capacity) {
+struct SequenceBuffer {
 private:
-    AstNode*[capacity] _nodes;
-    size_t _count;
+    AstNode*[] _nodes;
+    size_t _count, _size_class;
+
+    this(AstNode*[] nodes, size_t size_index) { _nodes = nodes; _size_class = size_index; }
 
 public:
-    size_t length() { return _count; }
+    size_t length()     { return _count; }
+    size_t capacity()   { return _nodes.length; }
+    size_t size_class() { return _size_class; }
 
     void add(AstNode* node) in (length < capacity) {
         _nodes[_count] = node;
@@ -116,16 +117,19 @@ public:
 
     AstNode*[] opSlice() { return _nodes[0 .. _count]; }
 
-    void copy(size_t n)(SizedSequenceBuffer!n* buffer) in (n < capacity) {
-        _nodes[0 .. n] = (*buffer)[];
+    void copy(SequenceBuffer* buffer) in (buffer.capacity < capacity) {
+        _nodes[0 .. buffer.length] = (*buffer)[];
     }
 }
 
 static assert(AstNode.alignof == 8 && AstNode.sizeof == 32);
-static assert(SequenceBuffer.alignof == 8 && LargeSequenceBuffer.alignof == 8);
+static assert(SequenceBuffer.alignof == 8);
+
+/// The size classes for sequence buffers, quadrupling each step up.
+immutable sequence_pool_sizes = [64, 256, 1024, 4096, 16384];
 
 final class AstNodeAllocator {
-    import arc.memory: VirtualAllocator, ObjectPool, gib;
+    import arc.memory: VirtualAllocator, MemoryPool, ObjectPool, gib;
 
 private:
     /// We reserve 128 Gib of memory for the syntax tree.
@@ -133,55 +137,47 @@ private:
 
     VirtualAllocator mem;
     ObjectPool!AstNode nodes;
-    ObjectPool!SequenceBuffer sequence_buffers;
-    ObjectPool!LargeSequenceBuffer large_sequence_buffers;
+    MemoryPool[sequence_pool_sizes.length] sequence_pools;
 
 public:
     this() {
         mem = VirtualAllocator(reserved_bytes);
         nodes = ObjectPool!AstNode(&mem);
-        sequence_buffers = ObjectPool!SequenceBuffer(&mem);
-        large_sequence_buffers = ObjectPool!LargeSequenceBuffer(&mem);
+
+        foreach (i, size; sequence_pool_sizes)
+            sequence_pools[i] = MemoryPool(&mem, size);
     }
 
-    AstNode* alloc(Args...)(Args args) {
-        auto node = nodes.allocate();
-        *node = AstNode(args);
-        return node;
-    }
+    AstNode* alloc(Args...)(Args args) { return nodes.alloc(args); }
 
     void free(AstNode*[] free_nodes...) {
-        foreach (n; free_nodes) {
+        foreach (AstNode* n; free_nodes) {
             if (n.children.length > 0) free(n.children);
-            nodes.deallocate(n);
+            nodes.free(n);
         }
     }
 
-    /// Borrow a sequence buffer to construct lists of elements.
-    SequenceBuffer* alloc_sequence_buffer() {
-        return sequence_buffers.allocate();
+    SequenceBuffer alloc_sequence_buffer() {
+        return SequenceBuffer(cast(AstNode*[]) sequence_pools[0].alloc(), 0);
     }
 
-    LargeSequenceBuffer* upgrade_sequence_buffer(SequenceBuffer* old_buffer) {
-        auto large = large_sequence_buffers.allocate();
-        large.copy(old_buffer);
+    SequenceBuffer upgrade_sequence_buffer(SequenceBuffer old) {
+        const new_size_class = old.size_class + 1;
+        assert(new_size_class < sequence_pools.length);
+
+        auto large = SequenceBuffer(cast(AstNode*[]) sequence_pools[new_size_class].alloc(), new_size_class);
+        large.copy(&old);
         return large;
     }
 
-    AstNode*[] alloc_sequence(SequenceBuffer* seq) {
-        auto array = alloc_sequence(seq.opSlice());
-        sequence_buffers.deallocate(seq);
-        return array;
-    }
-
-    AstNode*[] alloc_sequence(LargeSequenceBuffer* seq) {
-        auto array = alloc_sequence(seq.opSlice());
-        large_sequence_buffers.deallocate(seq);
+    AstNode*[] alloc_sequence(SequenceBuffer seq) {
+        auto array = alloc_sequence(seq[]);
+        sequence_pools[seq.size_class].free(cast(void[]) seq._nodes);
         return array;
     }
 
     AstNode*[] alloc_sequence(AstNode*[] seq...) {
-        auto array = cast(AstNode*[]) mem.allocate((AstNode*).sizeof * seq.length);
+        auto array = cast(AstNode*[]) mem.alloc((AstNode*).sizeof * seq.length);
         array[] = seq[];
         return array;
     }

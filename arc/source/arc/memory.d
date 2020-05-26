@@ -63,7 +63,7 @@ public:
             static assert(false, "Platform not supported for IndexedRegion.");
     }
 
-    void[] allocate(size_t n) in (capacity >= n) {
+    void[] alloc(size_t n) in (capacity >= n) {
         const next_after_alloc = next_alloc + n;
 
         if (next_after_alloc > top)
@@ -94,44 +94,67 @@ public:
 }
 
 /**
- * An object pool is an efficient way to allocate and deallocate fixed-sized
+ * An memory pool is an efficient way to allocate and deallocate fixed-sized
  * units of memory. Memory consumption grows only when the total number of
- * active objects increases.
+ * active allocations increases.
  */
-struct ObjectPool(T) if (!is(T == class) && !is(T == interface)) {
+struct MemoryPool {
 private:
-    union Node {
-        Node* next;
-        T object;
-    }
+    struct Node { Node* next; }
 
-    VirtualAllocator* allocator;
-   
-    Node* head;
-    size_t num_nodes;
+    VirtualAllocator* _allocator;
+    size_t _object_size;
+    Node* _head;
 
 public:
-    this(VirtualAllocator* allocator) {
-        this.allocator = allocator;
+    this(VirtualAllocator* allocator, size_t object_size) {
+        _allocator = allocator;
+        _object_size = object_size;
     }
 
     @disable this(this);
 
-    T* allocate() {
-        num_nodes++;
+    size_t object_size() { return _object_size; }
 
-        if (!head)
-            return cast(T*) &(allocator.allocate(T.sizeof))[0];
+    void[] alloc() {
+        if (!_head) return _allocator.alloc(_object_size);
 
-        scope (exit) head = head.next;
-        return &head.object;
+        scope (exit) _head = _head.next;
+        return (cast(void*) _head)[0 .. _object_size];
     }
 
-    void deallocate(T* object) {
-        auto n = cast(Node*) object;
-        n.next = head;
-        head = n;
-        num_nodes--;
+    void free(void[] object) in (object.length == object_size) {
+        auto n = cast(Node*) &object[0];
+        n.next = _head;
+        _head = n;
+    }
+}
+
+/**
+ * An object pool is an efficient way to allocate and deallocate lots of 
+ * small objects. Memory consumption grows only when the total number of
+ * active objects increases.
+ */
+struct ObjectPool(T) {
+    private MemoryPool pool;
+
+    this(VirtualAllocator* mem) { pool = MemoryPool(mem, T.sizeof); }
+
+    @disable this(this);
+
+    T* alloc(Args...)(Args args) {
+        auto object = cast(T*) pool.alloc().ptr;
+
+        static if (args.length > 0)
+            *object = T(args);
+        else
+            *object = T.init;
+        
+        return object;
+    }
+
+    void free(T* t) {
+        pool.free((cast(void*) t)[0 .. T.sizeof]);
     }
 }
 
@@ -140,7 +163,7 @@ unittest {
     auto vm = VirtualAllocator(4.kib);
 
     {
-        auto m1 = vm.allocate(10);
+        auto m1 = vm.alloc(10);
         assert(m1.ptr !is null);
         assert(m1.length == 10);
     }
@@ -149,31 +172,26 @@ unittest {
         struct T { bool a; size_t b; }
         auto ts = ObjectPool!T(&vm);
 
-        auto t1 = ts.allocate();
+        auto t1 = ts.alloc();
         assert(t1 !is null);
-        assert(ts.num_nodes == 1);
-        assert(ts.head is null);
+        assert(ts.pool._head is null);
 
-        auto t2 = ts.allocate();
+        auto t2 = ts.alloc();
         assert(t2 !is null);
-        assert(ts.num_nodes == 2);
-        assert(ts.head is null);
+        assert(ts.pool._head is null);
 
-        ts.deallocate(t1);
-        assert(ts.num_nodes == 1);
-        assert(ts.head !is null);
+        ts.free(t1);
+        assert(ts.pool._head !is null);
 
-        auto t3 = ts.allocate();
+        auto t3 = ts.alloc();
         assert(t3 !is null);
-        assert(ts.num_nodes == 2);
-        assert(ts.head is null);
+        assert(ts.pool._head is null);
         assert(t3 == t1);
 
-        ts.deallocate(t2);
-        ts.deallocate(t3);
+        ts.free(t2);
+        ts.free(t3);
 
-        assert(ts.num_nodes == 0);
-        assert(ts.allocate() == t3);
-        assert(ts.allocate() == t2);
+        assert(ts.alloc() == t3);
+        assert(ts.alloc() == t2);
     }
 }
