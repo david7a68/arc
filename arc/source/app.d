@@ -9,6 +9,7 @@ import arc.data.ast2;
 import arc.memory;
 
 void main(string[] args) {
+	// g();
 	f();
 	// auto map = new SourceMap();
 	// // auto src = map.put("", "(a = b)");
@@ -34,7 +35,7 @@ void f() {
 	import arc.syntax.tests.parser2;
 	
 	with (AstNode.Kind) {
-        assert(check_types("20".parse!"expression", AstNode.Kind.Integer));
-		// assert(check_types("'a'".parse!"expression", AstNode.Kind.Char));
+		check_types("1 + 1".parse!"expression", Add, Integer, Integer);
+        check_types("a ^ 2".parse!"expression", Power, Name, Integer);
     }
 }

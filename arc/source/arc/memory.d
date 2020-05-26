@@ -8,6 +8,10 @@ size_t gib(size_t n) { return n * (1024 ^ 3); }
 
 size_t round_to_nearest_page_size(size_t n) { return n + (pageSize - n % pageSize); }
 
+/**
+ Allocates a large span of virtual memory from the OS. The allocator works as a
+ simple bump allocator, with no deallocation ability.
+ */
 struct VirtualAllocator {
     import std.algorithm: max;
 
@@ -89,6 +93,11 @@ public:
     }
 }
 
+/**
+ * An object pool is an efficient way to allocate and deallocate fixed-sized
+ * units of memory. Memory consumption grows only when the total number of
+ * active objects increases.
+ */
 struct ObjectPool(T) if (!is(T == class) && !is(T == interface)) {
 private:
     union Node {

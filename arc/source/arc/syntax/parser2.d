@@ -114,10 +114,9 @@ struct ParsingContext {
     void resynchronize() { while (indentation_level > 0 && !tokens.done) advance(); }
 }
 
-AstNode* parse_symbol(ParsingContext* p) {
+AstNode* parse_symbol(AstNode.Kind kind)(ParsingContext* p) {
     auto t = p.take();
-    import std.stdio; writeln("ps: ", token_map[t.type].kind);
-    return p.nodes.alloc(token_map[t.type].kind, t.span, t.key);
+    return p.nodes.alloc(kind, t.span, t.key);
 }
 
 AstNode* parse_unary(AstNode.Kind kind)(ParsingContext* p) {
@@ -130,35 +129,28 @@ AstNode* parse_unary(AstNode.Kind kind)(ParsingContext* p) {
     return operand.as_invalid(t.span);
 }
 
-// AstNode* parse_binary(Precedence prec)(ParsingContext* p, AstNode* lhs) {
-//     auto op = token_map[p.current.type];
-    
-//     if (op.prec == Precedence.Call) {
-//         auto rhs = parse_expression(p, op.prec)
-//     }
-//     else {
-//         p.advance();
-//         auto rhs = parse_expression(p, op.prec);
+AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
+    if (op.skip_token) p.advance();
 
-//         if (rhs.is_valid)
-//             return alloc_binary(p.nodes, kind.type, lhs, rhs);
+    auto rhs = parse_expression(p, cast(Precedence) (op.prec + op.is_left_associative));
+    if (rhs.is_valid)
+        return p.nodes.alloc(op.kind, p.nodes.alloc_sequence(lhs, rhs));
 
-//         auto node = alloc_basic(AstNode.Invalid, lhs.span.merge(rhs.span));
-//         p.nodes.free(lhs.index, rhs.index);
-//         return node;
-//     }
-// }
+    auto node = p.nodes.alloc(AstNode.Invalid, lhs.span.merge(rhs.span));
+    p.nodes.free(lhs, rhs);
+    return node;
+}
 
 AstNode* parse_expression(ParsingContext* p, Precedence prec = Precedence.Assign) {
     auto expr = prefixes[p.tokens.current.type](p);
 
-    // while (expr.is_valid && prec < token_map[p.tokens.current.type].prec)
-    //     expr = parse_binary(p, expr);
+    for (Infix i = infixes[p.tokens.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.tokens.current.type])
+        expr = parse_binary(p, expr, i);
 
     if (expr.is_valid) return expr;
 
-    scope (exit) p.nodes.free(expr);
-    return p.nodes.alloc(AstNode.Kind.Invalid, expr.span);
+    p.nodes.free(expr.children);
+    return expr.as_invalid(expr.span);
 }
 
 alias PrefixFn = AstNode* function(ParsingContext*);
@@ -184,9 +176,9 @@ immutable prefixes = () {
         parsers[Bang]       = &parse_unary!(AstNode.Not);
         parsers[Not]        = &parse_unary!(AstNode.Not);
 
-        parsers[Name]       = &parse_symbol;
-        parsers[Integer]    = &parse_symbol;
-        parsers[Char]       = &parse_symbol;
+        parsers[Name]       = &parse_symbol!(AstNode.Name);
+        parsers[Integer]    = &parse_symbol!(AstNode.Integer);
+        parsers[Char]       = &parse_symbol!(AstNode.Char);
 
         // parsers[Lparen]       = &parse_list!(Rparen, false);
         // parsers[Lbracket]     = &parse_list!(Rbracket, false);
@@ -195,33 +187,29 @@ immutable prefixes = () {
     return parsers;
 } ();
 
-struct MapItem { AstNode.Kind kind; Precedence next_prec; }
+struct Infix { Precedence prec; bool is_left_associative, skip_token; AstNode.Kind kind; }
 
-MapItem[256] token_map = () {
-    MapItem[256] map;
-    with (Token.Type) {
-        // values (they can be used as a call in a binary expr, hence their precedence)
-        map[Name]           = MapItem(AstNode.Name,         Precedence.Prefix);
-        map[Integer]        = MapItem(AstNode.Integer,      Precedence.Prefix);
-        map[Char]           = MapItem(AstNode.Char,         Precedence.Prefix);
-        // unary operators (ditto)
-        map[Minus]          = MapItem(AstNode.Negate,       Precedence.Prefix);
-        map[Bang]           = MapItem(AstNode.Not,          Precedence.Prefix);
-        map[Not]            = MapItem(AstNode.Not,          Precedence.Prefix);
-        // binary operators
-        map[Plus]           = MapItem(AstNode.Add,          cast(Precedence) (Precedence.Sum + 1));
-        map[Minus]          = MapItem(AstNode.Subtract,     cast(Precedence) (Precedence.Sum + 1));
-        map[Star]           = MapItem(AstNode.Multiply,     cast(Precedence) (Precedence.Product + 1));
-        map[Slash]          = MapItem(AstNode.Divide,       cast(Precedence) (Precedence.Product + 1));
-        map[Caret]          = MapItem(AstNode.Power,        cast(Precedence) (Precedence.Power)); // cast is a noop
-        map[Less]           = MapItem(AstNode.Less,         cast(Precedence) (Precedence.Equality + 1));
-        map[LessEqual]      = MapItem(AstNode.LessEqual,    cast(Precedence) (Precedence.Equality + 1));
-        map[Greater]        = MapItem(AstNode.Greater,      cast(Precedence) (Precedence.Equality + 1));
-        map[GreaterEqual]   = MapItem(AstNode.GreaterEqual, cast(Precedence) (Precedence.Equality + 1));
-        map[Equals]         = MapItem(AstNode.Equal,        cast(Precedence) (Precedence.Equality + 1));
-        map[BangEqual]      = MapItem(AstNode.NotEqual,     cast(Precedence) (Precedence.Equality + 1));
-        map[And]            = MapItem(AstNode.And,          cast(Precedence) (Precedence.Logic + 1));
-        map[Or]             = MapItem(AstNode.Or,           cast(Precedence) (Precedence.Logic + 1));
+immutable infixes = () {
+    Infix[256] ops;
+
+    with (Token.Type) with (Precedence) {
+        ops[Less]           = Infix(Compare,    true,   true,   AstNode.Less);
+        ops[LessEqual]      = Infix(Compare,    true,   true,   AstNode.LessEqual);
+        ops[Greater]        = Infix(Compare,    true,   true,   AstNode.Greater);
+        ops[GreaterEqual]   = Infix(Compare,    true,   true,   AstNode.GreaterEqual);
+        ops[EqualEqual]     = Infix(Equality,   true,   true,   AstNode.Equal);
+        ops[BangEqual]      = Infix(Equality,   true,   true,   AstNode.NotEqual);
+        ops[And]            = Infix(Logic,      true,   true,   AstNode.And);
+        ops[Or]             = Infix(Logic,      true,   true,   AstNode.Or);
+        ops[Plus]           = Infix(Sum,        true,   true,   AstNode.Add);
+        ops[Minus]          = Infix(Sum,        true,   true,   AstNode.Subtract);
+        ops[Star]           = Infix(Product,    true,   true,   AstNode.Multiply);
+        ops[Slash]          = Infix(Product,    true,   true,   AstNode.Divide);
+        ops[Caret]          = Infix(Power,      false,  true,   AstNode.Power);
+        ops[Dot]            = Infix(Call,       true,   true,   AstNode.Access);
+        // ops[Lparen]         = Infix(Call,       &parse_call!(Rparen));
+        // ops[Lbracket]       = Infix(Call,       &parse_call!(Rparen));
     }
-    return map;
+
+    return ops;
 } ();

@@ -13,13 +13,20 @@ static this() {
     parser = ParsingContext(&reporter, &nodes);
 }
 
-auto parse(string op)(string text) {
-    parser.begin(text);
-    mixin ("return parse_" ~ op ~ "(&parser);");
+struct ParseResult {
+    AstNode* tree;
+    string text;
 }
 
-bool type_equivalent(AstNode* tree, AstNode.Kind[] types...) {
+auto parse(string op)(string text) {
+    parser.begin(text);
+    reporter.clear();
+    mixin ("return ParseResult(parse_" ~ op ~ "(&parser), text);");
+}
+
+bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
     import std.algorithm: equal;
+    import std.stdio: writefln;
 
     AstNode.Kind[] tree_types;
 
@@ -31,13 +38,22 @@ bool type_equivalent(AstNode* tree, AstNode.Kind[] types...) {
             flatten(child);
     }
 
-    flatten(tree);
-    // import std.stdio; writeln(tree_types);
-    return equal(types, tree_types);
+    flatten(result.tree);
+    if (equal(types, tree_types))
+        return true;
+    
+    writefln(
+        "Test failed: The tree is not equal to the specified types.\n" ~ 
+        "Source: %s\n" ~
+        "Tree:\n" ~
+        "\t%s\n" ~
+        "Expected:\n" ~
+        "\t%s", result.text, tree_types, types);
+    return false;
 }
 
-bool check_types(AstNode* node, AstNode.Kind[] types...) {
-    return type_equivalent(node, types);
+bool check_types(ParseResult result, AstNode.Kind[] types...) {
+    return type_equivalent(result, types);
 }
 
 
@@ -52,20 +68,57 @@ bool check_types(AstNode* node, AstNode.Kind[] types...) {
 //                |_|                                               
 // ----------------------------------------------------------------------
 
-@("parse name") unittest {
+@("Parse Name") unittest {
     assert(check_types("a_name".parse!"expression", AstNode.Kind.Name));
 }
 
-@("parse int") unittest {
+@("Parse Int") unittest {
     assert(check_types("20".parse!"expression", AstNode.Kind.Integer));
 }
 
-@("parse char") unittest {
+@("Parse Char") unittest {
     assert(check_types("'a'".parse!"expression", AstNode.Kind.Char));
 }
 
-@("parse unary") unittest {
+@("Parse Unary") unittest {
     with (AstNode.Kind) {
         assert(check_types("-var".parse!"expression", Negate, Name));
+    }
+}
+
+@("Parse Binary") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("1 + 1".parse!"expression", Add, Integer, Integer));
+        assert(check_types("a ^ 2".parse!"expression", Power, Name, Integer));
+
+        assert(check_types("-a * b".parse!"expression",
+            Multiply,
+                Negate,
+                    Name,
+                Name
+        ));
+
+        assert(check_types("a - -3".parse!"expression",
+            Subtract,
+                Name,
+                Negate,
+                    Integer
+        ));
+
+        assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
+            Add,
+                Subtract,
+                    Name,                   // b
+                    Name,                   // c
+                Divide,
+                    Multiply,
+                        Name,               // d
+                        Power,
+                            Name,           // e
+                            Power,
+                                Name,       // f
+                                Name,       // g
+                    Name                    // h
+        ));
     }
 }

@@ -42,16 +42,15 @@ struct AstNode {
     Span span;
     Kind kind;
 
-    // Make the padding in this struct explicit
-    // Note: Since x86 pointers are 48-bits, we could use this padding as a type pointer.
-    //       This is also true for AArch64.
     // TODO: Make use of unused top 16 bits on x64 (and Aarch64) to store
+    //       discriminant, and turn remaining bits to type pointer.
+    private ubyte[7] _type_ptr;
 
     union {
         private AstNode*[] _children;
         private AstNode* _child;
-
         Key symbol;
+        ulong value;
     }
 
     this(Kind kind, Span span) {
@@ -69,34 +68,24 @@ struct AstNode {
         _child = child;
     }
 
-    this(Kind kind, Span prefix, AstNode*[] parts) in (prefix <= parts[0].span) {
-        this(kind, prefix.merge(parts[$ - 1].span));
+    this(Kind kind, Span outer, AstNode*[] parts) {
+        this(kind, outer);
         _children = parts;
     }
 
-    bool is_valid() {
-        return kind != AstNode.Invalid;
+    this(Kind kind, AstNode*[] parts) {
+        this(kind, parts[0].span.merge(parts[$ - 1].span));
+        _children = parts;
+    }
+
     bool is_valid() { return kind != Kind.Invalid; }
 
-    AstNode* as_invalid(Span span) in (num_children == 0) {
-        kind = Kind.Invalid;
-        this.span = span;
+    AstNode* as_invalid(Span span) in (children.length == 0) {
+        this = AstNode(Kind.Invalid, span);
         return &this;
     }
 
-    size_t num_children() {
-        switch (kind) with (Kind) {
-            case None: case Invalid: case Inferred:
-            case Name: case Integer: case Char:
-                return 0;
-            case Negate: case Not:
-                return _child !is null;
-            default:
-                return _children.length;
-        }
-    }
-
-    AstNode*[] children() @nogc {
+    AstNode*[] children() {
         switch (kind) with (Kind) {
             case None: case Invalid: case Inferred:
             case Name: case Integer: case Char:
@@ -109,13 +98,8 @@ struct AstNode {
     }
 }
 
-static assert(AstNode.alignof == 8);
-static assert(AstNode.sizeof == 32);
-
-alias SequenceBuffer = SizedSequenceBuffer!4096;
-// 2 ^ 14, for a total of 131_072 bytes of memory.
-// Hopefully we don't need many of these.
-alias LargeSequenceBuffer = SizedSequenceBuffer!16384;
+alias SequenceBuffer = SizedSequenceBuffer!4096; // 128 kib
+alias LargeSequenceBuffer = SizedSequenceBuffer!16384; // 512 kib
 
 struct SizedSequenceBuffer(size_t capacity) {
 private:
@@ -137,14 +121,14 @@ public:
     }
 }
 
-static assert(SequenceBuffer.alignof == 8);
+static assert(AstNode.alignof == 8 && AstNode.sizeof == 32);
+static assert(SequenceBuffer.alignof == 8 && LargeSequenceBuffer.alignof == 8);
 
 final class AstNodeAllocator {
     import arc.memory: VirtualAllocator, ObjectPool, gib;
-    import std.experimental.allocator: makeArray;
 
 private:
-    /// We reserve 128 Gib of memory for the syntax tree
+    /// We reserve 128 Gib of memory for the syntax tree.
     enum reserved_bytes = 128.gib;
 
     VirtualAllocator mem;
@@ -168,7 +152,7 @@ public:
 
     void free(AstNode*[] free_nodes...) {
         foreach (n; free_nodes) {
-            if (n.num_children > 0) free(n.children);
+            if (n.children.length > 0) free(n.children);
             nodes.deallocate(n);
         }
     }
@@ -185,16 +169,20 @@ public:
     }
 
     AstNode*[] alloc_sequence(SequenceBuffer* seq) {
-        auto array = cast(AstNode*[]) mem.allocate((AstNode*).sizeof * seq.length);
-        array[] = (*seq)[];
+        auto array = alloc_sequence(seq.opSlice());
         sequence_buffers.deallocate(seq);
         return array;
     }
 
     AstNode*[] alloc_sequence(LargeSequenceBuffer* seq) {
-        auto array = cast(AstNode*[]) mem.allocate((AstNode*).sizeof * seq.length);
-        array[] = (*seq)[];
+        auto array = alloc_sequence(seq.opSlice());
         large_sequence_buffers.deallocate(seq);
+        return array;
+    }
+
+    AstNode*[] alloc_sequence(AstNode*[] seq...) {
+        auto array = cast(AstNode*[]) mem.allocate((AstNode*).sizeof * seq.length);
+        array[] = seq[];
         return array;
     }
 }
