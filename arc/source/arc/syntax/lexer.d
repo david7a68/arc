@@ -30,8 +30,12 @@ struct Token {
     Type type;
     ///
     Span span;
-    ///
-    Key key;
+    union {
+        ///
+        Key key;
+        ///
+        ulong value;
+    }
 }
 
 /// Returns `true` if `type` matches one of the types in `types`.
@@ -249,9 +253,22 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         case '0': .. case '9':
             while (current < end && (('0' <= *current && *current <= '9') || *current == '_'))
                 current++;
-            return make_token(Token.Integer, 0);
+            return make_token(Token.Integer, 0, string_to_int(start[0 .. current - start]));
 
         default:
             return make_token(Token.Invalid, 1);
     }
+}
+
+ulong string_to_int(const char[] text) {
+    ulong value = text[0] - '0';
+
+    foreach (c; text[1 .. $]) {
+        if (c == '_') continue;
+        
+        value *= 10;
+        value += c - '0';
+    }
+
+    return value;
 }
