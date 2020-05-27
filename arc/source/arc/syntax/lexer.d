@@ -50,21 +50,23 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
  A TokenBuffer offers a buffered 1-token window over a source text.
  */
 struct TokenBuffer(size_t buffer_size) {
-    /// A block-buffer for read tokens.
-    Token[buffer_size] tokens;
-    ///
-    size_t current_token_index;
-    ///
+private:
     const(char)[] source_text;
-    ///
-    size_t next_buffer_index;
-    ///
+    size_t current_token_index;
     size_t buffer_span_offset;
+    size_t next_buffer_index;
+    Token[buffer_size] tokens;
+
+public:
+    Token current;
+    bool done;
 
     this(const(char)[] text, size_t span_offset = 0) {
         source_text = text;
         buffer_span_offset = span_offset;
         fill_buffer(&this);
+        current = tokens[current_token_index];
+        done = current.type == Token.Done;
     }
 
     void begin(const(char)[] text, size_t span_offset = 0) {
@@ -78,11 +80,9 @@ struct TokenBuffer(size_t buffer_size) {
             fill_buffer(&this);
             current_token_index = 0;
         }
+        current = tokens[current_token_index];
+        done = current.type == Token.Done;
     }
-
-    auto current() { return tokens[current_token_index]; }
-
-    auto done() { return current.type == Token.Done; }
 }
 
 private:

@@ -58,7 +58,6 @@ statement = def ';'
                | '!='
                | 'and'
                | 'or'
-               | '='
                ;
 
 type = access

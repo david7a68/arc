@@ -33,6 +33,8 @@
  */
 module arc.syntax.parser;
 
+version (none):
+
 import arc.data.ast;
 import arc.data.source: Span, merge, merge_all;
 import arc.reporter;

@@ -1,5 +1,7 @@
 module arc.syntax.tests.parser;
 
+version (none):
+
 import arc.data.ast;
 import arc.data.source: Span;
 import arc.reporter;
