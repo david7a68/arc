@@ -119,8 +119,10 @@ public:
     void[] alloc() {
         if (!_head) return _allocator.alloc(_object_size);
 
-        scope (exit) _head = _head.next;
-        return (cast(void*) _head)[0 .. _object_size];
+        auto mem = (cast(void*) _head)[0 .. _object_size];
+        _head = _head.next;
+        mem[] = null;
+        return mem;
     }
 
     void free(void[] object) in (object.length == object_size) {
@@ -177,7 +179,7 @@ unittest {
         assert(ts.pool._head is null);
 
         ts.free(t1);
-        assert(ts.pool._head !is null);
+        assert(ts.pool._head is cast(void*) t1);
 
         auto t3 = ts.alloc();
         assert(t3 !is null);
