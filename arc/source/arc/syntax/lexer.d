@@ -96,6 +96,7 @@ void fill_buffer(size_t n)(TokenBuffer!n* buffer) {
     
     // get first token
     buffer.tokens[0] = scan_token(base, current, end);
+    buffer.tokens[0].span.start += buffer.buffer_span_offset;
 
     // if the previous token was not EOF, and there is space in the buffer, scan token
     size_t i = 1;

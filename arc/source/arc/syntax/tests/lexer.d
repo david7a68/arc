@@ -9,8 +9,7 @@ TokenBuffer!64 token_buffer;
 
 /// Read all tokens from text, up to `token_buffer.length`.
 Token[] scan_tokens(const(char)[] text) {
-    token_buffer.begin(text);
-    assert(token_buffer.next_buffer_index == text.length, "Exceeded max test length");
+    token_buffer.begin(text, 10);
 
     return token_buffer.tokens[];
 }
@@ -68,22 +67,22 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("lex keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
-        Token(Token.And,        Span(0, 3), 17648556366517412293UL),
-        Token(Token.Or,         Span(4, 2), 4116612837551264357UL),
-        Token(Token.If,         Span(7, 2), 10245967140023949179UL),
-        Token(Token.Else,       Span(10, 4), 15206279584842378246UL),
-        Token(Token.Loop,       Span(15, 4), 14974296207267515915UL),
-        Token(Token.Break,      Span(20, 5), 587566040553785743UL),
-        Token(Token.Return,     Span(26, 6), 17660342674565394361UL),
-        Token(Token.Continue,   Span(33, 8), 16371828708454923059UL),
-        Token(Token.Def,        Span(42, 3), 9791288970560527259UL)
+        Token(Token.And,        Span(10, 3), 17648556366517412293UL),
+        Token(Token.Or,         Span(14, 2), 4116612837551264357UL),
+        Token(Token.If,         Span(17, 2), 10245967140023949179UL),
+        Token(Token.Else,       Span(20, 4), 15206279584842378246UL),
+        Token(Token.Loop,       Span(25, 4), 14974296207267515915UL),
+        Token(Token.Break,      Span(30, 5), 587566040553785743UL),
+        Token(Token.Return,     Span(36, 6), 17660342674565394361UL),
+        Token(Token.Continue,   Span(43, 8), 16371828708454923059UL),
+        Token(Token.Def,        Span(52, 3), 9791288970560527259UL)
     ));
 }
 
 @("lex char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Char));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Char, Span(0, 4), 16287058411698249816UL)
+        Token(Token.Char, Span(10, 4), 16287058411698249816UL)
     ));
 }
 
