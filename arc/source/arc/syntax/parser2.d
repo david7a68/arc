@@ -204,7 +204,7 @@ AstNode* parse_statement(ParsingContext* p) {
     switch (p.current.type) with (Token.Type) {
         case Lbrace: return parse_block(p);
         default:
-            auto prefix = prefixes[p.current.type](p);
+            auto prefix = parse_prefix(p);
 
             if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
                 return parse_variable!true(p, prefix);
@@ -356,7 +356,7 @@ AstNode* parse_function(ParsingContext* p, AstNode* list) {
 }
 
 AstNode* parse_expression(ParsingContext* p, Precedence prec = Precedence.Assign) {
-    auto expr = prefixes[p.current.type](p);
+    auto expr = parse_prefix(p);
     return parse_infix(p, expr, prec);
 }
 
@@ -370,46 +370,32 @@ AstNode* parse_infix(ParsingContext* p, AstNode* expr, Precedence prec = Precede
     return expr.as_invalid(expr.span);
 }
 
-alias PrefixFn = AstNode* function(ParsingContext*);
+AstNode* parse_prefix(ParsingContext* p) {
+    switch (p.current.type) with (Token.Type) {
+        case Done:
+            p.reporter.error(
+                ArcError.UnexpectedEndOfFile, p.current.span,
+                "Unexpected end of file while parsing source.");
+            return p.alloc(AstNode.Kind.Invalid, p.current.span);
 
-immutable prefixes = () {
-    PrefixFn[256] parsers   = (p) {
-        if (p.current.type == Token.Semicolon) {
+        case Minus:     return parse_unary!(AstNode.Negate)(p);
+        case Bang:      return parse_unary!(AstNode.Not)(p);
+        case Not:       return parse_unary!(AstNode.Not)(p);
+
+        case Name:      return parse_symbol!(AstNode.Name)(p);
+        case Integer:   return parse_symbol!(AstNode.Integer)(p);
+        case Char:      return parse_symbol!(AstNode.Char)(p);
+
+        case Lparen:    return parse_list!Rparen(p);
+        case Lbracket:  return parse_list!Rbracket(p);
+    
+        default:
             p.reporter.error(
                 ArcError.Code.TokenExpectMismatch, p.current.span,
                 "Unexpected end of expression. An unexpected semicolon was encountered.");
             return p.alloc(AstNode.Kind.Invalid, p.current.span);
-        }
-
-        p.reporter.error(
-            ArcError.TokenNotAnExpression, p.current.span,
-            "The token \"%s\" cannot start a prefix expression.",
-            p.current.type);
-        return p.alloc(AstNode.Kind.Invalid, p.take().span);
-    };
-
-    parsers[Token.Done]     = (p) {
-        p.reporter.error(
-            ArcError.UnexpectedEndOfFile, p.current.span,
-            "Unexpected end of file while parsing source.");
-        return p.alloc(AstNode.Kind.Invalid, p.current.span);
-    };
-
-    with (Token.Type) {
-        parsers[Minus]      = &parse_unary!(AstNode.Negate);
-        parsers[Bang]       = &parse_unary!(AstNode.Not);
-        parsers[Not]        = &parse_unary!(AstNode.Not);
-
-        parsers[Name]       = &parse_symbol!(AstNode.Name);
-        parsers[Integer]    = &parse_symbol!(AstNode.Integer);
-        parsers[Char]       = &parse_symbol!(AstNode.Char);
-
-        parsers[Lparen]     = &parse_list!Rparen;
-        parsers[Lbracket]   = &parse_list!Rbracket;
     }
-
-    return parsers;
-} ();
+}
 
 struct Infix { Precedence prec; bool is_left_associative, skip_token; AstNode.Kind kind; }
 
