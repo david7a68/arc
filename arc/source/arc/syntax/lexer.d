@@ -51,13 +51,13 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
  */
 struct TokenBuffer(size_t buffer_size) {
 private:
-    const(char)[] source_text;
     size_t current_token_index;
     size_t buffer_span_offset;
     size_t next_buffer_index;
-    Token[buffer_size] tokens;
 
 public:
+    Token[buffer_size] tokens;
+    const(char)[] source_text;
     Token current;
     bool done;
 

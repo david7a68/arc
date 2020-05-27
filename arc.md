@@ -37,6 +37,20 @@ This means that a list's members are addressable both by index and by name.
 
 List members may optionally elide both name and type. When this occurs, the element becomes addressable only by index, and the type is inferred from the value.
 
+### Types
+
+There are two kinds of types, primitives, and lists.
+
+Lists are constructed from protoypes, created using the `def` keyword. Whenever the name is invoked outside of a type expression, a copy of the list is made and placed on the stack. If the list defines a default funciton, that may be called immediately after. If the name is invoked within a type expression, it is treated as the type itself.
+
+If a list does not have a default function, one is generated for it, allowing for the copying of data into the new instance of the list.
+
+```arc
+def ListNode : (next: ListNode*);
+
+head : ListNode = ListNode(null);
+```
+
 ### Functions
 
 ### Expressions

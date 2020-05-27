@@ -183,18 +183,14 @@ AstNode* parse_variable(bool is_statement)(ParsingContext* p, AstNode* name) {
     auto expr = parse_optional_expr(p);
 
     auto span = merge_all(name.span, type.span, expr.span);
-    static if (is_statement) {
-        const semicolon = p.take_required(Token.Semicolon);
+    const semicolon = p.take_required(Token.Semicolon);
 
-        if (semicolon.type != Token.Semicolon) {
-            p.free(type, expr);
-            return name.as_invalid(span);
-        }
+    if (semicolon.type == Token.Semicolon) {
         span = span.merge(semicolon.span);
-    }
 
-    if (type.is_valid && expr.is_valid) 
-        return p.alloc(AstNode.Variable, span, p.alloc_sequence(name, type, expr));
+        if (type.is_valid && expr.is_valid) 
+            return p.alloc(AstNode.Variable, span, p.alloc_sequence(name, type, expr));
+    }
 
     p.free(type, expr);
     return name.as_invalid(span);
@@ -207,7 +203,7 @@ AstNode* parse_statement(ParsingContext* p) {
             auto prefix = parse_prefix(p);
 
             if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
-                return parse_variable!true(p, prefix);
+                return parse_variable(p, prefix);
             
             if (p.current.type == Token.Equals)
                 return parse_assign(p, prefix);
