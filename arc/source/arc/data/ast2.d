@@ -91,6 +91,11 @@ struct AstNode {
         return &this;
     }
 
+    AstNode* respan(Span span) return {
+        this.span = span;
+        return &this;
+    }
+
     AstNode*[] children() return {
         switch (kind) with (Kind) {
             case None: case Invalid: case Inferred:

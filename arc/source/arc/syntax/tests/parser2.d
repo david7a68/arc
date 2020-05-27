@@ -339,3 +339,47 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     assert(reporter.errors.length == 1); //  We don't care what error occurs, as long as one does
     assert(check_types(err, AstNode.Invalid));
 }
+
+// ----------------------------------------------------------------------
+//   _______                       
+//  |__   __|                      
+//     | | _   _  _ __    ___  ___ 
+//     | || | | || '_ \  / _ \/ __|
+//     | || |_| || |_) ||  __/\__ \
+//     |_| \__, || .__/  \___||___/
+//          __/ || |               
+//         |___/ |_|               
+// ----------------------------------------------------------------------
+
+@("Parse Types") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("a".parse!"type"(), Name));
+
+        assert(check_types("a.b".parse!"type"(), Access, Name, Name));
+
+        assert(check_types("(a)".parse!"type"(), List, Variable, None, Name, Inferred));
+
+        assert(check_types("(a:b)".parse!"type"(), List, Variable, Name, Name, Inferred));
+
+        assert(check_types("(a := 3)".parse!"type"(), List, Variable, Name, Inferred, Integer));
+    }
+}
+
+@("Parse Types Error") unittest {
+    with (AstNode.Kind) {
+        {
+            auto err = "(a : !)".parse!"type"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(reporter.errors.length == 1);
+            check_types(err, Invalid);
+        }
+
+        {
+            auto err = "3".parse!"type"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(reporter.errors.length == 1);
+            check_types(err, Invalid);
+        }
+    }
+}
+
