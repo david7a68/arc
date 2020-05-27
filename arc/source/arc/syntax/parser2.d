@@ -176,20 +176,42 @@ AstNode* parse_block(ParsingContext* p) {
     return p.alloc(AstNode.Invalid, start.merge(end));
 }
 
-AstNode* parse_variable(bool is_statement)(ParsingContext* p, AstNode* name) {
+AstNode* parse_define(ParsingContext* p) {
+    const start = p.take().span;
+    auto name = parse_symbol(p, AstNode.Name);
+
+    if (!p.skip_required(Token.Colon))
+        return name.as_invalid(start.merge(name.span));
+
+    auto type = parse_optional_type(p);
+    auto expr = parse_optional_expr(p);
+    auto span = merge_all(start, type.span, expr.span); // name must be between start and type
+
+    if (type.is_valid && expr.is_valid) {
+        const semicolon = p.take_required(Token.Semicolon);
+        if (semicolon.type == Token.Semicolon) {
+            span = span.merge(semicolon.span);
+            return p.alloc(AstNode.Definition, span, p.alloc_sequence(name, type, expr));
+        }
+    }
+
+    p.free(type, expr);
+    return name.as_invalid(span);
+}
+
+AstNode* parse_variable(ParsingContext* p, AstNode* name) {
     p.skip_required(Token.Colon);
 
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
-
     auto span = merge_all(name.span, type.span, expr.span);
-    const semicolon = p.take_required(Token.Semicolon);
 
-    if (semicolon.type == Token.Semicolon) {
-        span = span.merge(semicolon.span);
-
-        if (type.is_valid && expr.is_valid) 
+    if (type.is_valid && expr.is_valid) {
+        const semicolon = p.take_required(Token.Semicolon);
+        if (semicolon.type == Token.Semicolon) {
+            span = span.merge(semicolon.span);
             return p.alloc(AstNode.Variable, span, p.alloc_sequence(name, type, expr));
+        }
     }
 
     p.free(type, expr);
@@ -199,6 +221,7 @@ AstNode* parse_variable(bool is_statement)(ParsingContext* p, AstNode* name) {
 AstNode* parse_statement(ParsingContext* p) {
     switch (p.current.type) with (Token.Type) {
         case Lbrace: return parse_block(p);
+        case Def: return parse_define(p);
         default:
             auto prefix = parse_prefix(p);
 
@@ -247,12 +270,15 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, in Token.Type closing) {
     static parse_member(ParsingContext* p) {
         auto first = parse_expression(p, Precedence.Logic);
 
+        if (!first.is_valid)
+            return first.as_invalid(first.span);
+
         if (p.skip(Token.Colon)) {
             auto type = parse_optional_type(p);
             auto expr = parse_optional_expr(p);
             auto span = merge_all(first.span, type.span, expr.span);
 
-            if (first.is_valid && type.is_valid && expr.is_valid)
+            if (type.is_valid && expr.is_valid)
                 return p.alloc(AstNode.Variable, span, p.alloc_sequence(first, type, expr));
 
             p.free(first, type, expr);
@@ -338,7 +364,7 @@ AstNode* parse_expression(ParsingContext* p, in Precedence prec = Precedence.Ass
 
 AstNode* parse_prefix(ParsingContext* p) {
     ArcError.Code ecode;
-    string emsg;
+    const(char)[] emsg;
 
     const token = p.current;
     switch (token.type) with (Token.Type) {
@@ -356,8 +382,15 @@ AstNode* parse_prefix(ParsingContext* p) {
             break;
 
         default:
-            ecode = ArcError.TokenExpectMismatch;
-            emsg = "Unexpected end of expression. An unexpected semicolon was encountered.";
+            if (token.type.matches_one(Semicolon, Comma, Rparen, Rbracket, Rbrace)) {
+                ecode = ArcError.TokenExpectMismatch;
+                emsg = "Unexpected end of expression.";
+            }
+            else {
+                ecode = ArcError.TokenExpectMismatch;
+                emsg = tprint("The token \"%s\" cannot start a prefix expression.", token.type);
+                p.advance();
+            }
     }
 
     p.reporter.error(ecode, token.span, emsg);

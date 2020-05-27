@@ -5,6 +5,8 @@ import arc.data.source: Span;
 import arc.syntax.parser2;
 import arc.reporter;
 
+import std.stdio: writefln;
+
 Reporter reporter;
 ParsingContext parser;
 AstNodeAllocator nodes = void;
@@ -28,7 +30,6 @@ auto parse(string op)(string text) {
 
 bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
     import std.algorithm: equal;
-    import std.stdio: writefln;
 
     AstNode.Kind[] tree_types;
 
@@ -59,7 +60,20 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
 }
 
 bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
-    return reporter.has_error(error) && reporter.errors.length == count && result.tree.kind == AstNode.Invalid;
+    if (!type_equivalent(result, AstNode.Invalid)) return false;
+    
+    if (!reporter.has_error(error)) {
+        writefln("The parser did not encounter the expected error.");
+        writefln("Source: %s\nExpected: %s\nErrors: %s", result.text, error, reporter.errors);
+        return false;
+    }
+
+    if (reporter.errors.length != count) {
+        writefln("The number of errors encountered was unexpected.\nSource: %s\nExpected:    %s\nEncountered: %s\nErrors:\n\t%s", result.text, count, reporter.errors.length, reporter.errors);
+        return false;
+    }
+
+    return true;
 }
 
 // ----------------------------------------------------------------------
@@ -111,6 +125,72 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 }
 
+@("Parse Definition") unittest {
+    with (AstNode.Kind) {
+        {
+            auto type = "def T : T2;".parse!"statement"();
+            assert(type.span == Span(0, 11));
+            assert(check_types(type,
+                Definition,
+                    Name,
+                    Name,
+                    Inferred
+            ));
+        }
+
+        {
+            auto type = "def T : (u32, k: u32);".parse!"statement"();
+            assert(type.span == Span(0, 22));
+            assert(check_types(type,
+                Definition,
+                    Name,
+                    List,
+                        Variable,
+                            None,
+                            Name,
+                            Inferred,
+                        Variable,
+                            Name,
+                            Name,
+                            Inferred,
+                    Inferred,
+            ));
+        }
+
+        {
+            auto error = "def T : (!);".parse!"statement"();
+            assert(error.span == Span(0, 11)); // We don't get to the semicolon
+            assert(check_error(error, ArcError.TokenExpectMismatch, 1));
+        }
+
+        {
+            auto decl = "def T := 1;".parse!"statement"();
+            assert(check_types(decl,
+                Definition,
+                    Name,
+                    Inferred,
+                    Integer,
+            ));
+        }
+
+        {
+            auto decl = "def T : a = b;".parse!"statement"();
+            assert(check_types(decl,
+                Definition,
+                    Name,
+                    Name,
+                    Name,
+            ));
+        }
+
+        {
+            auto error = "def T := +;".parse!"statement"();
+            assert(error.span == Span(0, 10)); // We don't get to the semicolon
+            assert(type_equivalent(error, Invalid));
+        }
+    }
+}
+
 @("Parse Variable") unittest {
     with (AstNode.Kind) {
         {
@@ -146,15 +226,11 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
             ));
         }
 
-        {   // ! cannot start type
-            auto var = "a : !;".parse!"statement"();
-            assert(check_error(var, ArcError.TokenExpectMismatch));
-        }
+        // ! cannot start type
+        assert(check_error("a : (!);".parse!"statement"(), ArcError.TokenExpectMismatch));
 
-        {   // ! cannot start type, unexpected EOF
-            auto var = "a : !".parse!"statement"();
-            assert(check_error(var, ArcError.UnexpectedEndOfFile, 2));
-        }
+        // ! cannot start type, unexpected EOF
+        assert(check_error("a : !".parse!"statement"(), ArcError.TokenExpectMismatch));
     }
 }
 
@@ -257,8 +333,8 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 }
 
 @("Parse List Error") unittest { // List variable must have type
-        auto err = "(a = b)".parse!"expression"();
-        assert(check_error(err, ArcError.TokenExpectMismatch));
+    assert(check_error("(a = b)".parse!"expression"(), ArcError.TokenExpectMismatch));
+    assert(check_error("(a, !)".parse!"expression"(), ArcError.TokenExpectMismatch));
 }
 
 @("Parse Call") unittest {
