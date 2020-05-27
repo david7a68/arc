@@ -68,6 +68,45 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
 //
 // ----------------------------------------------------------------------
 
+@("Parse Assign") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("a = b;".parse!"statement"(), Assign, Name, Name));
+        assert(check_types("() = 1;".parse!"statement"(), Assign, List, Integer));
+    }
+}
+
+@("Parse Block") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("{}".parse!"statement"(), Block));
+
+        {
+            auto block = "{ a; }".parse!"statement"();
+            assert(block.span == Span(0, 6));
+            assert(check_types(block, Block, Name));
+        }
+
+        {
+            const block = "{ ".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "{ a }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "( a, { ) }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "{ ( } )".parse!"statement"();
+            assert(!block.is_valid);
+        }
+    }
+}
+
 @("Parse Variable") unittest {
     with (AstNode.Kind) {
         {
@@ -117,38 +156,6 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
             assert(type_equivalent(var,
                 Invalid
             ));
-        }
-    }
-}
-
-@("Parse Block") unittest {
-    with (AstNode.Kind) {
-        assert(check_types("{}".parse!"statement"(), Block));
-
-        {
-            auto block = "{ a; }".parse!"statement"();
-            assert(block.span == Span(0, 6));
-            assert(check_types(block, Block, Name));
-        }
-
-        {
-            const block = "{ ".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "{ a }".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "( a, { ) }".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "{ ( } )".parse!"statement"();
-            assert(!block.is_valid);
         }
     }
 }

@@ -139,6 +139,21 @@ auto parse_optional_expr(ParsingContext* p) {
 //
 // ----------------------------------------------------------------------
 
+AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
+    p.skip_required(Token.Equals);
+
+    auto rhs = parse_expression(p);
+
+    const semicolon = p.take_required(Token.Semicolon);
+    const span = lhs.span.merge(rhs.span);
+
+    if (rhs.is_valid && semicolon.type == Token.Semicolon)
+        return p.alloc(AstNode.Assign, span.merge(semicolon.span), p.alloc_sequence(lhs, rhs));
+
+    p.free(lhs, rhs);
+    return p.alloc(AstNode.Invalid, span);
+}
+
 AstNode* parse_block(ParsingContext* p) {
     auto start = p.take().span;
 
@@ -194,6 +209,9 @@ AstNode* parse_statement(ParsingContext* p) {
             if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
                 return parse_variable!true(p, prefix);
             
+            if (p.current.type == Token.Equals)
+                return parse_assign(p, prefix);
+
             auto expr = prefix.is_valid ? parse_infix(p, prefix) : prefix;
 
             if (expr.is_valid && p.skip_required(Token.Semicolon)) return expr;

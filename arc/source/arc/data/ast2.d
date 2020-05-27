@@ -17,6 +17,7 @@ struct AstNode {
         List,
         Block,
         Negate,
+        Assign,
         Not,
         Add,
         Subtract,
