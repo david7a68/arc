@@ -203,6 +203,11 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             else return make_op_token(Token.Slash);
 
         case '=':
+            // Branchless version, need to performance test
+            // static immutable eq_type    = [Token.Equals,    Token.EqualEqual];
+            // static immutable eq_adv     = [0,               1];
+            // const second_eq = current < end && *current == '=';
+            // return make_op_token(eq_type[second_eq], eq_adv[second_eq]);
             if (current < end && *current == '=')
                 return make_op_token(Token.EqualEqual, 1);
             else

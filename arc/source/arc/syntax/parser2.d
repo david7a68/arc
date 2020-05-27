@@ -310,23 +310,31 @@ AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
 AstNode* parse_function(ParsingContext* p, AstNode* list) {
     p.advance();
 
-    auto expr = parse_expression(p, Precedence.Prefix);
+    AstNode* expr;
+    if (p.current.type != Token.Lbrace) {
+        expr = parse_expression(p, Precedence.Prefix);
 
-    if (!expr.is_valid) {
-        scope (exit) p.free(list);
-        return expr.as_invalid(list.span.merge(expr.span));
+        if (!expr.is_valid) {
+            scope (exit) p.free(list);
+            return expr.as_invalid(list.span.merge(expr.span));
+        }
     }
+    else expr = AstNode.inferred;
 
     if (p.current.type == Token.Lbrace) {
-        // auto body = parse_block(p);
-        // if (body.is_valid)
-        //     return p.alloc(AstNode.Function, p.alloc_sequence(list, expr, body));
-        
-        // p.free(list, expr, body);
-        // return p.alloc(AstNode.Invalid, list.span.merge(body.span));
+        auto body = parse_block(p);
+        if (body.is_valid)
+            return p.alloc(AstNode.Function, p.alloc_sequence(list, expr, body));
+
+        scope (exit) p.free(list, expr, body);
+        return p.alloc(AstNode.Invalid, list.span.merge(body.span));
     }
 
-    return p.alloc(AstNode.Function, p.alloc_sequence(list, AstNode.inferred, expr));
+    if (expr.kind != AstNode.Inferred)
+        return p.alloc(AstNode.Function, p.alloc_sequence(list, AstNode.inferred, expr));
+
+    // The function parse_expression() should have caught any token errors...
+    assert(false, "ICE Unreachable: All other cases should be handled by parse_expression().");
 }
 
 AstNode* parse_expression(ParsingContext* p, Precedence prec = Precedence.Assign) {

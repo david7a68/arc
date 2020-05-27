@@ -314,15 +314,21 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     }
 }
 
-// @("Parse Function (With Block)") unittest {
-//     with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expression"(),
-//         Function,
-//             List,
-//                 Variable,
-//                     None,
-//                     Inferred,
-//                     Name,
-//                 Inferred,
-//                 Block
-//     ));
-// }
+@("Parse Function (With Block)") unittest {
+    with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expression"(),
+        Function,
+            List,
+                Variable,
+                    None,
+                    Inferred,
+                    Name,
+                Inferred,
+                Block
+    ));
+}
+
+@("Parse Function Error") unittest {
+    auto err = "() ->;".parse!"expression"();
+    assert(reporter.errors.length == 1); //  We don't care what error occurs, as long as one does
+    assert(check_types(err, AstNode.Invalid));
+}
