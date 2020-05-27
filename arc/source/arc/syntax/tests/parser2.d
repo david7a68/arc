@@ -58,6 +58,10 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     return type_equivalent(result, types);
 }
 
+bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
+    return reporter.has_error(error) && reporter.errors.length == count && result.tree.kind == AstNode.Invalid;
+}
+
 // ----------------------------------------------------------------------
 //    _____  _          _                                 _        
 //   / ____|| |        | |                               | |       
@@ -142,20 +146,14 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
             ));
         }
 
-        {
+        {   // ! cannot start type
             auto var = "a : !;".parse!"statement"();
-            assert(reporter.has_error(ArcError.TokenExpectMismatch));
-            assert(type_equivalent(var,
-                Variable, Name, Invalid, Inferred
-            ));
+            assert(check_error(var, ArcError.TokenExpectMismatch));
         }
 
-        {
+        {   // ! cannot start type, unexpected EOF
             auto var = "a : !".parse!"statement"();
-            assert(reporter.has_error(ArcError.UnexpectedEndOfFile));
-            assert(type_equivalent(var,
-                Invalid
-            ));
+            assert(check_error(var, ArcError.UnexpectedEndOfFile, 2));
         }
     }
 }
@@ -258,16 +256,13 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     }
 }
 
-@("Parse List Error") unittest {
+@("Parse List Error") unittest { // List variable must have type
         auto err = "(a = b)".parse!"expression"();
-        assert(reporter.has_error(ArcError.TokenExpectMismatch));
-        assert(reporter.errors.length == 1);
-        check_types(err, AstNode.Invalid);
+        assert(check_error(err, ArcError.TokenExpectMismatch));
 }
 
 @("Parse Call") unittest {
     with (AstNode.Kind) {
-        // a -3 -> a - 3, not a call
         assert(check_types("a 4".parse!"expression"(), Call, Name, Integer));
         
         assert(check_types("a * b()".parse!"expression"(),
@@ -336,7 +331,7 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
 
 @("Parse Function Error") unittest {
     auto err = "() ->;".parse!"expression"();
-    assert(reporter.errors.length == 1); //  We don't care what error occurs, as long as one does
+//  We don't care what error occurs, as long as one does
     assert(check_types(err, AstNode.Invalid));
 }
 
@@ -369,16 +364,12 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     with (AstNode.Kind) {
         {
             auto err = "(a : !)".parse!"type"();
-            assert(reporter.has_error(ArcError.TokenExpectMismatch));
-            assert(reporter.errors.length == 1);
-            check_types(err, Invalid);
+            assert(check_error(err, ArcError.TokenExpectMismatch));
         }
 
         {
             auto err = "3".parse!"type"();
-            assert(reporter.has_error(ArcError.TokenExpectMismatch));
-            assert(reporter.errors.length == 1);
-            check_types(err, Invalid);
+            assert(check_error(err, ArcError.TokenExpectMismatch));
         }
     }
 }

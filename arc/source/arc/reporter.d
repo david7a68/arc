@@ -39,19 +39,27 @@ struct Reporter {
     ArcError[] errors;
     ArcWarning[] warnings;
 
-    void error(Args...)(ArcError.Code error_code, Span span, string message, Args args) {
+    void error(Args...)(ArcError.Code error_code, Span span, const char[] message, Args args) {
+        error(error_code, span, tprint(message, args));
+    }
+
+    void error(ArcError.Code error_code, Span span, const char[] message) {
         errors ~= ArcError(
             error_code,
             span.start,
-            tprint(message, args).idup
+            message.idup
         );
     }
 
-    void warn(Args...)(ArcWarning.Code warn_code, Span span, string message, Args args) {
+    void warn(Args...)(ArcWarning.Code warn_code, Span span, const char[] message, Args args) {
+        warn(warn_code, span, tprint(message, args));
+    }
+
+    void warn(ArcWarning.Code warn_code, Span span, const char[] message) {
         warnings ~= ArcWarning(
             warn_code,
             span.start,
-            tprint(message, args).idup
+            message.idup
         );
     }
 
@@ -68,27 +76,28 @@ struct Reporter {
         return false;
     }
 
-    const(char[]) tprint(Args...)(string message, Args args) {
-        import std.format: formattedWrite;
+}
 
-        static struct Buffer {
-            char[] data;
-            size_t length;
+const(char[]) tprint(Args...)(const char[] message, Args args) {
+    import std.format: formattedWrite;
 
-            void put(char c) {
-                assert(length < data.length);
-                data[length] = c;
-                length++;
-            }
+    static struct Buffer {
+        char[] data;
+        size_t length;
 
-            const(char[]) text() const { return data[0 .. length]; }
+        void put(char c) {
+            assert(length < data.length);
+            data[length] = c;
+            length++;
         }
 
-        static char[4096] temp_buffer;
-
-        auto buffer = Buffer(temp_buffer);
-        formattedWrite(buffer, message, args);
-        
-        return buffer.text();
+        const(char[]) text() const { return data[0 .. length]; }
     }
+
+    static char[4096] temp_buffer;
+
+    auto buffer = Buffer(temp_buffer);
+    formattedWrite(buffer, message, args);
+    
+    return buffer.text();
 }
