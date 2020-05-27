@@ -10,6 +10,7 @@ TokenBuffer!64 token_buffer;
 /// Read all tokens from text, up to `token_buffer.length`.
 Token[] scan_tokens(const(char)[] text) {
     token_buffer.begin(text, 10);
+    assert(token_buffer.next_buffer_index <= text.length, "Exceeded max test length");
 
     return token_buffer.tokens[];
 }
@@ -35,6 +36,11 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("lex whitespace") unittest {
     assert("  \t\t\t\t    ".scan_tokens[0].type == Token.Done);
+}
+
+@("Lex Line Comment") unittest {
+    assert("#blah blah blah".scan_tokens[0].type == Token.Done);
+    assert("#blah\n#blah".scan_tokens[0].type == Token.Done);
 }
 
 @("lex compact") unittest {

@@ -91,9 +91,9 @@ void fill_buffer(size_t n)(TokenBuffer!n* buffer) {
     auto base = buffer.source_text.ptr;
     auto current = buffer.source_text.ptr + buffer.next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
     auto end = buffer.source_text.length + base;
-    
+
     buffer.tokens[] = Token.init;
-    
+
     // get first token
     buffer.tokens[0] = scan_token(base, current, end);
     buffer.tokens[0].span.start += buffer.buffer_span_offset;
@@ -104,7 +104,7 @@ void fill_buffer(size_t n)(TokenBuffer!n* buffer) {
         buffer.tokens[i] = scan_token(base, current, end);
         buffer.tokens[i].span.start += buffer.buffer_span_offset;
     }
-    
+
     const read = current - (buffer.source_text.ptr + buffer.next_buffer_index);
     buffer.next_buffer_index += read;
 }
@@ -157,9 +157,11 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
     }
 
     switch_start:
+    current = start;
+
     if (current >= end)
         return Token(Token.Done, Span(cast(uint) (start - base), 0)); 
-    
+
     const c = *current;
     current++;
 
@@ -173,6 +175,11 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
 
         mixin(case_of("+*^&"));
             return make_op_token(cast(Token.Type) c);
+
+        case '#':
+            while (start < end && *start != '\n') start++;
+            start += start != end; // to skip the \n, true is 1, false is 0
+            goto switch_start;
 
         case '-':
             if (current < end && *current == '>')
@@ -220,19 +227,16 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
                 return make_op_token(Token.Bang);
 
         case '\'':
-            if (current >= end) {
+            if (current >= end)
                 return make_token(Token.Invalid);
-            }
-            else {
-                const content_length = *current == '\\' ? 2 : 1;
-                const key = digest(current[0 .. content_length]);
-                current += content_length;
+            
+            const content_length = *current == '\\' ? 2 : 1;
+            const key = digest(current[0 .. content_length]);
+            current += content_length;
 
-                if (*current == '\'')
-                    return make_token(Token.Char, 1, key);
-                else
-                    return make_token(Token.Invalid);
-            }
+            if (*current == '\'')
+                return make_token(Token.Char, 1, key);
+            return make_token(Token.Invalid);
 
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
