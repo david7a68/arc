@@ -58,6 +58,100 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
     return type_equivalent(result, types);
 }
 
+// ----------------------------------------------------------------------
+//    _____  _          _                                 _        
+//   / ____|| |        | |                               | |       
+//  | (___  | |_  __ _ | |_  ___  _ __ ___    ___  _ __  | |_  ___ 
+//   \___ \ | __|/ _` || __|/ _ \| '_ ` _ \  / _ \| '_ \ | __|/ __|
+//   ____) || |_| (_| || |_|  __/| | | | | ||  __/| | | || |_ \__ \
+//  |_____/  \__|\__,_| \__|\___||_| |_| |_| \___||_| |_| \__||___/
+//
+// ----------------------------------------------------------------------
+
+@("Parse Variable") unittest {
+    with (AstNode.Kind) {
+        {
+            auto var = "a : T = 3;".parse!"statement"();
+            assert(var.span == Span(0, 10));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Name,
+                    Integer
+            ));
+        }
+
+        {
+            auto var = "a := 3;".parse!"statement"();
+            assert(var.span == Span(0, 7));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Inferred,
+                    Integer
+            ));
+        }
+
+        {
+            auto var = "a : T;".parse!"statement"();
+            assert(var.span == Span(0, 6));
+            assert(check_types(var,
+                Variable,
+                    Name,
+                    Name,
+                    Inferred
+            ));
+        }
+
+        {
+            auto var = "a : !;".parse!"statement"();
+            assert(reporter.has_error(ArcError.TokenExpectMismatch));
+            assert(type_equivalent(var,
+                Variable, Name, Invalid, Inferred
+            ));
+        }
+
+        {
+            auto var = "a : !".parse!"statement"();
+            assert(reporter.has_error(ArcError.UnexpectedEndOfFile));
+            assert(type_equivalent(var,
+                Invalid
+            ));
+        }
+    }
+}
+
+@("Parse Block") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("{}".parse!"statement"(), Block));
+
+        {
+            auto block = "{ a; }".parse!"statement"();
+            assert(block.span == Span(0, 6));
+            assert(check_types(block, Block, Name));
+        }
+
+        {
+            const block = "{ ".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "{ a }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "( a, { ) }".parse!"statement"();
+            assert(!block.is_valid);
+        }
+
+        {
+            const block = "{ ( } )".parse!"statement"();
+            assert(!block.is_valid);
+        }
+    }
+}
 
 // ----------------------------------------------------------------------
 //   ______                                    _                    
@@ -181,3 +275,54 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
         assert(check_types("a b c".parse!"expression"(), Call, Name, Call, Name, Name));
     }
 }
+
+@("Parse Function (Simple)") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("(a) -> b".parse!"expression"(),
+            Function,
+                List,
+                    Variable,
+                        None,
+                        Inferred,
+                        Name,
+                Inferred,
+                Name
+        ));
+    }
+}
+
+@("Parse Function (Complex Return)") unittest {
+    with (AstNode.Kind) {
+        // (a) -> ((b) -> c)
+        assert(check_types("(a) -> (b) -> c".parse!"expression"(),
+            Function,
+                List,
+                    Variable,
+                        None,
+                        Inferred,
+                        Name,
+                Inferred,
+                Function,
+                    List,
+                        Variable,
+                            None,
+                            Inferred,
+                            Name,
+                    Inferred,
+                    Name
+        ));
+    }
+}
+
+// @("Parse Function (With Block)") unittest {
+//     with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expression"(),
+//         Function,
+//             List,
+//                 Variable,
+//                     None,
+//                     Inferred,
+//                     Name,
+//                 Inferred,
+//                 Block
+//     ));
+// }

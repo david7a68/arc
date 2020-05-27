@@ -28,7 +28,7 @@ statement = def ';'
                             | name ':' type '=' expr
                             ;
 
-            function = (name | variable | list) '->' expr block? ;
+            function = list '->' expr block? ;
 
             path = name ('::' name)* ;
 

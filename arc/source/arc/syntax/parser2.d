@@ -94,8 +94,7 @@ struct ParsingContext {
     }
 
     Token take_required(Token.Type type) {
-        const matched = match_required(type);
-        if (matched) return take();
+        if (match_required(type)) return take();
         return Token();
     }
 
@@ -103,11 +102,13 @@ struct ParsingContext {
         if (type == tokens.current.type) return true;
         
         const span = tokens.current.span;
-        if (tokens.done)
-            reporter.error(
-                ArcError.UnexpectedEndOfFile, span,
-                "The file ended unexpectedly. A %s was expected.",
-                type);
+        if (tokens.done) {
+            if (!reporter.has_error(ArcError.UnexpectedEndOfFile))
+                reporter.error(
+                    ArcError.UnexpectedEndOfFile, span,
+                    "The file ended unexpectedly. A %s was expected.",
+                    type);
+        }
         else
             reporter.error(
                 ArcError.TokenExpectMismatch, span,
@@ -127,6 +128,91 @@ auto parse_optional_type(ParsingContext* p) {
 auto parse_optional_expr(ParsingContext* p) {
     return p.skip(Token.Equals) ? parse_expression(p, Precedence.Logic) : AstNode.inferred;
 }
+
+// ----------------------------------------------------------------------
+//    _____  _          _                                 _        
+//   / ____|| |        | |                               | |       
+//  | (___  | |_  __ _ | |_  ___  _ __ ___    ___  _ __  | |_  ___ 
+//   \___ \ | __|/ _` || __|/ _ \| '_ ` _ \  / _ \| '_ \ | __|/ __|
+//   ____) || |_| (_| || |_|  __/| | | | | ||  __/| | | || |_ \__ \
+//  |_____/  \__|\__,_| \__|\___||_| |_| |_| \___||_| |_| \__||___/
+//
+// ----------------------------------------------------------------------
+
+AstNode* parse_block(ParsingContext* p) {
+    auto start = p.take().span;
+
+    auto seq = p.alloc_sequence_buffer();
+    while (!p.current.type.matches_one(Token.Done, Token.Rbrace)) {
+        seq.add(parse_statement(p));
+
+        if (!seq[$ - 1].is_valid) {
+            p.abort(seq);
+            return p.alloc(AstNode.Invalid, start);
+        }
+    }
+
+    auto end = p.current.span;
+    if (p.skip_required(Token.Rbrace))
+        return p.alloc(AstNode.Block, start.merge(end), p.alloc_sequence(seq));
+    
+    p.abort(seq);
+    return p.alloc(AstNode.Invalid, start.merge(end));
+}
+
+AstNode* parse_variable(bool is_statement)(ParsingContext* p, AstNode* name) {
+    p.skip_required(Token.Colon);
+
+    auto type = parse_optional_type(p);
+    auto expr = parse_optional_expr(p);
+
+    auto span = merge_all(name.span, type.span, expr.span);
+    static if (is_statement) {
+        const semicolon = p.take_required(Token.Semicolon);
+
+        if (semicolon.type == Token.Semicolon)
+            return p.alloc(AstNode.Variable, span.merge(semicolon.span), p.alloc_sequence(name, type, expr));
+
+        p.free(type, expr);
+        return name.as_invalid(span);
+    }
+    else {
+        if (type.is_valid && expr.is_valid) 
+            return p.alloc(AstNode.Variable, span, p.alloc_sequence(name, type, expr));
+        
+        p.free(type, expr);
+        return name.as_invalid(span);
+    }
+}
+
+AstNode* parse_statement(ParsingContext* p) {
+    switch (p.current.type) with (Token.Type) {
+        case Lbrace: return parse_block(p);
+        default:
+            auto prefix = prefixes[p.current.type](p);
+
+            if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
+                return parse_variable!true(p, prefix);
+            
+            auto expr = prefix.is_valid ? parse_infix(p, prefix) : prefix;
+
+            if (expr.is_valid && p.skip_required(Token.Semicolon)) return expr;
+
+            scope (exit) p.free(expr.children);
+            return expr.as_invalid(expr.span);
+    }
+}
+
+// ----------------------------------------------------------------------
+//   ______                                    _                    
+//  |  ____|                                  (_)                   
+//  | |__   __  __ _ __   _ __  ___  ___  ___  _   ___   _ __   ___ 
+//  |  __|  \ \/ /| '_ \ | '__|/ _ \/ __|/ __|| | / _ \ | '_ \ / __|
+//  | |____  >  < | |_) || |  |  __/\__ \\__ \| || (_) || | | |\__ \
+//  |______|/_/\_\| .__/ |_|   \___||___/|___/|_| \___/ |_| |_||___/
+//                | |                                               
+//                |_|                                               
+// ----------------------------------------------------------------------
 
 AstNode* parse_symbol(AstNode.Kind kind)(ParsingContext* p) {
     auto t = p.take();
@@ -158,9 +244,9 @@ AstNode* parse_list(Token.Type closing)(ParsingContext* p) {
             auto expr = parse_optional_expr(p);
             span = merge_all(span, type.span, expr.span);
 
-            if (first.kind == AstNode.Kind.Name && type.is_valid && expr.is_valid)
+            if (type.is_valid && expr.is_valid)
                 return p.alloc(AstNode.Variable, span, p.alloc_sequence(first, type, expr));
-            
+
             p.free(type, expr);
             p.free(first.children);
             return first.as_invalid(first.span);
@@ -196,13 +282,17 @@ AstNode* parse_list(Token.Type closing)(ParsingContext* p) {
 
     const end = p.current.span;
 
-    if (p.skip_required(closing)) {
-        auto members = p.alloc_sequence(seq);
-        return p.alloc(AstNode.List, begin.merge(end), members);
+    if (!p.skip_required(closing)) {
+        p.abort(seq);
+        return p.alloc(AstNode.Invalid, begin.merge(end));
     }
 
-    p.abort(seq);
-    return p.alloc(AstNode.Invalid, begin.merge(end));
+    auto members = p.alloc_sequence(seq);
+    auto list = p.alloc(AstNode.List, begin.merge(end), members);
+
+    if (p.current.type == Token.Rarrow)
+        return parse_function(p, list);
+    return list;
 }
 
 AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
@@ -217,9 +307,34 @@ AstNode* parse_binary(ParsingContext* p, AstNode* lhs, Infix op) {
     return node;
 }
 
+AstNode* parse_function(ParsingContext* p, AstNode* list) {
+    p.advance();
+
+    auto expr = parse_expression(p, Precedence.Prefix);
+
+    if (!expr.is_valid) {
+        scope (exit) p.free(list);
+        return expr.as_invalid(list.span.merge(expr.span));
+    }
+
+    if (p.current.type == Token.Lbrace) {
+        // auto body = parse_block(p);
+        // if (body.is_valid)
+        //     return p.alloc(AstNode.Function, p.alloc_sequence(list, expr, body));
+        
+        // p.free(list, expr, body);
+        // return p.alloc(AstNode.Invalid, list.span.merge(body.span));
+    }
+
+    return p.alloc(AstNode.Function, p.alloc_sequence(list, AstNode.inferred, expr));
+}
+
 AstNode* parse_expression(ParsingContext* p, Precedence prec = Precedence.Assign) {
     auto expr = prefixes[p.current.type](p);
+    return parse_infix(p, expr, prec);
+}
 
+AstNode* parse_infix(ParsingContext* p, AstNode* expr, Precedence prec = Precedence.Assign) {
     for (Infix i = infixes[p.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.current.type])
         expr = parse_binary(p, expr, i);
 
@@ -233,6 +348,13 @@ alias PrefixFn = AstNode* function(ParsingContext*);
 
 immutable prefixes = () {
     PrefixFn[256] parsers   = (p) {
+        if (p.current.type == Token.Semicolon) {
+            p.reporter.error(
+                ArcError.Code.TokenExpectMismatch, p.current.span,
+                "Unexpected end of expression. An unexpected semicolon was encountered.");
+            return p.alloc(AstNode.Kind.Invalid, p.current.span);
+        }
+
         p.reporter.error(
             ArcError.TokenNotAnExpression, p.current.span,
             "The token \"%s\" cannot start a prefix expression.",

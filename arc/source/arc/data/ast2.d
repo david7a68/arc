@@ -78,10 +78,12 @@ struct AstNode {
         _children = parts;
     }
 
-    static inferred()   { return &_inferred; }
-    static none()       { return &_none; }
+    static inferred()   { return cast(AstNode*) &_inferred; }
+    static none()       { return cast(AstNode*) &_none; }
 
-    bool is_valid() { return kind != Kind.Invalid; }
+    bool is_marker() const { return kind == Kind.None || kind == Kind.Invalid || kind == Kind.Inferred; }
+
+    bool is_valid() const { return kind != Kind.Invalid; }
 
     AstNode* as_invalid(Span span) return in (children.length == 0) {
         this = AstNode(Kind.Invalid, span);
@@ -101,8 +103,8 @@ struct AstNode {
     }
 }
 
-private auto _inferred = AstNode(AstNode.Inferred, Span());
-private auto _none = AstNode(AstNode.None, Span());
+private const _inferred = AstNode(AstNode.Inferred, Span());
+private const _none = AstNode(AstNode.None, Span());
 
 struct SequenceBuffer {
 private:
@@ -159,9 +161,11 @@ public:
     AstNode* alloc(Args...)(Args args) { return nodes.alloc(args); }
 
     void free(AstNode*[] free_nodes...) {
-        foreach (AstNode* n; free_nodes) {
-            if (n.children.length > 0) free(n.children);
-            nodes.free(n);
+        import std.algorithm: filter;
+
+        foreach (AstNode* node; free_nodes.filter!(n => !n.is_marker)) {
+            if (node.children.length > 0) free(node.children);
+            nodes.free(node);
         }
     }
 
