@@ -3,7 +3,7 @@ module arc.output.ast_printer;
 import arc.data.ast;
 import arc.data.source_map;
 
-const(char[]) print_ast(SourceMap sources, AstNode[] nodes...) {
+const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
     auto printer = AstPrinter(sources);
 
     foreach (node; nodes)
@@ -18,23 +18,27 @@ const(char[]) print_ast(SourceMap sources, AstNode[] nodes...) {
  * Formats an expression as an expanding tree to look something like the following:
  *
  *  ```
- *  let a = (b-(square 19), some_var)
+ *  a := (b-(square 19), some_var)
  *  ```
  *
  *  becomes
  *
  *  ```
- *  Let
+ *  Variable
  *   ├─ a
- *   ├─ Null
- *   └─ Group
- *       ├─ Binary
- *       │    ├─ -
- *       │    ├─ b
- *       │    └─ Unary
- *       │        ├─ square
- *       │        └─ 19
- *       └─ Null
+ *   ├─ Inferred
+ *   └─ List
+ *       ├─ ListMember
+ *       │    ├─ Name: None
+ *       │    ├─ Type: Inferred
+ *       |    └─ Expr: -
+ *       │       ├─ b
+ *       │       └─ square
+ *       │          └─ 19
+ *       └─ ListMember
+ *            ├─ None
+ *            ├─ Inferred
+ *            └─ Name
  *  ```
  */
 struct AstPrinter {
@@ -67,7 +71,7 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode n, string prefix = "") {
+    void print(AstNode* n, string prefix = "") {
         void put_length() {
             str.put(" (");
             str.put(n.children.length.to!string);
@@ -77,50 +81,64 @@ struct AstPrinter {
         str.put(prefix);
         str.put(repr(sources, n));
         switch (n.kind) with (AstNode.Kind) {
-        case Invalid:
-            str.put(" \"");
-            str.put(sources.get_spanned_text(n.span));
-            str.put("\"");
-            write_children(n);
-            break;
-        case List:
-            put_length();
-            write_children(n, true);
-            break;
-        case Function:
-            write_named_children(n, "Params: ", "Return Type: ", "Body: ");
-            break;
-        case Call:
-            write_named_children(n, "Target: ", "Arguments: ");
-            break;
-        case TypeDeclaration:
-            write_named_children(n, "Name: ", "Type: ");
-            break;
-        case ConstantDeclaration:
-            write_named_children(n, "Name: ", "Type: ", "Value: ");
-            break;
-        case Variable:
-            write_named_children(n, "Name: ", "Type: ", "Value: ");
-            break;
-        case Unary:
-            write_named_children(n, "Op: ", "Operand: ");
-            break;
-        case Binary:
-            write_named_children(n, "Op: ", "Left: ", "Right: ");
-            break;
-        default:
-            write_children(n);
+            case Invalid:
+                str.put(" \"");
+                str.put(sources.get_spanned_text(n.span));
+                str.put("\"");
+                write_children(n);
+                break;
+            case List:
+                put_length();
+                write_children(n, true);
+                break;
+            case Function:
+                write_named_children(n, "Params: ", "Return Type: ", "Body: ");
+                break;
+            case Call:
+                write_named_children(n, "Target: ", "Arguments: ");
+                break;
+            case Access:
+                write_named_children(n, "Source: ", "Member: ");
+                break;
+            case Definition:
+                write_named_children(n, "Name: ", "Type: ", "Expr: ");
+                break;
+            case Variable:
+                write_named_children(n, "Name: ", "Type: ", "Expr: ");
+                break;
+            case Negate:
+            case Not:
+                write_named_children(n, "Operand: ");
+                break;
+            case Add:
+            case Subtract:
+            case Multiply:
+            case Divide:
+            case Power:
+            case Less:
+            case LessEqual:
+            case Greater:
+            case GreaterEqual:
+            case Equal:
+            case NotEqual:
+            case And:
+            case Or:
+            case Assign:
+                write_named_children(n, "Left: ", "Right: ");
+                break;
+            default:
+                write_children(n);
         }
     }
 
-    void write_children(AstNode n, bool numbered = false) {
+    void write_children(AstNode* n, bool numbered = false) {
         str.put("\n");
         foreach (i, child; n.children) {
             write_child(child, i + 1 == n.children.length, numbered ? ("#" ~ i.to!string ~ " ") : "");
         }
     }
 
-    void write_named_children(AstNode n, string[] names...) {
+    void write_named_children(AstNode* n, string[] names...) {
         assert(n.children.length == names.length);
         
         str.put("\n");
@@ -129,7 +147,7 @@ struct AstPrinter {
         }
     }
 
-    void write_child(AstNode n, bool is_last_child, string prefix) {
+    void write_child(AstNode* n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 
@@ -147,7 +165,7 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SourceMap sources, AstNode node) {
+const(char)[] repr(SourceMap sources, AstNode* node) {
     import std.conv: to;
 
     switch (node.kind) with (AstNode.Kind) {

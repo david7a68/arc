@@ -1,169 +1,208 @@
 module arc.data.ast;
 
-import arc.data.source: Span;
+import arc.data.source: Span, merge_all;
+import arc.data.hash: Key;
 
-/**
- * Why use an abstract class to represent a discriminated union of types?
- *
- * 1) Additional control over what goes into the shared part. The variant type
- *    supported by the standard library does not allow you to choose what goes
- *    into the discriminant part. We want to keep more shared information.
- * 2) POD structs with a shared struct header is a viable option, but classes
- *    already implement much of the functionality expected of variable-sized
- *    discriminated unions.
- * 3) Other implementations for discriminated unions tend to pad to the largest
- *    type, wasting space that it didn't need to.
- */
-abstract class AstNode {
-    import arc.data.type: ArcType;
-
+struct AstNode {
     enum Kind : ubyte {
-        Invalid,
         None,
+        Invalid,
         Inferred,
-        ConstantDeclaration,
-        TypeDeclaration,
+        Definition,
         Variable,
         Name,
         Integer,
         Char,
         List,
         Block,
-        Unary,
-        Binary,
+        Negate,
+        Assign,
+        Not,
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Power,
+        Less,
+        LessEqual,
+        Greater,
+        GreaterEqual,
+        Equal,
+        NotEqual,
+        And,
+        Or,
         Call,
         Access,
         Function,
         FunctionType,
     }
 
-    const Span span;
-    ArcType type;
+    alias Kind this;
 
-    const Kind kind;
+    Span span;
+    Kind kind;
 
-    static AstNode none, inferred;
+    // TODO: Make use of unused top 16 bits on x64 (and Aarch64) to store
+    //       discriminant, and turn remaining bits to type pointer.
+    private ubyte[7] _type_ptr;
+
+    union {
+        private AstNode*[] _children;
+        private AstNode* _child;
+        Key symbol;
+        ulong value;
+    }
 
     this(Kind kind, Span span) {
         this.kind = kind;
         this.span = span;
     }
 
-    AstNode[] children() { return[]; }
+    this(Kind kind, Span span, Key symbol) {
+        this(kind, span);
+        this.symbol = symbol;
+    }
+
+    this(Kind kind, Span prefix, AstNode* child) in (prefix <= child.span) {
+        this(kind, prefix.merge(child.span));
+        _child = child;
+    }
+
+    this(Kind kind, Span outer, AstNode*[] parts) {
+        this(kind, outer);
+        _children = parts;
+    }
+
+    this(Kind kind, AstNode*[] parts) {
+        this(kind, parts[0].span.merge(parts[$ - 1].span));
+        _children = parts;
+    }
+
+    static inferred()   { return cast(AstNode*) &_inferred; }
+    static none()       { return cast(AstNode*) &_none; }
+
+    bool is_marker() const { return kind == Kind.None || kind == Kind.Invalid || kind == Kind.Inferred; }
 
     bool is_valid() const { return kind != Kind.Invalid; }
-}
 
-static this() {
-    AstNode.none = new None();
-    AstNode.inferred = new Inferred();
-}
+    AstNode* as_invalid(Span span) return in (children.length == 0) {
+        this = AstNode(Kind.Invalid, span);
+        return &this;
+    }
 
-final class Invalid : AstNode {
-    this(Span span) {
-        super(Kind.Invalid, span);
+    AstNode* respan(Span span) return {
+        this.span = span;
+        return &this;
+    }
+
+    AstNode*[] children() return {
+        switch (kind) with (Kind) {
+            case None: case Invalid: case Inferred:
+            case Name: case Integer: case Char:
+                return [];
+            case Negate: case Not:
+                return (&_child)[0 .. 1]; // JANK
+            default:
+                return _children;
+        }
     }
 }
 
-alias None = Marker!(AstNode.Kind.None);
-alias Inferred = Marker!(AstNode.Kind.Inferred);
+private const _inferred = AstNode(AstNode.Inferred, Span());
+private const _none = AstNode(AstNode.None, Span());
 
-final class Marker(AstNode.Kind marker_kind) : AstNode {
+struct SequenceBuffer {
+private:
+    AstNode*[] _nodes;
+    size_t _count, _size_class;
+
+    this(AstNode*[] nodes, size_t size_index) { _nodes = nodes; _size_class = size_index; }
+
+public:
+    size_t length()     { return _count; }
+    size_t capacity()   { return _nodes.length; }
+    size_t size_class() { return _size_class; }
+
+    void add(AstNode* node) in (length < capacity) {
+        _nodes[_count] = node;
+        _count++;
+    }
+
+    AstNode*[] opIndex()        { return _nodes[0 .. _count]; }
+    AstNode* opIndex(size_t n)  { return _nodes[n]; }
+    size_t opDollar()           { return _count; }
+
+    void copy(SequenceBuffer* buffer) in (buffer.capacity < capacity) {
+        _nodes[0 .. buffer.length] = (*buffer)[];
+    }
+}
+
+static assert(AstNode.alignof == 8 && AstNode.sizeof == 32);
+static assert(SequenceBuffer.alignof == 8);
+
+/// The size classes for sequence buffers, quadrupling each step up.
+immutable sequence_pool_sizes = [64, 256, 1024, 4096, 16384];
+
+final class AstNodeAllocator {
+    import arc.memory: VirtualAllocator, MemoryPool, ObjectPool, gib;
+
+private:
+    /// We reserve 128 Gib of memory for the syntax tree.
+    enum reserved_bytes = 128.gib;
+
+    VirtualAllocator mem;
+    ObjectPool!AstNode nodes;
+    MemoryPool[sequence_pool_sizes.length] sequence_pools;
+
+public:
     this() {
-        super(marker_kind, Span());
-    }
-}
+        mem = VirtualAllocator(reserved_bytes);
+        nodes = ObjectPool!AstNode(&mem);
 
-alias ConstantDeclaration = ValueDeclaration!(AstNode.Kind.ConstantDeclaration);
-alias Variable = ValueDeclaration!(AstNode.Kind.Variable);
-
-final class ValueDeclaration(AstNode.Kind decl_kind) : AstNode {
-    AstNode[3] parts;
-
-    this(Span span, AstNode name, AstNode type, AstNode value) {
-        super(decl_kind, span);
-        parts = [name, type, value];
+        foreach (i, size; sequence_pool_sizes)
+            sequence_pools[i] = MemoryPool(&mem, size);
     }
 
-    override AstNode[] children() { return parts[]; }
-}
+    AstNode* alloc(Args...)(Args args) { return nodes.alloc(args); }
 
-final class TypeDeclaration : AstNode {
-    AstNode[2] parts;
+    void free(AstNode*[] free_nodes...) {
+        import std.algorithm: filter;
 
-    this(Span span, AstNode name, AstNode type) {
-        super(Kind.TypeDeclaration, span);
-        parts = [name, type];
+        foreach (AstNode* node; free_nodes.filter!(n => !n.is_marker)) {
+            if (node.children.length > 0) free(node.children);
+            nodes.free(node);
+        }
     }
 
-    override AstNode[] children() { return parts[]; }
-}
-
-alias Block = Sequence!(AstNode.Kind.Block);
-alias List = Sequence!(AstNode.Kind.List);
-
-final class Sequence(AstNode.Kind seq_kind) : AstNode {
-    AstNode[] members;
-
-    this(Span span, AstNode[] members) {
-        super(seq_kind, span);
-        this.members = members;
+    SequenceBuffer alloc_sequence_buffer() {
+        return SequenceBuffer(cast(AstNode*[]) sequence_pools[0].alloc(), 0);
     }
 
-    override AstNode[] children() { return members; }
-}
-
-alias Char = Value!(AstNode.Kind.Char);
-alias Integer = Value!(AstNode.Kind.Integer);
-alias Name = Value!(AstNode.Kind.Name);
-
-final class Value(AstNode.Kind value_kind) : AstNode {
-    import arc.data.hash: Key;
-    
-    Key text;
-
-    this(Span span, Key value_text) {
-        super(value_kind, span);
-        text = value_text;
-    }
-}
-
-alias Call = Operator!(AstNode.Kind.Call, 2);
-alias Unary = Operator!(AstNode.Kind.Unary, 2);
-alias Binary = Operator!(AstNode.Kind.Binary, 3);
-
-final class Operator(AstNode.Kind op_kind, size_t n_parts) : AstNode {
-    import arc.data.hash: Key;
-
-    AstNode[n_parts] operands;
-
-    this(AstNode[] operands...) in (n_parts == operands.length) {
-        import arc.data.source : merge;
-        super(op_kind, operands[0].span.merge(operands[$ - 1].span));
-        this.operands[] = operands;
+    void abort(SequenceBuffer seq) {
+        foreach (node; seq[]) free(node);
+        sequence_pools[seq.size_class].free(seq._nodes);
     }
 
-    override AstNode[] children() { return operands[]; }
-}
+    SequenceBuffer upgrade_sequence_buffer(SequenceBuffer old) {
+        const new_size_class = old.size_class + 1;
+        assert(new_size_class < sequence_pools.length);
 
-final class Function : AstNode {
-    AstNode[3] parts;
-
-    this(Span span, AstNode params, AstNode result, AstNode body) {
-        super(Kind.Function, span);
-        parts = [params, result, body];
+        auto large = SequenceBuffer(cast(AstNode*[]) sequence_pools[new_size_class].alloc(), new_size_class);
+        large.copy(&old);
+        
+        sequence_pools[old.size_class].free(old._nodes);
+        return large;
     }
 
-    override AstNode[] children() { return parts[]; }
-}
-
-final class FunctionType : AstNode {
-    AstNode[2] parts;
-
-    this(Span span, AstNode params, AstNode result) {
-        super(Kind.FunctionType, span);
-        parts = [params, result];
+    AstNode*[] alloc_sequence(SequenceBuffer seq) {
+        auto array = alloc_sequence(seq[]);
+        sequence_pools[seq.size_class].free(seq._nodes);
+        return array;
     }
 
-    override AstNode[] children() { return parts[]; }
+    AstNode*[] alloc_sequence(AstNode*[] seq...) {
+        auto array = cast(AstNode*[]) mem.alloc((AstNode*).sizeof * seq.length);
+        array[] = seq[];
+        return array;
+    }
 }
