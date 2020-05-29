@@ -16,8 +16,8 @@ struct AstNode {
         List,
         Block,
         Negate,
-        Assign,
         Not,
+        Assign,
         Add,
         Subtract,
         Multiply,
@@ -49,6 +49,7 @@ struct AstNode {
     union {
         private AstNode*[] _children;
         private AstNode* _child;
+        private AstNode*[2] _children_2;
         Key symbol;
         ulong value;
     }
@@ -66,6 +67,11 @@ struct AstNode {
     this(Kind kind, Span prefix, AstNode* child) in (prefix <= child.span) {
         this(kind, prefix.merge(child.span));
         _child = child;
+    }
+
+    this(Kind kind, AstNode* left, AstNode* right, Span prefix = Span()) {
+        this(kind, merge_all(prefix, left.span, right.span));
+        _children_2 = [left, right];
     }
 
     this(Kind kind, Span outer, AstNode*[] parts) {
@@ -102,6 +108,8 @@ struct AstNode {
                 return [];
             case Negate: case Not:
                 return (&_child)[0 .. 1]; // JANK
+            case Assign: .. case Access:
+                return _children_2;
             default:
                 return _children;
         }

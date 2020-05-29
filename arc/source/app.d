@@ -5,7 +5,7 @@ import std.stdio;
 // import arc.reporter;
 // import arc.syntax.parser;
 
-import arc.data.ast2;
+import arc.data.ast;
 import arc.memory;
 
 void main(string[] args) {
@@ -30,15 +30,22 @@ void main(string[] args) {
 }
 
 void f() {
-	import arc.data.ast2;
-	import arc.syntax.parser2;
-	import arc.syntax.tests.parser2;
+	import arc.data.ast;
+	import arc.syntax.parser;
+	import arc.syntax.tests.parser;
 	import arc.reporter;
-	
-	with (AstNode.Kind) {
-		auto err = "(a = b)".parse!"expression"();
-        assert(reporter.has_error(ArcError.TokenExpectMismatch));
-        assert(reporter.errors.length == 1);
-        check_types(err, AstNode.Invalid);
-    }
+	import arc.data.source;
+
+	auto error = "def T : (!);".parse!"statement"();
+	error.span.writeln;
+	check_error(error, ArcError.TokenExpectMismatch, 1);
+	writeln(reporter.errors);
+}
+
+void g() {
+	import arc.syntax.tests.lexer;
+	import arc.syntax.lexer;
+
+	assert("#blah blah blah".scan_tokens[0].type == Token.Done);
+    assert("#blah\n#blah".scan_tokens[0].type == Token.Done);
 }

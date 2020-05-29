@@ -149,7 +149,7 @@ AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
     const semicolon = p.take_required(Token.Semicolon);
 
     if (rhs.is_valid && semicolon.type == Token.Semicolon)
-        return p.alloc(AstNode.Assign, span.merge(semicolon.span), p.alloc_sequence(lhs, rhs));
+        return p.alloc(AstNode.Assign, lhs, rhs, semicolon.span);
 
     p.free(lhs);
     return rhs.respan(span);
@@ -328,7 +328,7 @@ AstNode* parse_binary(ParsingContext* p, AstNode* lhs, in Infix op) {
 
     auto rhs = parse_expression(p, cast(Precedence) (op.prec + op.is_left_associative));
     if (rhs.is_valid)
-        return p.alloc(op.kind, p.alloc_sequence(lhs, rhs));
+        return p.alloc(op.kind, lhs, rhs);
 
     scope (exit) p.free(lhs, rhs);
     return p.alloc(AstNode.Invalid, lhs.span.merge(rhs.span));
@@ -443,13 +443,12 @@ AstNode* parse_function_type(ParsingContext* p, AstNode* list) {
     p.skip_required(Token.Rarrow);
 
     auto type = parse_type(p);
-    const span = list.span.merge(type.span);
 
     if (type.is_valid)
-        return p.alloc(AstNode.FunctionType, span, p.alloc_sequence(list, type));
+        return p.alloc(AstNode.FunctionType, list, type);
 
-    scope (exit) p.free(type);
-    return type.as_invalid(span);
+    scope (exit) { p.free(list); p.free(type.children); }
+    return type.as_invalid(list.span.merge(type.span));
 }
 
 AstNode* parse_type(ParsingContext* p) {
