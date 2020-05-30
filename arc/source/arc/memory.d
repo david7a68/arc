@@ -117,7 +117,7 @@ public:
     size_t object_size() { return _object_size; }
 
     void[] alloc() {
-        if (!_head) return _allocator.alloc(_object_size);
+        if (_head is null) return _allocator.alloc(_object_size);
 
         auto mem = (cast(void*) _head)[0 .. _object_size];
         _head = _head.next;
@@ -138,22 +138,22 @@ public:
  * active objects increases.
  */
 struct ObjectPool(T) {
-    private MemoryPool pool;
+    private MemoryPool _pool;
 
-    this(VirtualAllocator* mem) { pool = MemoryPool(mem, T.sizeof); }
+    this(VirtualAllocator* mem) { _pool = MemoryPool(mem, T.sizeof); }
 
     @disable this(this);
 
     T* alloc(Args...)(Args args) {
-        auto object = cast(T*) pool.alloc().ptr;
+        auto object = cast(T*) _pool.alloc().ptr;
 
         static if (args.length) *object = T(args);
         else                    *object = T.init;
-        
+
         return object;
     }
 
-    void free(T* t) { pool.free(t[0 .. 1]); }
+    void free(T* t) { _pool.free(t[0 .. 1]); }
 }
 
 @("Virtual Allocator and Object Pool")
@@ -172,18 +172,18 @@ unittest {
 
         auto t1 = ts.alloc();
         assert(t1 !is null);
-        assert(ts.pool._head is null);
+        assert(ts._pool._head is null);
 
         auto t2 = ts.alloc();
         assert(t2 !is null);
-        assert(ts.pool._head is null);
+        assert(ts._pool._head is null);
 
         ts.free(t1);
-        assert(ts.pool._head is cast(void*) t1);
+        assert(ts._pool._head is cast(void*) t1);
 
         auto t3 = ts.alloc();
         assert(t3 !is null);
-        assert(ts.pool._head is null);
+        assert(ts._pool._head is null);
         assert(t3 == t1);
 
         ts.free(t2);

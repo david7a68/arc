@@ -3,6 +3,7 @@ module arc.syntax.tests.parser;
 version (unittest):
 
 import arc.data.ast;
+import arc.data.ast_memory;
 import arc.data.source: Span;
 import arc.syntax.parser;
 import arc.reporter;
@@ -15,7 +16,7 @@ AstNodeAllocator nodes = void;
 
 static this() {
     nodes = new AstNodeAllocator();
-    parser = ParsingContext(&reporter, &nodes);
+    parser = ParsingContext(&reporter, nodes);
 }
 
 struct ParseResult {

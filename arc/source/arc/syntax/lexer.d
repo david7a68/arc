@@ -51,9 +51,9 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
  */
 struct TokenBuffer(size_t buffer_size) {
 private:
-    size_t current_token_index;
-    size_t buffer_span_offset;
-    size_t next_buffer_index;
+    size_t _current_token_index;
+    size_t _buffer_span_offset;
+    size_t _next_buffer_index;
 
 public:
     Token[buffer_size] tokens;
@@ -63,9 +63,9 @@ public:
 
     this(const(char)[] text, size_t span_offset = 0) {
         source_text = text;
-        buffer_span_offset = span_offset;
-        fill_buffer(&this);
-        current = tokens[current_token_index];
+        _buffer_span_offset = span_offset;
+        fill_buffer();
+        current = tokens[_current_token_index];
         done = current.type == Token.Done;
     }
 
@@ -74,40 +74,40 @@ public:
     }
 
     void advance() {
-        if (current_token_index + 1 < tokens.length)
-            current_token_index++;
+        if (_current_token_index + 1 < tokens.length)
+            _current_token_index++;
         else {
-            fill_buffer(&this);
-            current_token_index = 0;
+            fill_buffer();
+            _current_token_index = 0;
         }
-        current = tokens[current_token_index];
+        current = tokens[_current_token_index];
         done = current.type == Token.Done;
+    }
+
+    void fill_buffer() {
+        auto base = source_text.ptr;
+        auto current = source_text.ptr + _next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
+        auto end = source_text.length + base;
+
+        debug tokens[] = Token.init;
+
+        // get first token
+        tokens[0] = scan_token(base, current, end);
+        tokens[0].span.start += _buffer_span_offset;
+
+        // if the previous token was not EOF, and there is space in the buffer, scan token
+        size_t i = 1;
+        for (; tokens[i - 1].type != Token.Done && i < tokens.length; i++) {
+            tokens[i] = scan_token(base, current, end);
+            tokens[i].span.start += _buffer_span_offset;
+        }
+
+        const read = current - (source_text.ptr + _next_buffer_index);
+        _next_buffer_index += read;
     }
 }
 
 private:
-
-void fill_buffer(size_t n)(TokenBuffer!n* buffer) {
-    auto base = buffer.source_text.ptr;
-    auto current = buffer.source_text.ptr + buffer.next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
-    auto end = buffer.source_text.length + base;
-
-    buffer.tokens[] = Token.init;
-
-    // get first token
-    buffer.tokens[0] = scan_token(base, current, end);
-    buffer.tokens[0].span.start += buffer.buffer_span_offset;
-
-    // if the previous token was not EOF, and there is space in the buffer, scan token
-    size_t i = 1;
-    for (; buffer.tokens[i - 1].type != Token.Done && i < buffer.tokens.length; i++) {
-        buffer.tokens[i] = scan_token(base, current, end);
-        buffer.tokens[i].span.start += buffer.buffer_span_offset;
-    }
-
-    const read = current - (buffer.source_text.ptr + buffer.next_buffer_index);
-    buffer.next_buffer_index += read;
-}
 
 /// Hashmap of reserved keywords and their corresponding token types
 immutable Token.Type[Key] keywords;

@@ -34,6 +34,7 @@
  module arc.syntax.parser;
 
 import arc.data.ast;
+import arc.data.ast_memory;
 import arc.data.source: Span, merge_all;
 import arc.reporter;
 import arc.syntax.lexer: Token, TokenBuffer, matches_one;
@@ -54,14 +55,14 @@ enum Precedence {
 struct ParsingContext {
     TokenBuffer!4096 tokens;
 
-    AstNodeAllocator* nodes;
+    AstNodeAllocator nodes;
     Reporter* reporter;
 
     int indentation_level;
 
     alias nodes this;
 
-    this(Reporter* reporter, AstNodeAllocator* node_allocator) {
+    this(Reporter* reporter, AstNodeAllocator node_allocator) {
         this.reporter = reporter;
         this.nodes = node_allocator;
     }
@@ -158,21 +159,22 @@ AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
 AstNode* parse_block(ParsingContext* p) {
     auto start = p.take().span;
 
-    auto seq = p.alloc_sequence_buffer();
+    auto seq = SequenceBuilder(p.nodes);
     while (!p.current.type.matches_one(Token.Done, Token.Rbrace)) {
-        seq.add(parse_statement(p));
+        auto node = parse_statement(p);
 
-        if (!seq[$ - 1].is_valid) {
-            p.abort(seq);
+        if (!node.is_valid) {
+            seq.abort();
             return p.alloc(AstNode.Invalid, start);
         }
+        seq.add(node);
     }
 
     auto end = p.current.span;
     if (p.skip_required(Token.Rbrace))
-        return p.alloc(AstNode.Block, start.merge(end), p.alloc_sequence(seq));
+        return p.alloc(AstNode.Block, start.merge(end), seq.nodes);
     
-    p.abort(seq);
+    seq.abort();
     return p.alloc(AstNode.Invalid, start.merge(end));
 }
 
@@ -191,7 +193,7 @@ AstNode* parse_define(ParsingContext* p) {
         const semicolon = p.take_required(Token.Semicolon);
         if (semicolon.type == Token.Semicolon) {
             span = span.merge(semicolon.span);
-            return p.alloc(AstNode.Definition, span, p.alloc_sequence(name, type, expr));
+            return p.alloc(AstNode.Definition, span, p.make_seq(name, type, expr));
         }
     }
 
@@ -210,7 +212,7 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
         const semicolon = p.take_required(Token.Semicolon);
         if (semicolon.type == Token.Semicolon) {
             span = span.merge(semicolon.span);
-            return p.alloc(AstNode.Variable, span, p.alloc_sequence(name, type, expr));
+            return p.alloc(AstNode.Variable, span, p.make_seq(name, type, expr));
         }
     }
 
@@ -279,16 +281,16 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, in Token.Type closing) {
             auto span = merge_all(first.span, type.span, expr.span);
 
             if (type.is_valid && expr.is_valid)
-                return p.alloc(AstNode.Variable, span, p.alloc_sequence(first, type, expr));
+                return p.alloc(AstNode.Variable, span, p.make_seq(first, type, expr));
 
             p.free(first, type, expr);
             return p.alloc(AstNode.Invalid, span);
         }
 
         static if (is_type)
-            auto parts = p.alloc_sequence(AstNode.none, first, AstNode.inferred);
+            auto parts = p.make_seq(AstNode.none, first, AstNode.inferred);
         else
-            auto parts = p.alloc_sequence(AstNode.none, AstNode.inferred, first);
+            auto parts = p.make_seq(AstNode.none, AstNode.inferred, first);
 
         return p.alloc(AstNode.Variable, first.span, parts);
     }
@@ -296,25 +298,27 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, in Token.Type closing) {
     const begin = p.take().span;
     while (p.current.type == Token.Comma) p.advance();
 
-    auto seq = p.alloc_sequence_buffer();
+    auto seq = SequenceBuilder(p.nodes);
     while (!p.current.type.matches_one(closing, Token.Done)) {
-        seq.add(parse_member(p));
+        auto node = parse_member(p);
 
-        if (seq[$ - 1].is_valid && (p.current.type.matches_one(closing, Token.Done) || p.skip_required(Token.Comma)))
+        if (node.is_valid && (p.current.type.matches_one(closing, Token.Done) || p.skip_required(Token.Comma)))
             while (p.current.type == Token.Comma) p.advance();
         else {
-            scope (exit) p.abort(seq);
-            return p.alloc(AstNode.Invalid, begin.merge(seq[$ - 1].span));
+            scope (exit) seq.abort();
+            return p.alloc(AstNode.Invalid, begin.merge(node.span));
         }
+
+        seq.add(node);
     }
 
     const end = p.current.span;
     if (!p.skip_required(closing)) {
-        p.abort(seq);
+        seq.abort();
         return p.alloc(AstNode.Invalid, begin.merge(end));
     }
 
-    auto members = p.alloc_sequence(seq);
+    auto members = seq.nodes;
     auto list = p.alloc(AstNode.List, begin.merge(end), members);
 
     if (p.current.type != Token.Rarrow) return list;
@@ -351,7 +355,7 @@ AstNode* parse_function(ParsingContext* p, AstNode* list) {
     } ();
 
     if (type.is_valid && body.is_valid)
-        return p.alloc(AstNode.Function, p.alloc_sequence(list, type, body));
+        return p.alloc(AstNode.Function, p.make_seq(list, type, body));
 
     scope (exit) p.free(list, type, body);
     return p.alloc(AstNode.Invalid, merge_all(list.span, type.span, body.span));
