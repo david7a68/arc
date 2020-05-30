@@ -1,4 +1,6 @@
+.vs/
 .dub
+.sln
 docs.json
 __dummy.html
 docs/
