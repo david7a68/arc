@@ -1,5 +1,7 @@
 module arc.syntax.tests.parser;
 
+version (unittest):
+
 import arc.data.ast;
 import arc.data.source: Span;
 import arc.syntax.parser;

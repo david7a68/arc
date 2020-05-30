@@ -87,7 +87,7 @@ struct AstNode {
     static inferred()   { return cast(AstNode*) &_inferred; }
     static none()       { return cast(AstNode*) &_none; }
 
-    bool is_marker() const { return kind == Kind.None || kind == Kind.Invalid || kind == Kind.Inferred; }
+    bool is_marker() const { return kind == Kind.None || kind == Kind.Inferred; }
 
     bool is_valid() const { return kind != Kind.Invalid; }
 
