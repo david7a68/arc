@@ -1,6 +1,5 @@
 .vs/
 .dub
-.sln
 docs.json
 __dummy.html
 docs/
@@ -11,6 +10,7 @@ arc.dll
 arc.a
 arc.lib
 arc-test-*
+*.sln
 *.exe
 *.o
 *.obj
