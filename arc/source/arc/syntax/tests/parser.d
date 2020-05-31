@@ -369,6 +369,15 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                 Inferred,
                 Name
         ));
+
+        assert(check_types("() -> a * b".parse!"expression"(),
+            Function,
+                List,
+                Inferred,
+                Multiply,
+                    Name,
+                    Name
+        ));
     }
 }
 

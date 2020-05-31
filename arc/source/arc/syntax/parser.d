@@ -342,7 +342,7 @@ AstNode* parse_function(ParsingContext* p, AstNode* list) {
     p.advance();
 
     auto expr = p.current.type != Token.Lbrace ?
-                parse_prefix(p) :
+                parse_expression(p) :
                 AstNode.inferred;
 
     auto body = p.current.type == Token.Lbrace ?
