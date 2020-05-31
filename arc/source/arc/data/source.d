@@ -36,30 +36,14 @@ struct Span {
 }
 
 /**
- * Merge two spans together. If either span is Span(0, 0), `merge` will return
- * the non-0 span, or if both spans are 0, the 0 span.
- */
-auto merge(Span lhs, Span rhs) {
-    if (lhs == Span()) {
-        if (rhs == Span())
-            return lhs;
-        else
-            return rhs;
-    }
-    else {
-        auto lo = lhs.start < rhs.start ? lhs.start : rhs.start;
-        auto hi = lhs.end > rhs.end ? lhs.end : rhs.end;
-        return Span(lo, hi - lo);
-    }
-}
-
-/**
  * Merges all non-0 spans together or returns the 0 span if all spans are 0.
  */
 auto merge_all(Span[] spans...) {
     import std.algorithm: filter, fold;
 
-    return spans.filter!(a => a != Span()).fold!merge(Span());
+    Span result;
+    foreach (span; spans.filter!(s => s != Span())) result = result.merge(span);
+    return result;
 }
 
 @("merge spans") unittest {
