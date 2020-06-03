@@ -63,8 +63,8 @@ struct AstPrinter {
         this.sources = sources;
     }
 
-    const(char)[] data() {
-        return cast(const(char)[]) str.data;
+    const(char)[] data() const {
+        return str.data;
     }
 
     void reset() {
@@ -84,8 +84,7 @@ struct AstPrinter {
             case Invalid:
                 str.put(" \"");
                 str.put(sources.get_spanned_text(n.span));
-                str.put("\"");
-                write_children(n);
+                str.put("\"\n");
                 break;
             case List:
                 put_length();
