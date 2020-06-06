@@ -51,9 +51,9 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
  */
 struct TokenBuffer(size_t buffer_size) {
 private:
-    size_t _current_token_index;
-    size_t _buffer_span_offset;
-    size_t _next_buffer_index;
+    uint _current_token_index;
+    uint _buffer_span_offset;
+    uint _next_buffer_index;
 
 public:
     Token[buffer_size] tokens;
@@ -61,7 +61,7 @@ public:
     Token current;
     bool done;
 
-    this(const(char)[] text, size_t span_offset = 0) {
+    this(const(char)[] text, uint span_offset = 0) {
         source_text = text;
         _buffer_span_offset = span_offset;
         fill_buffer();
@@ -69,41 +69,34 @@ public:
         done = current.type == Token.Done;
     }
 
-    void begin(const(char)[] text, size_t span_offset = 0) {
+    void begin(const(char)[] text, uint span_offset = 0) {
         this = typeof(this)(text, span_offset);
     }
 
     void advance() {
-        if (_current_token_index + 1 < tokens.length)
-            _current_token_index++;
-        else {
+        _current_token_index++;
+        if (_current_token_index == tokens.length)
             fill_buffer();
-            _current_token_index = 0;
-        }
+
         current = tokens[_current_token_index];
         done = current.type == Token.Done;
     }
 
     void fill_buffer() {
-        auto base = source_text.ptr;
-        auto current = source_text.ptr + _next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
-        auto end = source_text.length + base;
+        const base = source_text.ptr;
+        auto  current = source_text.ptr + _next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
+        const end = source_text.length + base;
 
         debug tokens[] = Token.init;
 
-        // get first token
-        tokens[0] = scan_token(base, current, end);
-        tokens[0].span.start += _buffer_span_offset;
-
-        // if the previous token was not EOF, and there is space in the buffer, scan token
-        size_t i = 1;
-        for (; tokens[i - 1].type != Token.Done && i < tokens.length; i++) {
-            tokens[i] = scan_token(base, current, end);
-            tokens[i].span.start += _buffer_span_offset;
-        }
+        // get first token, might be Done
+        tokens[0] = scan_token(base, current, end, _buffer_span_offset);
+        for (size_t i = 1; tokens[i - 1].type != Token.Done && i < tokens.length; i++)
+            tokens[i] = scan_token(base, current, end, _buffer_span_offset);
 
         const read = current - (source_text.ptr + _next_buffer_index);
         _next_buffer_index += read;
+        _current_token_index = 0;
     }
 }
 
@@ -133,7 +126,7 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token scan_token(const char* base, ref const(char)* current, ref const(char*) end) {
+Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, uint span_offset) {
     auto start = current;
 
     string case_of(const char[] c) {
@@ -143,7 +136,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         return c.map!(v => "case " ~ v.to!int.to!string ~ ": ").join().to!string;
     }
 
-    auto final_span() { return Span(cast(uint) (start - base), cast(uint) (current - start)); }
+    auto final_span() { return Span(cast(uint) (start - base) + span_offset, cast(uint) (current - start)); }
 
     auto make_token(Token.Type t, size_t advance_n, Key key = 0) {
         current += advance_n;
@@ -151,10 +144,10 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
     }
 
     auto make_2_op(char second, Token.Type two_char_type, Token.Type one_char_type) {
-        static immutable span           = [2,                1];
+        static immutable length         = [2,                1];
         immutable Token.Type[2] type    = [two_char_type,    one_char_type];
         immutable is_one_char           = (current + 1 == end) | (*(current + 1) != second); //bit to avoid short circuit
-        return make_token(type[is_one_char], span[is_one_char]);
+        return make_token(type[is_one_char], length[is_one_char]);
     }
 
     while (start < end) {
@@ -165,13 +158,13 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
                 start++;
                 continue;
 
-            mixin(case_of("()[]{}.,;+*^&/:"));
-                return make_token(cast(Token.Type) *current, 1);
-
             case '#':
                 while (start < end && *start != '\n') start++;
-                start += start != end; // to skip the \n, true is 1, false is 0
+                start++; // we can safely cross past end, handled in loop conditional
                 continue;
+
+            mixin(case_of("()[]{}.,;+*^&/:"));
+                return make_token(cast(Token.Type) *current, 1);
 
             case '-': return make_2_op('>', Rarrow,         Minus);
             case '=': return make_2_op('=', EqualEqual,     Equals);
@@ -181,14 +174,12 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
 
             case '\'':
                 current++;
-                const content_length = *current == '\\' ? 2 : 1;
-                const key = digest(current[0 .. content_length]);
-                current += content_length;
+                const length = *current == '\\' ? 2 : 1;
+                const key = digest(current[0 .. length]);
 
-                if (current < end && *current == '\'')
-                    return make_token(Char, 1, key);
-                else
-                    return make_token(Invalid, current - start);
+                if (current < end && *(current + length) == '\'')
+                    return make_token(Char, length + 1, key);
+                return make_token(Invalid, current - start);
 
             case 'a': .. case 'z':
             case 'A': .. case 'Z':
@@ -216,7 +207,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         }
     }
 
-    return Token(Token.Done, Span(cast(uint) (start - base), 0)); 
+    return Token(Token.Done, Span(end, 0)); 
 }
 
 ulong string_to_int(const char[] text) {
@@ -224,9 +215,7 @@ ulong string_to_int(const char[] text) {
 
     foreach (c; text[1 .. $]) {
         if (c == '_') continue;
-        
-        value *= 10;
-        value += c - '0';
+        value = value * 10 + (c - '0');
     }
 
     return value;
