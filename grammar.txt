@@ -12,7 +12,7 @@ statement = def ';'
 
     loop = 'loop' block ;
 
-    escape = 'break' | 'continue' ;
+    escape = 'break' | 'continue' | 'return' ;
 
     expr = primary | prefix | binary;
 
