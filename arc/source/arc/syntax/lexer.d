@@ -65,7 +65,7 @@ public:
         source_text = text;
         _buffer_span_offset = span_offset;
         fill_buffer();
-        current = tokens[_current_token_index];
+        current = tokens[0];
         done = current.type == Token.Done;
     }
 
@@ -207,7 +207,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         }
     }
 
-    return Token(Token.Done, Span(end, 0)); 
+    return Token(Token.Done, Span(cast(uint) (end - base), 0)); 
 }
 
 ulong string_to_int(const char[] text) {

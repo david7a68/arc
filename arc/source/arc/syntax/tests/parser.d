@@ -98,33 +98,18 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Block") unittest {
     with (AstNode.Kind) {
-        assert(check_types("{}".parse!"statement"(), Block));
+        // assert(check_types("{}".parse!"statement"(), Block));
 
-        {
-            auto block = "{ a; }".parse!"statement"();
-            assert(block.span == Span(0, 6));
-            assert(check_types(block, Block, Name));
-        }
+        // {
+        //     auto block = "{ a; }".parse!"statement"();
+        //     assert(block.span == Span(0, 6));
+        //     assert(check_types(block, Block, Name));
+        // }
 
-        {
-            const block = "{ ".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "{ a }".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "( a, { ) }".parse!"statement"();
-            assert(!block.is_valid);
-        }
-
-        {
-            const block = "{ ( } )".parse!"statement"();
-            assert(!block.is_valid);
-        }
+        assert("{ ".parse!"statement"().is_valid == false);
+        assert("{ a }".parse!"statement"().is_valid == false);
+        assert("{ ( } )".parse!"statement"().is_valid == false);
+        assert("( a, { ) }".parse!"statement"().is_valid == false);
     }
 }
 
@@ -162,7 +147,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
         {
             auto error = "def T : (!);".parse!"statement"();
-            assert(error.span == Span(0, 11)); // We don't get to the semicolon
+            assert(error.span == Span(0, 11));
             assert(check_error(error, ArcError.TokenExpectMismatch, 1));
         }
 
@@ -459,5 +444,24 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
             auto err = "3".parse!"type"();
             assert(check_error(err, ArcError.TokenExpectMismatch));
         }
+    }
+}
+
+// ----------------------------------------------------------------------
+//   ______                              
+//  |  ____|                             
+//  | |__    _ __  _ __  ___   _ __  ___ 
+//  |  __|  | '__|| '__|/ _ \ | '__|/ __|
+//  | |____ | |   | |  | (_) || |   \__ \
+//  |______||_|   |_|   \___/ |_|   |___/
+//    
+// ----------------------------------------------------------------------
+
+@("Parser Resynchronization")
+unittest {
+    with (AstNode.Kind) {
+        auto stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"statement";
+        assert(stmt.span == Span(0, 36));
+        assert(!parser.is_done);
     }
 }

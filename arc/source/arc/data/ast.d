@@ -1,5 +1,6 @@
 module arc.data.ast;
 
+import arc.data.ast_memory: AstNodeAllocator;
 import arc.data.source: Span, merge_all;
 import arc.data.hash: Key;
 

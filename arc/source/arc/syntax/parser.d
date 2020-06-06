@@ -67,7 +67,14 @@ struct ParsingContext {
         this.nodes = node_allocator;
     }
 
-    void begin(const char[] source_text) { tokens.begin(source_text); }
+    void begin(const char[] source_text) {
+        tokens.begin(source_text);
+        reporter.clear();
+
+        indentation_level = tokens.current.type == Token.Lbrace ? 1 : 0;
+    }
+
+    bool is_done() { return tokens.current.type == Token.Done; }
 
     Token current() { return tokens.current; }
 
@@ -121,7 +128,17 @@ struct ParsingContext {
         return false;
     }
 
-    void resynchronize() { while (indentation_level > 0 && !tokens.done) advance(); }
+    Token resynchronize() {
+        if (indentation_level == 0) return Token();
+
+        while (tokens.current.type != Token.Done) {
+            if (indentation_level == 0)
+                break;
+            advance();
+        }
+
+        return take();
+    }
 }
 
 auto parse_optional_type(ParsingContext* p) {
@@ -147,10 +164,9 @@ AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
 
     auto rhs = parse_expression(p);
     const span = lhs.span.merge(rhs.span);
-    const semicolon = p.take_required(Token.Semicolon);
 
-    if (rhs.is_valid && semicolon.type == Token.Semicolon)
-        return p.alloc(AstNode.Assign, lhs, rhs, semicolon.span);
+    if (rhs.is_valid)
+        return p.alloc(AstNode.Assign, lhs, rhs);
 
     p.free(lhs);
     return rhs.respan(span);
@@ -165,7 +181,7 @@ AstNode* parse_block(ParsingContext* p) {
 
         if (!node.is_valid) {
             seq.abort();
-            return p.alloc(AstNode.Invalid, start);
+            return p.alloc(AstNode.Invalid, start.merge(node.span));
         }
         seq.add(node);
     }
@@ -173,7 +189,7 @@ AstNode* parse_block(ParsingContext* p) {
     auto end = p.current.span;
     if (p.skip_required(Token.Rbrace))
         return p.alloc(AstNode.Block, start.merge(end), seq.nodes);
-    
+
     seq.abort();
     return p.alloc(AstNode.Invalid, start.merge(end));
 }
@@ -189,13 +205,8 @@ AstNode* parse_define(ParsingContext* p) {
     auto expr = parse_optional_expr(p);
     auto span = merge_all(start, type.span, expr.span); // name must be between start and type
 
-    if (type.is_valid && expr.is_valid) {
-        const semicolon = p.take_required(Token.Semicolon);
-        if (semicolon.type == Token.Semicolon) {
-            span = span.merge(semicolon.span);
-            return p.alloc(AstNode.Definition, span, p.make_seq(name, type, expr));
-        }
-    }
+    if (type.is_valid && expr.is_valid)
+        return p.alloc(AstNode.Definition, span, p.make_seq(name, type, expr));
 
     p.free(type, expr);
     return name.as_invalid(span);
@@ -208,38 +219,45 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
     auto expr = parse_optional_expr(p);
     auto span = merge_all(name.span, type.span, expr.span);
 
-    if (type.is_valid && expr.is_valid) {
-        const semicolon = p.take_required(Token.Semicolon);
-        if (semicolon.type == Token.Semicolon) {
-            span = span.merge(semicolon.span);
-            return p.alloc(AstNode.Variable, span, p.make_seq(name, type, expr));
-        }
-    }
+    if (type.is_valid && expr.is_valid)
+        return p.alloc(AstNode.Variable, span, p.make_seq(name, type, expr));
 
     p.free(type, expr);
     return name.as_invalid(span);
 }
 
 AstNode* parse_statement(ParsingContext* p) {
-    switch (p.current.type) with (Token.Type) {
-        case Lbrace: return parse_block(p);
-        case Def: return parse_define(p);
-        default:
-            auto prefix = parse_prefix(p);
+    auto stmt = () {
+        switch (p.current.type) with (Token.Type) {
+            case Lbrace: return parse_block(p);
+            case Def: return parse_define(p);
+            default:
+                auto prefix = parse_prefix(p);
 
-            if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
-                return parse_variable(p, prefix);
-            
-            if (p.current.type == Token.Equals)
-                return parse_assign(p, prefix);
+                if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
+                    return parse_variable(p, prefix);
 
-            auto expr = prefix.is_valid ? parse_infix(p, prefix) : prefix;
+                if (p.current.type == Token.Equals)
+                    return parse_assign(p, prefix);
 
-            if (expr.is_valid && p.skip_required(Token.Semicolon)) return expr;
+                return prefix.is_valid ? parse_infix(p, prefix) : prefix;
+        }
+    } ();
 
-            scope (exit) p.free(expr.children);
-            return expr.as_invalid(expr.span);
+    if (stmt.kind == AstNode.Block) return stmt;
+
+    if (stmt.is_valid) {
+        auto semicolon = p.take_required(Token.Semicolon);
+        if (semicolon.type == Token.Semicolon) {
+            stmt.span = stmt.span.merge(semicolon.span);
+            return stmt;
+        }
+        scope (exit) p.free(stmt);
+        stmt = p.alloc(AstNode.Invalid, stmt.span);
     }
+
+    stmt.span = stmt.span.merge(p.resynchronize().span);
+    return stmt;
 }
 
 // ----------------------------------------------------------------------
