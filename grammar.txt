@@ -1,11 +1,18 @@
 statement = def ';'
           | expr '=' expr ';'
           | block
+          | name ':' type? ('=' expr)? ';'                              # var
           ;
 
     def = 'def' name ':' ((type ('=' expr)?) | ('=' expr)) ;
 
     block = '{' statement* '}' ;
+
+    if = 'if' expr block ('else' 'if' statement)* ('else' statement)? ;
+
+    loop = 'loop' block ;
+
+    escape = 'break' | 'continue' ;
 
     expr = primary | prefix | binary;
 
@@ -16,7 +23,6 @@ statement = def ';'
                 | integer
                 | name
                 | path
-                | var
                 ;
 
             access = prefix '.' name ;
@@ -31,8 +37,6 @@ statement = def ';'
             function = list '->' expr block? ;
 
             path = name ('::' name)* ;
-
-            var = name ':' ((type ('=' expr)?) | ('=' expr)) ;
 
         prefix = '-' primary
                | '!' primary
