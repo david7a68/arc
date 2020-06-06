@@ -15,7 +15,7 @@ struct ArcError {
 
     Code code;
     // Source parsed_file;
-    size_t location;
+    uint location;
     string message;
 }
 
@@ -29,7 +29,7 @@ struct ArcWarning {
     alias Code this;
 
     Code code;
-    size_t location;
+    uint location;
     string message;
 }
 
@@ -75,7 +75,6 @@ struct Reporter {
         
         return false;
     }
-
 }
 
 const(char[]) tprint(Args...)(const char[] message, Args args) {

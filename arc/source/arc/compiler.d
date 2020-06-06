@@ -28,12 +28,11 @@ final class Compiler {
             auto source = source_map.put(path, readText(path));
             auto syntax = parse(this, source);
 
-            import std.stdio: writeln;
-            writeln(syntax);
-
             import arc.output.ast_printer: print_ast;
+            import std.stdio: writeln;
             writeln(print_ast(source_map, syntax));
-            foreach (error; reporter.errors) writeln(error);
+
+            report_errors(&reporter, source_map);
         }
     }
 }
@@ -50,16 +49,27 @@ AstNode*[] parse(Compiler compiler, Source source) {
     while (!parser.is_done) {
         auto statement = parse_statement(&parser);
 
-        // if (statement.is_valid)
         statements.add(statement);
         if (!statement.is_valid) num_errors++;
 
         if (num_errors == 5) break;
-        // else {
-        //     parser.resynchronize();
-        //     compiler.node_allocator.free(statement);
-        // }
     }
 
     return statements.nodes; // TODO: Implement parsing import expressions
+}
+
+void report_errors(Reporter* reporter, SourceMap sources) {
+    import std.stdio: writefln;
+    import arc.data.source: Span;
+
+    foreach (error; reporter.errors) {
+        auto coords = sources.coordinates_of(Span(error.location, 0));
+
+        writefln("Error: %s\n\tAt (line: %s, column: %s) in file %s",
+            error.message,
+            coords.line,
+            coords.column,
+            sources.source_of(Span(error.location, 0)).path,
+        );
+    }
 }

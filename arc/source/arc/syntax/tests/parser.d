@@ -115,67 +115,77 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Definition") unittest {
     with (AstNode.Kind) {
-        {
-            auto type = "def T : T2;".parse!"statement"();
-            assert(type.span == Span(0, 11));
-            assert(check_types(type,
-                Definition,
-                    Name,
-                    Name,
-                    Inferred
-            ));
-        }
+        auto type = "def T : T2;".parse!"statement"();
+        assert(type.span == Span(0, 11));
+        assert(check_types(type,
+            Definition,
+                Name,
+                Name,
+                Inferred
+        ));
+    }
 
-        {
-            auto type = "def T : (u32, k: u32);".parse!"statement"();
-            assert(type.span == Span(0, 22));
-            assert(check_types(type,
-                Definition,
-                    Name,
+    with (AstNode.Kind) {
+        auto type = "def T : (u32, k: u32);".parse!"statement"();
+        assert(type.span == Span(0, 22));
+        assert(check_types(type,
+            Definition,
+                Name,
+                List,
+                    Variable,
+                        None,
+                        Name,
+                        Inferred,
+                    Variable,
+                        Name,
+                        Name,
+                        Inferred,
+                Inferred,
+        ));
+    }
+
+    with (AstNode.Kind) {
+        auto error = "def T : (!);".parse!"statement"();
+        assert(error.span == Span(0, 11));
+        assert(check_error(error, ArcError.TokenExpectMismatch, 1));
+    }
+
+    with (AstNode.Kind) {
+        auto decl = "def T := 1;".parse!"statement"();
+        assert(check_types(decl,
+            Definition,
+                Name,
+                Inferred,
+                Integer,
+        ));
+    }
+
+    with (AstNode.Kind) {
+        auto decl = "def T : a = b;".parse!"statement"();
+        assert(check_types(decl,
+            Definition,
+                Name,
+                Name,
+                Name,
+        ));
+    }
+
+    with (AstNode.Kind) {
+        assert(check_types("def F := () -> {};".parse!"statement"(),
+            Definition,
+                Name,
+                Inferred,
+                Function,
                     List,
-                        Variable,
-                            None,
-                            Name,
-                            Inferred,
-                        Variable,
-                            Name,
-                            Name,
-                            Inferred,
                     Inferred,
-            ));
-        }
+                    Block
+        ));
+    }
 
-        {
-            auto error = "def T : (!);".parse!"statement"();
-            assert(error.span == Span(0, 11));
-            assert(check_error(error, ArcError.TokenExpectMismatch, 1));
-        }
-
-        {
-            auto decl = "def T := 1;".parse!"statement"();
-            assert(check_types(decl,
-                Definition,
-                    Name,
-                    Inferred,
-                    Integer,
-            ));
-        }
-
-        {
-            auto decl = "def T : a = b;".parse!"statement"();
-            assert(check_types(decl,
-                Definition,
-                    Name,
-                    Name,
-                    Name,
-            ));
-        }
-
-        {
-            auto error = "def T := +;".parse!"statement"();
-            assert(error.span == Span(0, 10)); // We don't get to the semicolon
-            assert(type_equivalent(error, Invalid));
-        }
+    with (AstNode.Kind) {
+        auto error = "def T := +;".parse!"statement"();
+        assert(error.span == Span(0, 10)); // We don't get to the semicolon
+        assert(type_equivalent(error, Invalid));
     }
 }
 
@@ -316,6 +326,18 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                     Access,
                         Name,
                         Name
+        ));
+    }
+
+    with (AstNode.Kind) {
+        assert(check_types("(a: T[])".parse!"expression"(),
+            List,
+                Variable,
+                    Name,
+                    Call,
+                        Name,
+                        List,
+                    Inferred
         ));
     }
 }

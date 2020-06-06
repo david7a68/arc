@@ -137,7 +137,10 @@ struct ParsingContext {
             advance();
         }
 
-        return take();
+        auto close = take();
+        if (tokens.current.type == Token.Semicolon)
+            return take();
+        return close;
     }
 }
 
@@ -406,7 +409,7 @@ AstNode* parse_prefix(ParsingContext* p) {
         default:
             if (token.type.matches_one(Semicolon, Comma, Rparen, Rbracket, Rbrace)) {
                 ecode = ArcError.TokenExpectMismatch;
-                emsg = "Unexpected end of expression.";
+                emsg = tprint("Unexpected end of expression by terminating %s.", token.type);
             }
             else {
                 ecode = ArcError.TokenExpectMismatch;
@@ -495,11 +498,13 @@ AstNode* parse_type_prefix(ParsingContext* p) {
 
 AstNode* parse_type_infix(ParsingContext* p, AstNode* expr) {
     static immutable Infix[256] ops = [
-        Token.Dot: Infix(Precedence.Call, true, true, AstNode.Access)
+        Token.Dot       : Infix(Precedence.Call, true, true,    AstNode.Access),
+        Token.Lparen    : Infix(Precedence.Call, true, false,   AstNode.Call),
+        Token.Lbracket  : Infix(Precedence.Call, true, false,   AstNode.Call)
     ];
 
     for (Infix i = ops[p.current.type]; expr.is_valid && Precedence.Call <= i.prec; i = ops[p.current.type])
         expr = parse_binary(p, expr, i);
-    
+
     return expr;
 }

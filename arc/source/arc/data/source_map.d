@@ -54,4 +54,23 @@ final class SourceMap {
         }
         return "";
     }
+
+    auto coordinates_of(Span span) {
+        struct Coord { size_t line, column; }
+
+        auto source = source_of(span);
+        const local_offset = span.start - source.start_offset;
+
+        size_t line = 1, column = 0;
+        for (auto i = 0; i < local_offset; i++) {
+            // handles \r\n
+            if (source.text[i] == '\n') {
+                line++;
+                column = 0;
+            }
+            else column++;
+        }
+
+        return Coord(line, column);
+    }
 }
