@@ -140,134 +140,83 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         import std.algorithm: map;
         import std.array: join;
         import std.conv: to;
-        return c.map!(v => "case "d ~ v.to!int.to!dstring ~ ": "d).join().to!string;
+        return c.map!(v => "case " ~ v.to!int.to!string ~ ": ").join().to!string;
     }
 
     auto final_span() { return Span(cast(uint) (start - base), cast(uint) (current - start)); }
 
-    auto make_token(Token.Type t, int advance_n = 0, Key key = 0) {
+    auto make_token(Token.Type t, size_t advance_n, Key key = 0) {
         current += advance_n;
         return Token(t, final_span(), key);
     }
 
-    auto make_op_token(Token.Type t, int advance_n = 0) {
-        current += advance_n;
-        const key = digest(start[0 .. current - start]);
-        return Token(t, final_span(), key);
+    auto make_2_op(char second, Token.Type two_char_type, Token.Type one_char_type) {
+        static immutable span           = [2,                1];
+        immutable Token.Type[2] type    = [two_char_type,    one_char_type];
+        immutable is_one_char           = (current + 1 == end) | (*(current + 1) != second); //bit to avoid short circuit
+        return make_token(type[is_one_char], span[is_one_char]);
     }
 
-    switch_start:
-    current = start;
+    while (start < end) {
+        current = start;
 
-    if (current >= end)
-        return Token(Token.Done, Span(cast(uint) (start - base), 0)); 
+        switch (*current) with (Token.Type) {
+            mixin(case_of(" \t\r\n"));
+                start++;
+                continue;
 
-    const c = *current;
-    current++;
+            mixin(case_of("()[]{}.,;+*^&/:"));
+                return make_token(cast(Token.Type) *current, 1);
 
-    switch (c) {
-        mixin(case_of(" \t\r\n"));
-            start++;
-            goto switch_start;
+            case '#':
+                while (start < end && *start != '\n') start++;
+                start += start != end; // to skip the \n, true is 1, false is 0
+                continue;
 
-        mixin(case_of("()[]{},;"));
-            return make_token(cast(Token.Type) c);
+            case '-': return make_2_op('>', Rarrow,         Minus);
+            case '=': return make_2_op('=', EqualEqual,     Equals);
+            case '<': return make_2_op('=', LessEqual,      Less);
+            case '>': return make_2_op('=', GreaterEqual,   Greater);
+            case '!': return make_2_op('=', BangEqual,      Bang);
 
-        mixin(case_of("+*^&"));
-            return make_op_token(cast(Token.Type) c);
-
-        case '#':
-            while (start < end && *start != '\n') start++;
-            start += start != end; // to skip the \n, true is 1, false is 0
-            goto switch_start;
-
-        case '-':
-            if (current < end && *current == '>')
-                return make_token(Token.Rarrow, 1);
-            return make_op_token(Token.Minus);
-
-        case '.':
-            return make_op_token(Token.Dot);
-
-        case ':':
-            if (current < end && *current == ':')
-                return make_token(Token.ColonColon, 1);
-            else
-                return make_token(Token.Colon);
-
-        case '/':
-            if (current < end && *current == '/') {
-                while (*current != '\n') current++;
-                goto switch_start;
-            }
-            else return make_op_token(Token.Slash);
-
-        case '=':
-            // Branchless version, need to performance test
-            // static immutable eq_type    = [Token.Equals,    Token.EqualEqual];
-            // static immutable eq_adv     = [0,               1];
-            // const second_eq = current < end && *current == '=';
-            // return make_op_token(eq_type[second_eq], eq_adv[second_eq]);
-            if (current < end && *current == '=')
-                return make_op_token(Token.EqualEqual, 1);
-            else
-                return make_op_token(Token.Equals);
-
-        case '<':
-            if (current < end && *current == '=')
-                return make_op_token(Token.LessEqual, 1);
-            else
-                return make_op_token(Token.Less);
-
-        case '>':
-            if (current < end && *current == '=')
-                return make_op_token(Token.GreaterEqual, 1);
-            else
-                return make_op_token(Token.Greater);
-
-        case '!':
-            if (current < end && *current == '=')
-                return make_op_token(Token.BangEqual, 1);
-            else
-                return make_op_token(Token.Bang);
-
-        case '\'':
-            if (current >= end)
-                return make_token(Token.Invalid);
-            
-            const content_length = *current == '\\' ? 2 : 1;
-            const key = digest(current[0 .. content_length]);
-            current += content_length;
-
-            if (*current == '\'')
-                return make_token(Token.Char, 1, key);
-            return make_token(Token.Invalid);
-
-        case 'a': .. case 'z':
-        case 'A': .. case 'Z':
-        case '_':
-            loop_start: if (current < end) switch (*current) {
-                case 'a': .. case 'z':
-                case 'A': .. case 'Z':
-                case '0': .. case '9':
-                case '_':
-                    current++;
-                    goto loop_start;
-                default:
-            }
-
-            const key = digest(start[0 .. current - start]);
-            const type = keywords.get(key, Token.Name);
-            return make_token(type, 0, key);
-
-        case '0': .. case '9':
-            while (current < end && (('0' <= *current && *current <= '9') || *current == '_'))
+            case '\'':
                 current++;
-            return make_token(Token.Integer, 0, string_to_int(start[0 .. current - start]));
+                const content_length = *current == '\\' ? 2 : 1;
+                const key = digest(current[0 .. content_length]);
+                current += content_length;
 
-        default:
-            return make_token(Token.Invalid, 1);
+                if (current < end && *current == '\'')
+                    return make_token(Char, 1, key);
+                else
+                    return make_token(Invalid, current - start);
+
+            case 'a': .. case 'z':
+            case 'A': .. case 'Z':
+            case '_':
+                loop: for(; current < end; current++) switch (*current) {
+                    case 'a': .. case 'z':
+                    case 'A': .. case 'Z':
+                    case '0': .. case '9':
+                    case '_':
+                        continue;
+                    default: break loop;
+                }
+
+                const key = digest(start[0 .. current - start]);
+                const type = keywords.get(key, Name);
+                return make_token(type, 0, key);
+
+            case '0': .. case '9':
+                while (current < end && (('0' <= *current && *current <= '9') || *current == '_'))
+                    current++;
+                return make_token(Integer, 0, string_to_int(start[0 .. current - start]));
+
+            default:
+                return make_token(Invalid, 1);
+        }
     }
+
+    return Token(Token.Done, Span(cast(uint) (start - base), 0)); 
 }
 
 ulong string_to_int(const char[] text) {

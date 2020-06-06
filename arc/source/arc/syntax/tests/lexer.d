@@ -1,6 +1,7 @@
 module arc.syntax.tests.lexer;
 
 import arc.data.source: Span;
+import arc.data.hash: digest;
 import arc.syntax.lexer: Token, TokenBuffer;
 
 /// Thread-local global token buffer so we don't have to allocate a whole bunch
@@ -28,20 +29,23 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
         return tokens[0 .. length].equal(ts);
 }
 
-@("lex empty") unittest {
+@("Lex Empty") unittest {
     assert("".scan_tokens[0].type == Token.Done);
 }
 
-@("lex whitespace") unittest {
+@("Lex Whitespace") unittest {
     assert("  \t\t\t\t    ".scan_tokens[0].type == Token.Done);
 }
 
 @("Lex Line Comment") unittest {
+
     assert("#blah blah blah".scan_tokens[0].type == Token.Done);
     assert("#blah\n#blah".scan_tokens[0].type == Token.Done);
+
+    // import std.stdio; writeln("#asflj".scan_tokens[0].span);
 }
 
-@("lex compact") unittest {
+@("Lex Compact") unittest {
     assert("()[]{},.;->1a_3".scan_tokens.equivalent(
         Token.Lparen,
         Token.Rparen,
@@ -58,18 +62,25 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
     ));
 }
 
-@("lex operators") unittest {
-    import arc.data.hash: digest;
-
-    auto tokens = "+ - * / ^ & < > = ! <= != >=".scan_tokens;
-    auto strings = ["+", "-", "*", "/", "^", "&", "<", ">", "=", "!", "<=", "!=", ">="];
-
-    import std.range: lockstep;
-    foreach (token, text; lockstep(tokens, strings))
-        assert(token.key == digest(text));
+@("Lex Operators") unittest {
+    assert("+ - * / ^ & < > = ! <= != >=".scan_tokens.equivalent(
+        Token.Plus,
+        Token.Minus,
+        Token.Star,
+        Token.Slash,
+        Token.Caret,
+        Token.Ampersand,
+        Token.Less,
+        Token.Greater,
+        Token.Equals,
+        Token.Bang,
+        Token.LessEqual,
+        Token.BangEqual,
+        Token.GreaterEqual
+    ));
 }
 
-@("lex keywords") unittest {
+@("Lex Keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
         Token(Token.And,        Span(10, 3), 17648556366517412293UL),
         Token(Token.Or,         Span(14, 2), 4116612837551264357UL),
@@ -83,14 +94,15 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
     ));
 }
 
-@("lex char") unittest {
+@("Lex Char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Char));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Char, Span(10, 4), 16287058411698249816UL)
+        Token(Token.Char, Span(10, 4), digest("\\a"))
     ));
 }
 
 @("Lex Integers") unittest {
     assert("20".scan_tokens()[0].value == 20);
     assert("1_____23__4___".scan_tokens()[0].value == 1234);
+    assert("3b".scan_tokens.equivalent(Token.Integer, Token.Name));
 }
