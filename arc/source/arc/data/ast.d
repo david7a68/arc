@@ -34,6 +34,7 @@ struct AstNode {
         Or,
         Call,
         Access,
+        StaticAccess,
         Function,
         FunctionType,
     }
@@ -109,7 +110,7 @@ struct AstNode {
                 return [];
             case Negate: case Not:
                 return (&_child)[0 .. 1]; // JANK
-            case Assign: .. case Access:
+            case Assign: .. case StaticAccess:
                 return _children_2;
             default:
                 return _children;

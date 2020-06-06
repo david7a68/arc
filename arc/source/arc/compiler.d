@@ -25,37 +25,41 @@ final class Compiler {
         import std.file: readText;
 
         foreach (path; source_paths) {
-            auto source = source_map.put(path, readText(path));
-            auto syntax = parse(this, source);
-
-            import arc.output.ast_printer: print_ast;
-            import std.stdio: writeln;
-            writeln(print_ast(source_map, syntax));
-
-            report_errors(&reporter, source_map);
+            auto syntax = parse(path, readText(path));
+            print_ast(syntax);
         }
     }
-}
 
-AstNode*[] parse(Compiler compiler, Source source) {
-    import arc.data.ast_memory: SequenceBuilder;
-    import arc.syntax.parser: ParsingContext, parse_statement;
+    AstNode*[] parse(string name, string source) {
+        import arc.data.ast_memory: SequenceBuilder;
+        import arc.syntax.parser: ParsingContext, parse_statement;
 
-    auto parser = ParsingContext(&compiler.reporter, compiler.node_allocator);
-    auto statements = SequenceBuilder(compiler.node_allocator);
-    size_t num_errors;
+        source_map.put(name, source);
+        
+        auto statements = SequenceBuilder(node_allocator);
+        auto parser = ParsingContext(&reporter, node_allocator);
+        parser.begin(source);
 
-    parser.begin(source.text);
-    while (!parser.is_done) {
-        auto statement = parse_statement(&parser);
+        size_t num_errors;
+        while (!parser.is_done) {
+            auto statement = parse_statement(&parser);
 
-        statements.add(statement);
-        if (!statement.is_valid) num_errors++;
+            statements.add(statement);
+            if (!statement.is_valid) num_errors++;
 
-        if (num_errors == 5) break;
+            if (num_errors == 5) break;
+        }
+
+        return statements.nodes; // TODO: Implement parsing import expressions
     }
 
-    return statements.nodes; // TODO: Implement parsing import expressions
+    void print_ast(AstNode*[] nodes) {
+        import arc.output.ast_printer: print_ast;
+        import std.stdio: writeln;
+        
+        writeln(print_ast(source_map, nodes));
+        report_errors(&reporter, source_map);
+    }
 }
 
 void report_errors(Reporter* reporter, SourceMap sources) {

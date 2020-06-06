@@ -96,6 +96,7 @@ struct AstPrinter {
             case Call:
                 write_named_children(n, "Target: ", "Arguments: ");
                 break;
+            case StaticAccess:
             case Access:
                 write_named_children(n, "Source: ", "Member: ");
                 break;
@@ -137,9 +138,7 @@ struct AstPrinter {
         }
     }
 
-    void write_named_children(AstNode* n, string[] names...) {
-        assert(n.children.length == names.length);
-        
+    void write_named_children(AstNode* n, string[] names...) in (names.length == n.children.length) {
         str.put("\n");
         foreach (i, child; n.children) {
             write_child(child, i + 1 == n.children.length, names[i]);

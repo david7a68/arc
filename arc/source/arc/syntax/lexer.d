@@ -163,9 +163,10 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
                 start++; // we can safely cross past end, handled in loop conditional
                 continue;
 
-            mixin(case_of("()[]{}.,;+*^&/:"));
+            mixin(case_of("()[]{}.,;+*^&/"));
                 return make_token(cast(Token.Type) *current, 1);
 
+            case ':': return make_2_op(':', ColonColon,     Colon);
             case '-': return make_2_op('>', Rarrow,         Minus);
             case '=': return make_2_op('=', EqualEqual,     Equals);
             case '<': return make_2_op('=', LessEqual,      Less);

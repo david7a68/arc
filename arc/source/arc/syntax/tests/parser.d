@@ -295,6 +295,18 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                                 Name,       // g
                     Name                    // h
         ));
+
+        assert(check_types("a.b()::c::d".parse!"expression",
+            StaticAccess,
+                StaticAccess,
+                    Call,
+                        List,
+                        Access,
+                            Name,
+                            Name,
+                    Name,
+                Name
+        ));
     }
 }
 
@@ -349,6 +361,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Call") unittest {
     with (AstNode.Kind) {
+        // a 4 -> a(4)
         assert(check_types("a 4".parse!"expression"(), Call, Name, Integer));
         
         assert(check_types("a * b()".parse!"expression"(),
@@ -359,8 +372,8 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                     List
         ));
 
-        // a b c -> a (b c)
-        assert(check_types("a b c".parse!"expression"(), Call, Name, Call, Name, Name));
+        // a b c -> (a b) c
+        assert(check_types("a b c".parse!"expression"(), Call, Call, Name, Name, Name));
     }
 }
 
