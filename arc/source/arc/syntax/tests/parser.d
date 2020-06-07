@@ -189,6 +189,32 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 }
 
+@("Parse Escape") unittest {
+    with (AstNode.Kind)
+    assert(check_types("break;".parse!"statement"(), Break));
+
+    with (AstNode.Kind)
+    assert(check_types("continue;".parse!"statement"(), Continue));
+}
+
+@("Parse If") unittest {
+    with (AstNode.Kind)
+    assert(check_types("if a {} else if b {} else c;".parse!"statement"(),
+        If,
+            Name,
+            Block,
+            If,
+                Name,
+                Block,
+                Name
+    ));
+}
+
+@("Parse Loop") unittest {
+    with (AstNode.Kind)
+    assert(check_types("loop { break;}".parse!"statement"(), Loop, Block, Break));
+}
+
 @("Parse Variable") unittest {
     with (AstNode.Kind) {
         {
@@ -300,10 +326,10 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
             StaticAccess,
                 StaticAccess,
                     Call,
-                        List,
                         Access,
                             Name,
                             Name,
+                        List,
                     Name,
                 Name
         ));

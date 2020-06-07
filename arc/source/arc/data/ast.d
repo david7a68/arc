@@ -11,6 +11,11 @@ struct AstNode {
         Inferred,
         Definition,
         Variable,
+        If,
+        Return,
+        Break,
+        Continue,
+        Loop,
         Name,
         Integer,
         Char,
@@ -108,7 +113,7 @@ struct AstNode {
             case None: case Invalid: case Inferred:
             case Name: case Integer: case Char:
                 return [];
-            case Negate: case Not:
+            case Negate: case Not: case Return: case Loop:
                 return (&_child)[0 .. 1]; // JANK
             case Assign: .. case StaticAccess:
                 return _children_2;

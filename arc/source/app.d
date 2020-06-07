@@ -14,5 +14,6 @@ void do_cli(string[] args) {
 }
 
 void main(string[] args) {
-	do_cli(args);
+	// do_cli(args);
+	do_cli(["", "b.arc"]);
 }

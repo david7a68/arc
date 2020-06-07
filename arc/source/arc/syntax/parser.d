@@ -215,6 +215,48 @@ AstNode* parse_define(ParsingContext* p) {
     return name.as_invalid(span);
 }
 
+AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
+    auto start = p.take_required(token).span;
+    return p.alloc(kind, start);
+}
+
+AstNode* parse_if(ParsingContext* p) {
+    auto start = p.take_required(Token.If).span;
+
+    auto cond = parse_expression(p);
+    auto body = parse_block(p);
+    auto base = p.skip(Token.Else) ? parse_statement(p) : AstNode.none;
+    auto span = merge_all(start, cond.span, body.span, base.span);
+
+    if (cond.is_valid && body.is_valid && base.is_valid)
+        return p.alloc(AstNode.If, span, p.make_seq(cond, body, base));
+
+    p.free(cond, body, base);
+    return p.alloc(AstNode.Invalid, span);
+}
+
+AstNode* parse_loop(ParsingContext* p) {
+    auto start = p.take_required(Token.Loop).span;
+
+    auto body = parse_block(p);
+
+    if (body.is_valid) return p.alloc(AstNode.Loop, start, body);
+
+    scope (exit) p.free(body);
+    return p.alloc(AstNode.Invalid, start.merge(body.span));
+}
+
+AstNode* parse_return(ParsingContext* p) {
+    auto start = p.take_required(Token.Return).span;
+
+    auto expr = p.current.type != Token.Semicolon ? parse_expression(p) : AstNode.none;
+
+    if (expr.is_valid)
+        return p.alloc(AstNode.Return, start, expr);
+
+    return expr.respan(expr.span.merge(start));
+}
+
 AstNode* parse_variable(ParsingContext* p, AstNode* name) {
     p.skip_required(Token.Colon);
 
@@ -232,8 +274,13 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
 AstNode* parse_statement(ParsingContext* p) {
     auto stmt = () {
         switch (p.current.type) with (Token.Type) {
-            case Lbrace: return parse_block(p);
-            case Def: return parse_define(p);
+            case Break:     return parse_escape(p, Token.Break, AstNode.Break);
+            case Continue:  return parse_escape(p, Token.Continue, AstNode.Continue);
+            case Def:       return parse_define(p);
+            case If:        return parse_if(p);
+            case Lbrace:    return parse_block(p);
+            case Loop:      return parse_loop(p);
+            case Return:    return parse_return(p);
             default:
                 auto prefix = parse_prefix(p);
 
@@ -247,7 +294,7 @@ AstNode* parse_statement(ParsingContext* p) {
         }
     } ();
 
-    if (stmt.kind == AstNode.Block) return stmt;
+    if (stmt.kind == AstNode.Block || stmt.kind == AstNode.If || stmt.kind == AstNode.Loop) return stmt;
 
     if (stmt.is_valid) {
         auto semicolon = p.take_required(Token.Semicolon);

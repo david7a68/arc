@@ -106,6 +106,9 @@ struct AstPrinter {
             case Variable:
                 write_named_children(n, "Name: ", "Type: ", "Expr: ");
                 break;
+            case If:
+                write_named_children(n, "Condition: ", "Body: ", "Else: ");
+                break;
             case Negate:
             case Not:
                 write_named_children(n, "Operand: ");
