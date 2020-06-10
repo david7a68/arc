@@ -274,6 +274,10 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     assert(check_types("'a'".parse!"expression", AstNode.Kind.Char));
 }
 
+@("Parse String") unittest {
+    assert(check_types(`"Ha"`.parse!"expression", AstNode.Kind.String));
+}
+
 @("Parse Unary") unittest {
     with (AstNode.Kind) {
         assert(check_types("-var".parse!"expression", Negate, Name));

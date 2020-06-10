@@ -463,6 +463,7 @@ AstNode* parse_prefix(ParsingContext* p) {
         case Name:              return parse_symbol(p, AstNode.Name);
         case Integer:           return parse_symbol(p, AstNode.Integer);
         case Char:              return parse_symbol(p, AstNode.Char);
+        case String:            return parse_symbol(p, AstNode.String);
         case Import:            return parse_import(p);
         case Lparen:            return parse_list!false(p, Rparen);
         case Lbracket:          return parse_list!false(p, Rbracket);
