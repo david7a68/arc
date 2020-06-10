@@ -546,6 +546,10 @@ AstNode* parse_type(ParsingContext* p) {
 
 AstNode* parse_type_prefix(ParsingContext* p) {
     switch (p.current.type) with (Token.Type) {
+        case Star:
+            const start = p.take().span;
+            return p.alloc(AstNode.PointerType, start, parse_type(p));
+
         case Name:      return parse_symbol(p, AstNode.Name);
         case Lparen:    return parse_list!true(p, Token.Rparen);
         case Lbracket:  return parse_list!true(p, Token.Rbracket);

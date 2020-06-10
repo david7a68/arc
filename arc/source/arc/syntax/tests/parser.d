@@ -510,6 +510,8 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         assert(check_types("(a:b)".parse!"type"(), List, Variable, Name, Name, Inferred));
 
         assert(check_types("(a := 3)".parse!"type"(), List, Variable, Name, Inferred, Integer));
+
+        assert(check_types("*T".parse!"type"(), PointerType, Name));
     }
 }
 
