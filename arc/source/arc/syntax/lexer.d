@@ -17,7 +17,7 @@ struct Token {
         LessEqual = 128, GreaterEqual, EqualEqual, BangEqual,
         Rarrow, ColonColon,
         
-        Name, Integer, Char,
+        Name, Integer, Char, String,
 
         And, Or, Not,
         If, Else, Loop, Break, Return, Continue,
@@ -182,6 +182,18 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
                 if (current < end && *(current + length) == '\'')
                     return make_token(Char, length + 1, key);
                 return make_token(Invalid, current - start);
+
+            case '"':
+                current++;
+                for(; current < end; current++) {
+                    const c = *current;
+                    if (c == '\\') current++;
+                    if (c == '"') break;
+                }
+
+                const length = current - start;
+                if (current == end) make_token(Invalid, length);
+                return make_token(String, 1, digest(start[0 .. length]));
 
             case 'a': .. case 'z':
             case 'A': .. case 'Z':

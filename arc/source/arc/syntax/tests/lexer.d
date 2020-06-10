@@ -101,6 +101,11 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
     ));
 }
 
+@("Lex String") unittest {
+    assert(`"hello world"`.scan_tokens.equivalent(Token.String));
+    assert(`"\""`.scan_tokens.equivalent(Token.String));
+}
+
 @("Lex Integers") unittest {
     assert("20".scan_tokens()[0].value == 20);
     assert("1_____23__4___".scan_tokens()[0].value == 1234);
