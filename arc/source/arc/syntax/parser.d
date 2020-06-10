@@ -284,13 +284,17 @@ AstNode* parse_statement(ParsingContext* p) {
             default:
                 auto prefix = parse_prefix(p);
 
+                if (!prefix.is_valid) return prefix;
+
                 if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
                     return parse_variable(p, prefix);
 
-                if (p.current.type == Token.Equals)
-                    return parse_assign(p, prefix);
+                auto infix = parse_infix(p, prefix);
 
-                return prefix.is_valid ? parse_infix(p, prefix) : prefix;
+                if (p.current.type == Token.Equals)
+                    infix = parse_assign(p, infix);
+
+                return infix;
         }
     } ();
 

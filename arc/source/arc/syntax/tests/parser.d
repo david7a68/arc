@@ -93,19 +93,12 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     with (AstNode.Kind) {
         assert(check_types("a = b;".parse!"statement"(), Assign, Name, Name));
         assert(check_types("() = 1;".parse!"statement"(), Assign, List, Integer));
+        assert(check_types("a.b = 3;".parse!"statement"(), Assign, Access, Name, Name, Integer));
     }
 }
 
 @("Parse Block") unittest {
     with (AstNode.Kind) {
-        // assert(check_types("{}".parse!"statement"(), Block));
-
-        // {
-        //     auto block = "{ a; }".parse!"statement"();
-        //     assert(block.span == Span(0, 6));
-        //     assert(check_types(block, Block, Name));
-        // }
-
         assert("{ ".parse!"statement"().is_valid == false);
         assert("{ a }".parse!"statement"().is_valid == false);
         assert("{ ( } )".parse!"statement"().is_valid == false);
