@@ -491,26 +491,27 @@ AstNode* parse_prefix(ParsingContext* p) {
 
 AstNode* parse_infix(ParsingContext* p, AstNode* expr, in Precedence prec = Precedence.Assign) {
     static immutable Infix[256] infixes = [
-        Token.Less           : Infix(Precedence.Compare,    true,   true,   AstNode.Less),
-        Token.LessEqual      : Infix(Precedence.Compare,    true,   true,   AstNode.LessEqual),
-        Token.Greater        : Infix(Precedence.Compare,    true,   true,   AstNode.Greater),
-        Token.GreaterEqual   : Infix(Precedence.Compare,    true,   true,   AstNode.GreaterEqual),
-        Token.EqualEqual     : Infix(Precedence.Equality,   true,   true,   AstNode.Equal),
-        Token.BangEqual      : Infix(Precedence.Equality,   true,   true,   AstNode.NotEqual),
-        Token.And            : Infix(Precedence.Logic,      true,   true,   AstNode.And),
-        Token.Or             : Infix(Precedence.Logic,      true,   true,   AstNode.Or),
-        Token.Plus           : Infix(Precedence.Sum,        true,   true,   AstNode.Add),
-        Token.Minus          : Infix(Precedence.Sum,        true,   true,   AstNode.Subtract),
-        Token.Star           : Infix(Precedence.Product,    true,   true,   AstNode.Multiply),
-        Token.Slash          : Infix(Precedence.Product,    true,   true,   AstNode.Divide),
-        Token.Caret          : Infix(Precedence.Power,      false,  true,   AstNode.Power),
-        Token.Dot            : Infix(Precedence.Call,       true,   true,   AstNode.Access),
-        Token.ColonColon     : Infix(Precedence.Call,       true,   true,   AstNode.StaticAccess),
-        Token.Name           : Infix(Precedence.Call,       true,   false,  AstNode.Call),
-        Token.Integer        : Infix(Precedence.Call,       true,   false,  AstNode.Call),
-        Token.Char           : Infix(Precedence.Call,       true,   false,  AstNode.Call),
-        Token.Lparen         : Infix(Precedence.Call,       true,   false,  AstNode.Call),
-        Token.Lbracket       : Infix(Precedence.Call,       true,   false,  AstNode.Call)
+        Token.Less          : Infix(Precedence.Compare,     true,   true,   AstNode.Less),
+        Token.LessEqual     : Infix(Precedence.Compare,     true,   true,   AstNode.LessEqual),
+        Token.Greater       : Infix(Precedence.Compare,     true,   true,   AstNode.Greater),
+        Token.GreaterEqual  : Infix(Precedence.Compare,     true,   true,   AstNode.GreaterEqual),
+        Token.EqualEqual    : Infix(Precedence.Equality,    true,   true,   AstNode.Equal),
+        Token.BangEqual     : Infix(Precedence.Equality,    true,   true,   AstNode.NotEqual),
+        Token.And           : Infix(Precedence.Logic,       true,   true,   AstNode.And),
+        Token.Or            : Infix(Precedence.Logic,       true,   true,   AstNode.Or),
+        Token.Plus          : Infix(Precedence.Sum,         true,   true,   AstNode.Add),
+        Token.Minus         : Infix(Precedence.Sum,         true,   true,   AstNode.Subtract),
+        Token.Star          : Infix(Precedence.Product,     true,   true,   AstNode.Multiply),
+        Token.Slash         : Infix(Precedence.Product,     true,   true,   AstNode.Divide),
+        Token.Caret         : Infix(Precedence.Power,       false,  true,   AstNode.Power),
+        Token.Dot           : Infix(Precedence.Call,        true,   true,   AstNode.Access),
+        Token.ColonColon    : Infix(Precedence.Call,        true,   true,   AstNode.StaticAccess),
+        Token.Name          : Infix(Precedence.Call,        true,   false,  AstNode.Call),
+        Token.Integer       : Infix(Precedence.Call,        true,   false,  AstNode.Call),
+        Token.Char          : Infix(Precedence.Call,        true,   false,  AstNode.Call),
+        Token.String        : Infix(Precedence.Call,        true, false, AstNode.Call),
+        Token.Lparen        : Infix(Precedence.Call,        true,   false,  AstNode.Call),
+        Token.Lbracket      : Infix(Precedence.Call,        true,   false,  AstNode.Call)
     ];
 
     for (Infix i = infixes[p.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.current.type])

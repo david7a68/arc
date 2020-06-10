@@ -404,8 +404,11 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse Call") unittest {
     with (AstNode.Kind) {
         // a 4 -> a(4)
+        assert(check_types("a a".parse!"expression"(), Call, Name, Name));
         assert(check_types("a 4".parse!"expression"(), Call, Name, Integer));
-        
+        assert(check_types("a 'a'".parse!"expression"(), Call, Name, Char));
+        assert(check_types("a \"\"".parse!"expression"(), Call, Name, String));
+
         assert(check_types("a * b()".parse!"expression"(),
             Multiply,
                 Name,
