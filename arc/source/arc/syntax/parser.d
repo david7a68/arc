@@ -395,6 +395,20 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, in Token.Type closing) {
     else return parse_function(p, list);
 }
 
+AstNode* parse_import(ParsingContext* p) {
+    const start = p.take_required(Token.Import).span;
+
+    if (p.current.type != Token.Name) {
+        p.reporter.error(ArcError.TokenExpectMismatch, start,
+            "An import symbol must be followed by a path to the module to import.");
+        
+        return p.alloc(AstNode.Invalid, start);
+    }
+
+    auto name = parse_expression(p, Precedence.Call);
+    return p.alloc(AstNode.Import, start, name);
+}
+
 AstNode* parse_binary(ParsingContext* p, AstNode* lhs, in Infix op) {
     if (op.skip_token) p.advance();
 
@@ -445,6 +459,7 @@ AstNode* parse_prefix(ParsingContext* p) {
         case Name:              return parse_symbol(p, AstNode.Name);
         case Integer:           return parse_symbol(p, AstNode.Integer);
         case Char:              return parse_symbol(p, AstNode.Char);
+        case Import:            return parse_import(p);
         case Lparen:            return parse_list!false(p, Rparen);
         case Lbracket:          return parse_list!false(p, Rbracket);
 

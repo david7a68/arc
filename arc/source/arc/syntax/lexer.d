@@ -21,7 +21,7 @@ struct Token {
 
         And, Or, Not,
         If, Else, Loop, Break, Return, Continue,
-        Def,
+        Def, Import,
     }
 
     alias Type this;
@@ -116,6 +116,7 @@ shared static this() {
     keywords[digest("return")] = Token.Return;
     keywords[digest("continue")] = Token.Continue;
     keywords[digest("def")] = Token.Def;
+    keywords[digest("import")] = Token.Import;
 }
 
 /**

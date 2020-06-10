@@ -385,6 +385,25 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     assert(check_error("(a, !)".parse!"expression"(), ArcError.TokenExpectMismatch));
 }
 
+@("Parse Import") unittest {
+    with (AstNode.Kind) {
+        assert(check_types("import a".parse!"expression"(), Import, Name));
+        assert(check_types("import a::b".parse!"expression"(), Import, StaticAccess, Name, Name));
+        assert(check_types("import a()".parse!"expression"(), Import, Call, Name, List));
+        assert(check_types("(import b)::c()".parse!"expression"(),
+            Call,
+                StaticAccess,
+                    List,
+                        Variable,
+                            None,
+                            Inferred,
+                            Import,
+                                Name,
+                    Name,
+                List));
+    }
+}
+
 @("Parse Call") unittest {
     with (AstNode.Kind) {
         // a 4 -> a(4)
@@ -522,7 +541,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 unittest {
     with (AstNode.Kind) {
         auto stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"statement";
-        assert(stmt.span == Span(0, 36));
+        assert(stmt.span == Span(0, 17));
         assert(!parser.is_done);
     }
 }
