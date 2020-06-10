@@ -174,6 +174,8 @@ const(char)[] repr(SourceMap sources, AstNode* node) {
         case Integer:
         case Char:
             return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
+        case String:
+            return node.kind.to!string ~ "(" ~ sources.get_spanned_text(node.span) ~ ")";
         default:
             return node.kind.to!string;
     }

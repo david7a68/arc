@@ -176,7 +176,9 @@ AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
 }
 
 AstNode* parse_block(ParsingContext* p) {
-    auto start = p.take().span;
+    auto start = p.take_required(Token.Lbrace).span;
+
+    if (start.length == 0) return p.alloc(AstNode.Invalid, start);
 
     auto seq = SequenceBuilder(p.nodes);
     while (!p.current.type.matches_one(Token.Done, Token.Rbrace)) {

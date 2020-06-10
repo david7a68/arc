@@ -20,6 +20,7 @@ struct AstNode {
         Name,
         Integer,
         Char,
+        String,
         List,
         Block,
         Negate,
@@ -43,6 +44,7 @@ struct AstNode {
         StaticAccess,
         Function,
         FunctionType,
+        PointerType
     }
 
     alias Kind this;
@@ -112,9 +114,9 @@ struct AstNode {
     AstNode*[] children() return {
         switch (kind) with (Kind) {
             case None: case Invalid: case Inferred:
-            case Name: case Integer: case Char:
+            case Name: case Integer: case Char: case String:
                 return [];
-            case Negate: case Not:
+            case Negate: case Not: case PointerType:
             case Return: case Loop: case Import:
                 return (&_child)[0 .. 1]; // JANK
             case Assign: .. case StaticAccess:
