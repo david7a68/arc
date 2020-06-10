@@ -7,13 +7,16 @@ import std.stdio;
 
 import arc.compiler;
 
-void do_cli(string[] args) {
+int do_cli(string[] args) {
 	auto compiler = new Compiler();
 
 	compiler.compile(args[1 .. $], CompileOptions());
+
+	if (compiler.reporter.errors.length > 0)
+		return -compiler.reporter.errors[0].code;
+	return 0;
 }
 
-void main(string[] args) {
-	// do_cli(args);
-	do_cli(["", "b.arc"]);
+int main(string[] args) {
+	return do_cli(args);
 }

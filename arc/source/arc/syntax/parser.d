@@ -189,35 +189,12 @@ AstNode* parse_block(ParsingContext* p) {
         seq.add(node);
     }
 
-    auto end = p.current.span;
+    auto span = p.current.span.merge(start);
     if (p.skip_required(Token.Rbrace))
-        return p.alloc(AstNode.Block, start.merge(end), seq.nodes);
+        return p.alloc(AstNode.Block, span, seq.nodes);
 
     seq.abort();
-    return p.alloc(AstNode.Invalid, start.merge(end));
-}
-
-AstNode* parse_define(ParsingContext* p) {
-    const start = p.take().span;
-    auto name = parse_symbol(p, AstNode.Name);
-
-    if (!p.skip_required(Token.Colon))
-        return name.as_invalid(start.merge(name.span));
-
-    auto type = parse_optional_type(p);
-    auto expr = parse_optional_expr(p);
-    auto span = merge_all(start, type.span, expr.span); // name must be between start and type
-
-    if (type.is_valid && expr.is_valid)
-        return p.alloc(AstNode.Definition, span, p.make_seq(name, type, expr));
-
-    p.free(type, expr);
-    return name.as_invalid(span);
-}
-
-AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
-    auto start = p.take_required(token).span;
-    return p.alloc(kind, start);
+    return p.alloc(AstNode.Invalid, span);
 }
 
 AstNode* parse_if(ParsingContext* p) {
@@ -246,6 +223,11 @@ AstNode* parse_loop(ParsingContext* p) {
     return p.alloc(AstNode.Invalid, start.merge(body.span));
 }
 
+AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
+    auto start = p.take_required(token).span;
+    return p.alloc(kind, start);
+}
+
 AstNode* parse_return(ParsingContext* p) {
     auto start = p.take_required(Token.Return).span;
 
@@ -255,6 +237,24 @@ AstNode* parse_return(ParsingContext* p) {
         return p.alloc(AstNode.Return, start, expr);
 
     return expr.respan(expr.span.merge(start));
+}
+
+AstNode* parse_define(ParsingContext* p) {
+    const start = p.take().span;
+    auto name = parse_symbol(p, AstNode.Name);
+
+    if (!p.skip_required(Token.Colon))
+        return name.as_invalid(start.merge(name.span));
+
+    auto type = parse_optional_type(p);
+    auto expr = parse_optional_expr(p);
+    auto span = merge_all(start, type.span, expr.span); // name must be between start and type
+
+    if (type.is_valid && expr.is_valid)
+        return p.alloc(AstNode.Definition, span, p.make_seq(name, type, expr));
+
+    p.free(type, expr);
+    return name.as_invalid(span);
 }
 
 AstNode* parse_variable(ParsingContext* p, AstNode* name) {
@@ -306,7 +306,6 @@ AstNode* parse_statement(ParsingContext* p) {
         stmt = p.alloc(AstNode.Invalid, stmt.span);
     }
 
-    stmt.span = stmt.span.merge(p.resynchronize().span);
     return stmt;
 }
 
@@ -329,11 +328,12 @@ AstNode* parse_symbol(ParsingContext* p, in AstNode.Kind kind) {
 AstNode* parse_unary(ParsingContext* p, in AstNode.Kind kind) {
     auto t = p.take();
     auto operand = parse_expression(p, Precedence.Call);
+    auto span = t.span.merge(operand.span);
 
     if (operand.is_valid)
-        return p.alloc(kind, t.span, operand);
+        return p.alloc(kind, span, operand);
 
-    return operand.respan(t.span.merge(operand.span));
+    return operand.respan(span);
 }
 
 AstNode* parse_list(bool is_type)(ParsingContext* p, in Token.Type closing) {
@@ -450,7 +450,7 @@ AstNode* parse_prefix(ParsingContext* p) {
 
         case Done:
             ecode = ArcError.UnexpectedEndOfFile;
-            emsg = "Unexpected end of file while parsing source.";
+            emsg = "Unexpected end of file while parsing prefix expression.";
             break;
 
         default:
