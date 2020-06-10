@@ -9,7 +9,7 @@ import arc.util: case_of;
 struct Token {
     /// Represents the distinct classes of tokens that the are used in the compiler.
     enum Type: ubyte {
-        Invalid, Done,
+        None, Invalid, Done,
 
         Lparen = '(', Rparen = ')', Lbracket = '[', Rbracket = ']', Lbrace = '{', Rbrace = '}',
         Comma = ',', Dot = '.', Semicolon = ';', Colon = ':',

@@ -63,7 +63,7 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
 }
 
 bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
-    if (!type_equivalent(result, AstNode.Invalid)) return false;
+    if (!type_equivalent(result, AstNode.Kind.Invalid)) return false;
     
     if (!reporter.has_error(error)) {
         writefln("The parser did not encounter the expected error.");
@@ -485,7 +485,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse Function Error") unittest {
     auto err = "() ->;".parse!"expression"();
 //  We don't care what error occurs, as long as one does
-    assert(check_types(err, AstNode.Invalid));
+    assert(check_types(err, AstNode.Kind.Invalid));
 }
 
 // ----------------------------------------------------------------------

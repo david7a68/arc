@@ -48,8 +48,6 @@ struct AstNode {
         PointerType
     }
 
-    alias Kind this;
-
     Span span;
     Kind kind;
 
@@ -90,8 +88,8 @@ struct AstNode {
         _children = parts;
     }
 
-    this(Kind kind, AstNode*[] parts) {
-        this(kind, parts[0].span.merge(parts[$ - 1].span));
+    this(Kind kind, AstNode*[] parts, Span extra = Span()) {
+        this(kind, merge_all(extra, parts[0].span, parts[$ - 1].span));
         _children = parts;
     }
 
@@ -99,8 +97,6 @@ struct AstNode {
     static none()       { return cast(AstNode*) &_none; }
 
     bool is_marker() const { return kind == Kind.None || kind == Kind.Inferred; }
-
-    bool is_valid() const { return kind != Kind.Invalid; }
 
     AstNode* as_invalid(Span span) return in (children.length == 0) {
         this = AstNode(Kind.Invalid, span);
@@ -126,5 +122,10 @@ struct AstNode {
     }
 }
 
-private const _inferred = AstNode(AstNode.Inferred, Span());
-private const _none = AstNode(AstNode.None, Span());
+bool is_valid(AstNode*[] nodes...) {
+    foreach (node; nodes) if (node.kind == AstNode.Kind.Invalid) return false;
+    return true;
+}
+
+private const _inferred = AstNode(AstNode.Kind.Inferred, Span());
+private const _none = AstNode(AstNode.Kind.None, Span());

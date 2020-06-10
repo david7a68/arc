@@ -74,6 +74,10 @@ public:
         return seq.nodes.ptr[0 .. nodes.length];
     }
 
+    void free_seq(AstNode*[] nodes) {
+        free_seq(seq_of(nodes));
+    }
+
     void free(AstNode*[] nodes...) {
         foreach (node; nodes.filter!(n => !n.is_marker)) {
             if (node.children) {
@@ -146,13 +150,13 @@ unittest {
     AstNode* node;
     {
         foreach (i; 0 .. 4000)
-            seq.add(mem.alloc(AstNode.Invalid, Span(i, 0)));
+            seq.add(mem.alloc(AstNode.Kind.Invalid, Span(i, 0)));
 
         auto nodes = seq.nodes;
         foreach (i; 0 .. 4000)
             assert(nodes[i].span.start == i);
 
-        node = mem.alloc(AstNode.Block, seq.nodes);
+        node = mem.alloc(AstNode.Kind.Block, seq.nodes);
     }
     mem.free(node);
     assert(mem.alloc_seq(10) is seq._buffer);
