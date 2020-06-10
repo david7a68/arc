@@ -2,6 +2,7 @@ module arc.syntax.lexer;
 
 import arc.data.hash: Key, digest;
 import arc.data.source: Span;
+import arc.util: case_of;
 
 /// A `Token` is the smallest discrete unit of the source text that the compiler
 /// operates on.
@@ -129,13 +130,6 @@ shared static this() {
  */
 Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, uint span_offset) {
     auto start = current;
-
-    string case_of(const char[] c) {
-        import std.algorithm: map;
-        import std.array: join;
-        import std.conv: to;
-        return c.map!(v => "case " ~ v.to!int.to!string ~ ": ").join().to!string;
-    }
 
     auto final_span() { return Span(cast(uint) (start - base) + span_offset, cast(uint) (current - start)); }
 

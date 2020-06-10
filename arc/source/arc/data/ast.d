@@ -3,6 +3,7 @@ module arc.data.ast;
 import arc.data.ast_memory: AstNodeAllocator;
 import arc.data.source: Span, merge_all;
 import arc.data.hash: Key;
+import arc.util: case_of;
 
 struct AstNode {
     enum Kind : ubyte {
@@ -113,11 +114,9 @@ struct AstNode {
 
     AstNode*[] children() return {
         switch (kind) with (Kind) {
-            case None: case Invalid: case Inferred:
-            case Name: case Integer: case Char: case String:
+            mixin(case_of(None, Invalid, Inferred, Name, Integer, Char, String));
                 return [];
-            case Negate: case Not: case PointerType:
-            case Return: case Loop: case Import:
+            mixin(case_of(Negate, Not, PointerType, Return, Loop, Import));
                 return (&_child)[0 .. 1]; // JANK
             case Assign: .. case StaticAccess:
                 return _children_2;
