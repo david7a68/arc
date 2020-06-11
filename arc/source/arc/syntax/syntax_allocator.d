@@ -45,7 +45,7 @@ public:
 
     AstNode*[] make_seq(AstNode*[] nodes...) {
         auto size_class = 0;
-        for (; size_classes[size_class] < nodes.length; size_class++) {}
+        for (; ast_size_classes[size_class] < nodes.length; size_class++) {}
 
         auto array = _ast_allocator.alloc_array(size_class)[0 .. nodes.length];
         array[] = nodes;
