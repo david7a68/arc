@@ -31,12 +31,11 @@ final class Compiler {
     }
 
     AstNode*[] parse(string name, string source) {
-        import arc.data.ast_memory: SequenceBuilder;
         import arc.syntax.parser: ParsingContext, parse_statement;
 
         source_map.put(name, source);
         
-        auto statements = SequenceBuilder(node_allocator);
+        auto statements = node_allocator.get_appender();
         auto parser = ParsingContext(&reporter, node_allocator);
         parser.begin(source);
 
@@ -44,13 +43,13 @@ final class Compiler {
         while (!parser.is_done) {
             auto statement = parse_statement(&parser);
 
-            statements.add(statement);
+            statements ~= statement;
             if (!statement.is_valid) num_errors++;
 
             if (num_errors == 5) break;
         }
 
-        return statements.nodes; // TODO: Implement parsing import expressions
+        return statements.get(); // TODO: Implement parsing import expressions
     }
 
     void print_ast(AstNode*[] nodes) {

@@ -12,7 +12,7 @@ size_t round_to_nearest_page_size(size_t n) { return n + (pageSize - n % pageSiz
  Allocates a large span of virtual memory from the OS. The allocator works as a
  simple bump allocator, with no deallocation ability.
  */
-struct VirtualAllocator {
+struct VirtualMemory {
     import std.algorithm: max;
 
 private:
@@ -102,12 +102,12 @@ struct MemoryPool {
 private:
     struct Node { Node* next; }
 
-    VirtualAllocator* _allocator;
+    VirtualMemory* _allocator;
     size_t _object_size;
     Node* _head;
 
 public:
-    this(VirtualAllocator* allocator, size_t object_size) {
+    this(VirtualMemory* allocator, size_t object_size) {
         _allocator = allocator;
         _object_size = object_size;
     }
@@ -140,7 +140,7 @@ public:
 struct ObjectPool(T) {
     private MemoryPool _pool;
 
-    this(VirtualAllocator* mem) { _pool = MemoryPool(mem, T.sizeof); }
+    this(VirtualMemory* mem) { _pool = MemoryPool(mem, T.sizeof); }
 
     @disable this(this);
 
@@ -158,7 +158,7 @@ struct ObjectPool(T) {
 
 @("Virtual Allocator and Object Pool")
 unittest {
-    auto vm = VirtualAllocator(4.kib);
+    auto vm = VirtualMemory(4.kib);
 
     {
         auto m1 = vm.alloc(10);
@@ -192,4 +192,88 @@ unittest {
         assert(ts.alloc() == t3);
         assert(ts.alloc() == t2);
     }
+}
+
+struct TreeAllocator(T, size_t[] size_classes) {
+    this(size_t max_objects) {
+        _memory = VirtualMemory(max_objects * T.sizeof * 2);
+        _objects = ObjectPool!T(&_memory);
+
+        foreach (size_class_index, ref list_pool; _list_pools)
+            list_pool = MemoryPool(&_memory, size_of(size_class_index));
+    }
+
+    T* alloc(Args...)(Args args) { return _objects.alloc(args); }
+
+    void free(T* object) { _objects.free(object); }
+
+    auto get_appender() { return Appender(&this); }
+
+    T*[] alloc_array(int size_class_index) {
+        import std.conv: emplace;
+
+        auto memory = cast(ListHeader*) _list_pools[size_class_index].alloc().ptr;
+        auto list = memory.emplace!ListHeader(size_class_index);
+        return list.objects.ptr[0 .. size_classes[size_class_index]];
+    }
+
+    void expand_array(ref T*[] array) {
+        import core.stdc.string: memcpy;
+
+        auto header = header_of(array);
+
+        auto new_array = alloc_array(header.size_class_index + 1);
+        memcpy(header.objects.ptr, new_array.ptr, size_classes[header.size_class_index] * (T*).sizeof);
+        free_array(array);
+
+        array = new_array;
+    }
+
+    void free_array(T*[] array) {
+        auto header = header_of(array);
+        _list_pools[header.size_class_index].free((cast(void*) header)[0 .. size_of(header.size_class_index)]);
+    }
+
+private:
+    struct ListHeader {
+        int size_class_index;
+        ubyte[4] padding;
+        T*[0] objects;
+    }
+
+    struct Appender {
+        TreeAllocator* memory;
+        T*[] array;
+        size_t count;
+
+        this(TreeAllocator* allocator) {
+            memory = allocator;
+            array = allocator.alloc_array(0);
+        }
+
+        @disable this(this);
+
+        T*[] get() { return array[0 .. count]; }
+
+        void abort() { memory.free_array(array); }
+
+        void opOpAssign(string op = "~")(T* new_element) {
+            if (count == array.length) memory.expand_array(array);
+
+            array[count] = new_element;
+            count++;
+        }
+    }
+
+    size_t size_of(size_t size_class_index) {
+        return ListHeader.sizeof + (void*).sizeof * size_classes[size_class_index];
+    }
+
+    ListHeader* header_of(T*[] array) {
+        return (cast(ListHeader*) array.ptr) - 1;
+    }
+
+    VirtualMemory                   _memory;
+    ObjectPool!T                    _objects;
+    MemoryPool[size_classes.length] _list_pools;
 }

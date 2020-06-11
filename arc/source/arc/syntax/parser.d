@@ -177,7 +177,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
 
     if (start.length == 0) return p.make_invalid(start);
 
-    auto seq = SequenceBuilder(p.nodes);
+    auto seq = p.nodes.get_appender();
     while (!p.current.type.matches_one(Token.Done, info.close)) {
         auto node = parse_member(p);
 
@@ -194,12 +194,12 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
             while (p.current.type == info.delim) p.advance();
         }
 
-        seq.add(node);
+        seq ~= node;
     }
 
     auto span = p.current.span.merge(start);
     if (p.skip_required(info.close))
-        return p.alloc(info.kind, span, seq.nodes);
+        return p.alloc(info.kind, span, seq.get());
 
     seq.abort();
     return p.make_invalid(span);
