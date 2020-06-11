@@ -161,7 +161,7 @@ unittest {
     auto vm = VirtualMemory(4.kib);
 
     {
-        auto m1 = vm.alloc(10);
+        const m1 = vm.alloc(10);
         assert(m1.ptr !is null);
         assert(m1.length == 10);
     }
@@ -194,6 +194,24 @@ unittest {
     }
 }
 
+/**
+ A tree allocator is specialized for the purposes of managing the memory
+ involved with managing trees.
+ 
+ It is composed of 3 parts:
+  - An object pool for individual nodes of the tree.
+  - A facility for constructing arrays of pointers to those nodes in the tree.
+  - An appender implementation so that arrays of trees can be constructed
+    dynamically without knowing its length ahead of time.
+
+ To use the allocator, specify the type of the tree's nodes, as well as an array
+ of size classes. These size classes describe the valid sizes that an array can
+ have, in ascending order. Arrays are first constructed using size class 0, up
+ to size_classes.length - 1. This means that all arrays have a maximum bound.
+ This may or may not cause problems, though it has so far been simple to just
+ use a size class so ridiculously large that other parts of the compiler should
+ fail first.
+ */
 struct TreeAllocator(T, size_t[] size_classes) {
     this(size_t max_objects) {
         _memory = VirtualMemory(max_objects * T.sizeof * 2);
@@ -217,19 +235,19 @@ struct TreeAllocator(T, size_t[] size_classes) {
         return list.objects.ptr[0 .. size_classes[size_class_index]];
     }
 
-    void expand_array(ref T*[] array) {
+    void expand(ref T*[] array) {
         import core.stdc.string: memcpy;
 
         auto header = header_of(array);
 
         auto new_array = alloc_array(header.size_class_index + 1);
-        memcpy(header.objects.ptr, new_array.ptr, size_classes[header.size_class_index] * (T*).sizeof);
-        free_array(array);
+        memcpy(new_array.ptr, header.objects.ptr, size_classes[header.size_class_index] * (T*).sizeof);
+        free(array);
 
         array = new_array;
     }
 
-    void free_array(T*[] array) {
+    void free(T*[] array) {
         auto header = header_of(array);
         _list_pools[header.size_class_index].free((cast(void*) header)[0 .. size_of(header.size_class_index)]);
     }
@@ -253,12 +271,11 @@ private:
 
         @disable this(this);
 
-        T*[] get() { return array[0 .. count]; }
-
-        void abort() { memory.free_array(array); }
+        T*[] get()      { return array[0 .. count]; }
+        void abort()    { memory.free(array); }
 
         void opOpAssign(string op = "~")(T* new_element) {
-            if (count == array.length) memory.expand_array(array);
+            if (count == array.length) memory.expand(array);
 
             array[count] = new_element;
             count++;
@@ -276,4 +293,35 @@ private:
     VirtualMemory                   _memory;
     ObjectPool!T                    _objects;
     MemoryPool[size_classes.length] _list_pools;
+}
+
+@("Tree Allocator") unittest {
+    auto mem = TreeAllocator!(uint, [3, 5, 8])(32);
+
+	auto a = mem.alloc();
+	mem.free(a);
+	auto b = mem.alloc();
+	assert(b is a);
+
+	uint v = 100;
+
+	auto c = mem.alloc_array(0);
+	assert(c.length == 3);
+	c[1] = &v;
+	mem.expand(c);
+	assert(c.length == 5);
+	assert(c[1] is &v);
+	mem.expand(c);
+	assert(c.length == 8);
+	assert(c[1] is &v);
+	mem.free(c);
+	const d = mem.alloc_array(2);
+	assert(c.ptr == d.ptr);
+
+    auto appender = mem.get_appender();
+
+    foreach (i; 0 .. 6) appender ~= &v;
+
+    assert(appender.get().length == 6);
+    assert(appender.array.length == 8);
 }

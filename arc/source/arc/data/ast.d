@@ -169,7 +169,7 @@ public:
     }
 
     void free_seq(AstNode*[] nodes) {
-        _allocator.free_array(nodes);
+        _allocator.free(nodes);
     }
 
 private:
