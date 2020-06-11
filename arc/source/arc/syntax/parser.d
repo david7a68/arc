@@ -342,9 +342,9 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type
     else                                return parse_function(p, list);
 }
 
-AstNode* parse_binary(ParsingContext* p, AstNode* lhs, in Infix op) {
+AstNode* parse_binary(alias parse_fn)(ParsingContext* p, AstNode* lhs, in Infix op) {
     if (op.skip_token) p.advance();
-    auto rhs = parse_expression(p, cast(Precedence) (op.prec + op.is_left_associative));
+    auto rhs = parse_fn(p, cast(Precedence) (op.prec + op.is_left_associative));
     return p.make_node(op.kind, lhs, rhs);
 }
 
@@ -415,7 +415,7 @@ AstNode* parse_infix(ParsingContext* p, AstNode* expr, in Precedence prec = Prec
     ];
 
     for (Infix i = infixes[p.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p.current.type])
-        expr = parse_binary(p, expr, i);
+        expr = parse_binary!parse_expression(p, expr, i);
 
     return expr;
 }
@@ -438,8 +438,8 @@ AstNode* parse_function_type(ParsingContext* p, AstNode* list) {
     return p.make_node(AstNode.Kind.FunctionType, list, parse_type(p));
 }
 
-AstNode* parse_type(ParsingContext* p) {
-    return parse_type_infix(p, parse_type_prefix(p));
+AstNode* parse_type(ParsingContext* p, Precedence prec = Precedence.Assign) {
+    return parse_type_infix(p, parse_type_prefix(p), prec);
 }
 
 AstNode* parse_type_prefix(ParsingContext* p) {
@@ -459,15 +459,15 @@ AstNode* parse_type_prefix(ParsingContext* p) {
     return p.make_invalid(p.take().span);
 }
 
-AstNode* parse_type_infix(ParsingContext* p, AstNode* expr) {
+AstNode* parse_type_infix(ParsingContext* p, AstNode* expr, Precedence prec) {
     static immutable Infix[256] ops = [
         Token.Dot       : Infix(Precedence.Call, true, true,    AstNode.Kind.Access),
         Token.Lparen    : Infix(Precedence.Call, true, false,   AstNode.Kind.Call),
         Token.Lbracket  : Infix(Precedence.Call, true, false,   AstNode.Kind.Call)
     ];
 
-    for (Infix i = ops[p.current.type]; expr.is_valid && Precedence.Call <= i.prec; i = ops[p.current.type])
-        expr = parse_binary(p, expr, i);
+    for (Infix i = ops[p.current.type]; expr.is_valid && prec <= i.prec; i = ops[p.current.type])
+        expr = parse_binary!parse_type(p, expr, i);
 
     return expr;
 }

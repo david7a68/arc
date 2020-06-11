@@ -512,20 +512,15 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         assert(check_types("(a := 3)".parse!"type"(), List, Variable, Name, Inferred, Integer));
 
         assert(check_types("*T".parse!"type"(), PointerType, Name));
+
     }
 }
 
 @("Parse Types Error") unittest {
     with (AstNode.Kind) {
-        {
-            auto err = "(a : !)".parse!"type"();
-            assert(check_error(err, ArcError.TokenExpectMismatch));
-        }
-
-        {
-            auto err = "3".parse!"type"();
-            assert(check_error(err, ArcError.TokenExpectMismatch));
-        }
+        assert(check_error("(a : !)".parse!"type"(), ArcError.TokenExpectMismatch));
+        assert(check_error("3".parse!"type"(), ArcError.TokenExpectMismatch));
+        assert(check_error("a.!".parse!"type"(), ArcError.TokenExpectMismatch));
     }
 }
 
