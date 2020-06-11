@@ -212,11 +212,13 @@ unittest {
  use a size class so ridiculously large that other parts of the compiler should
  fail first.
  */
-struct TreeAllocator(T, size_t[] size_classes) {
-    this(size_t max_objects) {
+struct TreeAllocator(T) {
+    this(size_t max_objects, in size_t[] size_classes) {
         _memory = VirtualMemory(max_objects * T.sizeof * 2);
         _objects = ObjectPool!T(&_memory);
+        _size_classes = size_classes;
 
+        _list_pools = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
         foreach (size_class_index, ref list_pool; _list_pools)
             list_pool = MemoryPool(&_memory, size_of(size_class_index));
     }
@@ -225,14 +227,14 @@ struct TreeAllocator(T, size_t[] size_classes) {
 
     void free(T* object) { _objects.free(object); }
 
-    auto get_appender() { return Appender(&this); }
+    Appender!T get_appender() { return Appender!T(&this); }
 
     T*[] alloc_array(int size_class_index) {
         import std.conv: emplace;
 
         auto memory = cast(ListHeader*) _list_pools[size_class_index].alloc().ptr;
         auto list = memory.emplace!ListHeader(size_class_index);
-        return list.objects.ptr[0 .. size_classes[size_class_index]];
+        return list.objects.ptr[0 .. _size_classes[size_class_index]];
     }
 
     void expand(ref T*[] array) {
@@ -257,44 +259,45 @@ private:
         T*[0] objects;
     }
 
-    struct Appender {
-        TreeAllocator* memory;
-        T*[] array;
-        size_t count;
-
-        this(TreeAllocator* allocator) {
-            memory = allocator;
-            array = allocator.alloc_array(0);
-        }
-
-        @disable this(this);
-
-        T*[] get()      { return array[0 .. count]; }
-        void abort()    { memory.free(array); }
-
-        void opOpAssign(string op = "~")(T* new_element) {
-            if (count == array.length) memory.expand(array);
-
-            array[count] = new_element;
-            count++;
-        }
-    }
-
     size_t size_of(size_t size_class_index) {
-        return ListHeader.sizeof + (void*).sizeof * size_classes[size_class_index];
+        return ListHeader.sizeof + (void*).sizeof * _size_classes[size_class_index];
     }
 
     ListHeader* header_of(T*[] array) {
         return (cast(ListHeader*) array.ptr) - 1;
     }
 
-    VirtualMemory                   _memory;
-    ObjectPool!T                    _objects;
-    MemoryPool[size_classes.length] _list_pools;
+    VirtualMemory   _memory;
+    ObjectPool!T    _objects;
+    MemoryPool[]    _list_pools;
+    const size_t[]  _size_classes;
+}
+
+struct Appender(T) {
+    TreeAllocator!T * memory;
+    T*[] array;
+    size_t count;
+
+    this(TreeAllocator!T * allocator) {
+        memory = allocator;
+        array = allocator.alloc_array(0);
+    }
+
+    @disable this(this);
+
+    T*[] get()      { return array[0 .. count]; }
+    void abort()    { memory.free(array); }
+
+    void opOpAssign(string op = "~")(T* new_element) {
+        if (count == array.length) memory.expand(array);
+
+        array[count] = new_element;
+        count++;
+    }
 }
 
 @("Tree Allocator") unittest {
-    auto mem = TreeAllocator!(uint, [3, 5, 8])(32);
+    auto mem = TreeAllocator!(uint)(32, [3, 5, 8]);
 
 	auto a = mem.alloc();
 	mem.free(a);

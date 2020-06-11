@@ -130,7 +130,7 @@ private const _inferred = AstNode(AstNode.Kind.Inferred, Span());
 private const _none = AstNode(AstNode.Kind.None, Span());
 
 /// The size of each sequence pool, calculated in number of nodes stored. (3 nodes, 8 nodes, etc).
-immutable size_classes = [3, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+immutable ulong[] size_classes = [3, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 
 final class AstNodeAllocator {
     import std.algorithm: filter;
@@ -138,7 +138,7 @@ final class AstNodeAllocator {
 
 public:
     this() {
-        _allocator = TreeAllocator!(AstNode, size_classes)(uint.max + 1);
+        _allocator = TreeAllocator!AstNode(uint.max + 1, size_classes);
     }
 
     AstNode* alloc(Args...)(Args args) { return _allocator.alloc(args); }
@@ -173,5 +173,5 @@ public:
     }
 
 private:
-    TreeAllocator!(AstNode, size_classes) _allocator;
+    TreeAllocator!AstNode _allocator;
 }
