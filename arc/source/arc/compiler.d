@@ -9,14 +9,15 @@ import arc.data.ast;
 import arc.data.source: Source;
 import arc.data.source_map: SourceMap;
 import arc.reporter: Reporter;
+import arc.syntax.syntax_allocator;
 
 final class Compiler {
-    AstNodeAllocator node_allocator;
+    SyntaxAllocator syntax_allocator;
     SourceMap source_map;
     Reporter reporter;
 
     this() {
-        node_allocator = new AstNodeAllocator();
+        syntax_allocator = new SyntaxAllocator();
         source_map = new SourceMap();
     }
 
@@ -34,8 +35,8 @@ final class Compiler {
 
         source_map.put(name, source);
         
-        auto statements = node_allocator.get_appender();
-        auto parser = ParsingContext(&reporter, node_allocator);
+        auto statements = syntax_allocator.get_ast_appender();
+        auto parser = ParsingContext(&reporter, syntax_allocator);
         parser.begin(source);
 
         size_t num_errors;

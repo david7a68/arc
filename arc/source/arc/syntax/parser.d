@@ -37,6 +37,7 @@ import arc.data.ast;
 import arc.data.source: Span, merge_all;
 import arc.reporter;
 import arc.syntax.lexer: Token, TokenBuffer, matches_one;
+import arc.syntax.syntax_allocator;
 
 enum Precedence {
     None,
@@ -54,14 +55,14 @@ enum Precedence {
 struct ParsingContext {
     TokenBuffer!4096 tokens;
 
-    AstNodeAllocator nodes;
+    SyntaxAllocator nodes;
     Reporter* reporter;
 
     int indentation_level;
 
     alias nodes this;
 
-    this(Reporter* reporter, AstNodeAllocator node_allocator) {
+    this(Reporter* reporter, SyntaxAllocator node_allocator) {
         this.reporter = reporter;
         this.nodes = node_allocator;
     }
@@ -138,13 +139,13 @@ struct ParsingContext {
     }
     
     AstNode* make_node(AstNode.Kind kind, Span prefix, AstNode* node) {
-        if (is_valid(node)) return nodes.alloc(kind, prefix, node);
+        if (is_valid(node)) return nodes.alloc_ast(kind, prefix, node);
         scope (exit) nodes.free(node);
         return make_invalid(prefix.merge(node.span));
     }
 
     AstNode* make_node(AstNode.Kind kind, AstNode*[] seq, Span extra = Span()) {
-        if (is_valid(seq)) return nodes.alloc(kind, seq, extra);
+        if (is_valid(seq)) return nodes.alloc_ast(kind, seq, extra);
 
         scope (exit) nodes.free_seq(seq);
         auto span = extra;
@@ -153,12 +154,12 @@ struct ParsingContext {
     }
 
     AstNode* make_node(AstNode.Kind kind, AstNode* first, AstNode* second) {
-        if (is_valid(first, second)) return nodes.alloc(kind, first, second);
+        if (is_valid(first, second)) return nodes.alloc_ast(kind, first, second);
         scope (exit) nodes.free(first, second);
         return make_invalid(first.span.merge(second.span));
     }
 
-    AstNode* make_invalid(Span span) { return nodes.alloc(AstNode.Kind.Invalid, span); }
+    AstNode* make_invalid(Span span) { return nodes.alloc_ast(AstNode.Kind.Invalid, span); }
 }
 
 auto parse_optional_type(ParsingContext* p) {
@@ -176,7 +177,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
 
     if (start.length == 0) return p.make_invalid(start);
 
-    auto seq = p.nodes.get_appender();
+    auto seq = p.nodes.get_ast_appender();
     while (!p.current.type.matches_one(Token.Done, info.close)) {
         auto node = parse_member(p);
 
@@ -198,7 +199,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
 
     auto span = p.current.span.merge(start);
     if (p.skip_required(info.close))
-        return p.alloc(info.kind, span, seq.get());
+        return p.alloc_ast(info.kind, span, seq.get());
 
     seq.abort();
     return p.make_invalid(span);
@@ -237,7 +238,7 @@ AstNode* parse_loop(ParsingContext* p) {
 }
 
 AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
-    return p.alloc(kind, p.take_required(token).span);
+    return p.alloc_ast(kind, p.take_required(token).span);
 }
 
 AstNode* parse_return(ParsingContext* p) {
@@ -316,7 +317,7 @@ AstNode* parse_statement(ParsingContext* p) {
 
 AstNode* parse_symbol(ParsingContext* p, in AstNode.Kind kind) {
     auto t = p.take();
-    return p.alloc(kind, t.span, t.key);
+    return p.alloc_ast(kind, t.span, t.key);
 }
 
 AstNode* parse_unary(ParsingContext* p, in AstNode.Kind kind) {

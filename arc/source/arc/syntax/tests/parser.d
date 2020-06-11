@@ -5,16 +5,17 @@ version (unittest):
 import arc.data.ast;
 import arc.data.source: Span;
 import arc.syntax.parser;
+import arc.syntax.syntax_allocator;
 import arc.reporter;
 
 import std.stdio: writefln;
 
 Reporter reporter;
 ParsingContext parser;
-AstNodeAllocator nodes = void;
+SyntaxAllocator nodes = void;
 
 static this() {
-    nodes = new AstNodeAllocator();
+    nodes = new SyntaxAllocator();
     parser = ParsingContext(&reporter, nodes);
 }
 
