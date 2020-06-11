@@ -34,7 +34,6 @@
  module arc.syntax.parser;
 
 import arc.data.ast;
-import arc.data.ast_memory;
 import arc.data.source: Span, merge_all;
 import arc.reporter;
 import arc.syntax.lexer: Token, TokenBuffer, matches_one;

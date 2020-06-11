@@ -6,7 +6,6 @@ struct CompileOptions {
 }
 
 import arc.data.ast;
-import arc.data.ast_memory: AstNodeAllocator;
 import arc.data.source: Source;
 import arc.data.source_map: SourceMap;
 import arc.reporter: Reporter;
