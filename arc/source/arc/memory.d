@@ -213,14 +213,14 @@ unittest {
  fail first.
  */
 struct TreeAllocator(T) {
-    this(size_t max_objects, in size_t[] size_classes) {
-        _memory = VirtualMemory(max_objects * T.sizeof * 2);
-        _objects = ObjectPool!T(&_memory);
+    this(VirtualMemory* memory, in size_t[] size_classes) {
+        _memory = memory;
+        _objects = ObjectPool!T(_memory);
         _size_classes = size_classes;
 
         _list_pools = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
         foreach (size_class_index, ref list_pool; _list_pools)
-            list_pool = MemoryPool(&_memory, size_of(size_class_index));
+            list_pool = MemoryPool(_memory, size_of(size_class_index));
     }
 
     T* alloc(Args...)(Args args) { return _objects.alloc(args); }
@@ -267,7 +267,7 @@ private:
         return (cast(ListHeader*) array.ptr) - 1;
     }
 
-    VirtualMemory   _memory;
+    VirtualMemory*  _memory;
     ObjectPool!T    _objects;
     MemoryPool[]    _list_pools;
     const size_t[]  _size_classes;
@@ -297,29 +297,30 @@ struct Appender(T) {
 }
 
 @("Tree Allocator") unittest {
-    auto mem = TreeAllocator!(uint)(32, [3, 5, 8]);
+    auto memory = VirtualMemory(1024);
+    auto allocator = TreeAllocator!(uint)(&memory, [3, 5, 8]);
 
-	auto a = mem.alloc();
-	mem.free(a);
-	auto b = mem.alloc();
+	auto a = allocator.alloc();
+	allocator.free(a);
+	const b = allocator.alloc();
 	assert(b is a);
 
 	uint v = 100;
 
-	auto c = mem.alloc_array(0);
+	auto c = allocator.alloc_array(0);
 	assert(c.length == 3);
 	c[1] = &v;
-	mem.expand(c);
+	allocator.expand(c);
 	assert(c.length == 5);
 	assert(c[1] is &v);
-	mem.expand(c);
+	allocator.expand(c);
 	assert(c.length == 8);
 	assert(c[1] is &v);
-	mem.free(c);
-	const d = mem.alloc_array(2);
+	allocator.free(c);
+	const d = allocator.alloc_array(2);
 	assert(c.ptr == d.ptr);
 
-    auto appender = mem.get_appender();
+    auto appender = allocator.get_appender();
 
     foreach (i; 0 .. 6) appender ~= &v;
 

@@ -134,11 +134,12 @@ immutable ulong[] size_classes = [3, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4
 
 final class AstNodeAllocator {
     import std.algorithm: filter;
-    import arc.memory: gib, TreeAllocator;
+    import arc.memory: gib, TreeAllocator, VirtualMemory;
 
 public:
     this() {
-        _allocator = TreeAllocator!AstNode(uint.max + 1, size_classes);
+        _memory = VirtualMemory(128.gib);
+        _allocator = TreeAllocator!AstNode(&_memory, size_classes);
     }
 
     AstNode* alloc(Args...)(Args args) { return _allocator.alloc(args); }
@@ -173,5 +174,6 @@ public:
     }
 
 private:
-    TreeAllocator!AstNode _allocator;
+    VirtualMemory           _memory;
+    TreeAllocator!AstNode   _allocator;
 }
