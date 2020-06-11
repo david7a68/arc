@@ -236,12 +236,10 @@ struct TreeAllocator(T, size_t[] size_classes) {
     }
 
     void expand(ref T*[] array) {
-        import core.stdc.string: memcpy;
-
         auto header = header_of(array);
 
         auto new_array = alloc_array(header.size_class_index + 1);
-        memcpy(new_array.ptr, header.objects.ptr, size_classes[header.size_class_index] * (T*).sizeof);
+        new_array[0 .. array.length] = array;
         free(array);
 
         array = new_array;
