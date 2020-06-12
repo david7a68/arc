@@ -286,11 +286,11 @@ AstNode* parse_define(ParsingContext* p) {
 }
 
 AstNode* parse_variable(ParsingContext* p, AstNode* name) {
+    p.skip_required(Token.Colon);
     return parse_declaration(p, AstNode.Kind.Variable, name);
 }
 
 AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
-    p.skip_required(Token.Colon);
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
     auto node = p.make_node(AstNode.Kind.Variable, p.make_seq(name, type, expr));
