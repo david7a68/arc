@@ -14,5 +14,5 @@ int do_cli(string[] args) {
 
 int main(string[] args) {
 	return do_cli(args);
-	// return do_cli(["", "b.arc"]);
+	// return do_cli(["", "lexer.arc"]);
 }

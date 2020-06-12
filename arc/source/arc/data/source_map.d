@@ -1,7 +1,7 @@
 module arc.data.source_map;
 
 final class SourceMap {
-    import arc.data.source: Source, Span;
+    import arc.data.source : Source, Span;
 
     // The first source is a reserved dummy source to allow source_of to return
     // an error condition without throwing an exception.
@@ -30,13 +30,13 @@ final class SourceMap {
     Source source_of(Span span) {
         if (span == Span())
             return sources[0];
-        
+
         auto source = () {
             foreach (src; sources[1 .. $])
                 if (span in src)
                     return src;
             return sources[0];
-        } ();
+        }();
 
         return source;
     }
@@ -56,7 +56,9 @@ final class SourceMap {
     }
 
     auto coordinates_of(Span span) {
-        struct Coord { size_t line, column; }
+        struct Coord {
+            size_t line, column;
+        }
 
         auto source = source_of(span);
         const local_offset = span.start - source.start_offset;
@@ -68,7 +70,8 @@ final class SourceMap {
                 line++;
                 column = 0;
             }
-            else column++;
+            else
+                column++;
         }
 
         return Coord(line, column);

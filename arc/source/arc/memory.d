@@ -1,19 +1,29 @@
 module arc.memory;
 
-import core.memory: pageSize;
+import core.memory : pageSize;
 
-size_t kib(size_t n) { return n * 1024; }
-size_t mib(size_t n) { return n * (1024 * 2); }
-size_t gib(size_t n) { return n * (1024 ^ 3); }
+size_t kib(size_t n) {
+    return n * 1024;
+}
 
-size_t round_to_nearest_page_size(size_t n) { return n + (pageSize - n % pageSize); }
+size_t mib(size_t n) {
+    return n * (1024 * 2);
+}
+
+size_t gib(size_t n) {
+    return n * (1024 ^ 3);
+}
+
+size_t round_to_nearest_page_size(size_t n) {
+    return n + (pageSize - n % pageSize);
+}
 
 /**
  Allocates a large span of virtual memory from the OS. The allocator works as a
  simple bump allocator, with no deallocation ability.
  */
 struct VirtualMemory {
-    import std.algorithm: max;
+    import std.algorithm : max;
 
 private:
     // The start of the virtual address range.
@@ -39,10 +49,11 @@ public:
         num_reserved_bytes = max(round_to_nearest_page_size(size_bytes), extra_bytes_per_alloc);
 
         version (Windows) {
-            import core.sys.windows.windows: VirtualAlloc, MEM_RESERVE, MEM_COMMIT, PAGE_NOACCESS, PAGE_READWRITE;
+            import core.sys.windows.windows : MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc;
 
             base = VirtualAlloc(null, num_reserved_bytes, MEM_RESERVE, PAGE_NOACCESS);
-            if (!base) assert(0, "Failed to allocate memory.");
+            if (!base)
+                assert(0, "Failed to allocate memory.");
 
             top = next_alloc = base;
         }
@@ -54,7 +65,7 @@ public:
 
     ~this() {
         version (Windows) {
-            import core.sys.windows.windows: VirtualFree, MEM_RELEASE;
+            import core.sys.windows.windows : MEM_RELEASE, VirtualFree;
 
             const status = VirtualFree(base, 0, MEM_RELEASE);
             assert(status, "Failed to free memory.");
@@ -63,7 +74,8 @@ public:
             static assert(false, "Platform not supported for IndexedRegion.");
     }
 
-    void[] alloc(size_t n) in (capacity >= n) {
+    void[] alloc(size_t n)
+    in(capacity >= n) {
         const next_after_alloc = next_alloc + n;
 
         if (next_after_alloc > top)
@@ -74,17 +86,21 @@ public:
         return mem;
     }
 
-    size_t capacity() { return num_reserved_bytes - (next_alloc - base); }
+    size_t capacity() {
+        return num_reserved_bytes - (next_alloc - base);
+    }
 
-    void reserve(size_t n) in (capacity >= n) {
+    void reserve(size_t n)
+    in(capacity >= n) {
         n = round_to_nearest_page_size(n);
         const bytes_needed = max(extra_bytes_per_alloc, n);
 
         version (Windows) {
-            import core.sys.windows.windows: VirtualAlloc, MEM_COMMIT, PAGE_READWRITE;
+            import core.sys.windows.windows : MEM_COMMIT, PAGE_READWRITE, VirtualAlloc;
 
             const status = VirtualAlloc(top, bytes_needed, MEM_COMMIT, PAGE_READWRITE);
-            if (!status) assert(0, "Failed to allocate memory.");
+            if (!status)
+                assert(0, "Failed to allocate memory.");
         }
         else
             static assert(false, "Platform not supported.");
@@ -99,13 +115,6 @@ public:
  * active allocations increases.
  */
 struct MemoryPool {
-private:
-    struct Node { Node* next; }
-
-    VirtualMemory* _allocator;
-    size_t _object_size;
-    Node* _head;
-
 public:
     this(VirtualMemory* allocator, size_t object_size) {
         _allocator = allocator;
@@ -114,10 +123,13 @@ public:
 
     @disable this(this);
 
-    size_t object_size() { return _object_size; }
+    size_t object_size() {
+        return _object_size;
+    }
 
     void[] alloc() {
-        if (_head is null) return _allocator.alloc(_object_size);
+        if (_head is null)
+            return _allocator.alloc(_object_size);
 
         auto mem = (cast(void*) _head)[0 .. _object_size];
         _head = _head.next;
@@ -125,11 +137,21 @@ public:
         return mem;
     }
 
-    void free(void[] object) in (object.length == object_size) {
-        auto n = cast(Node*) &object[0];
+    void free(void[] object)
+    in(object.length == object_size) {
+        auto n = cast(Node*)&object[0];
         n.next = _head;
         _head = n;
     }
+
+private:
+    struct Node {
+        Node* next;
+    }
+
+    VirtualMemory* _allocator;
+    size_t _object_size;
+    Node* _head;
 }
 
 /**
@@ -138,22 +160,28 @@ public:
  * active objects increases.
  */
 struct ObjectPool(T) {
-    private MemoryPool _pool;
-
-    this(VirtualMemory* mem) { _pool = MemoryPool(mem, T.sizeof); }
+    this(VirtualMemory* mem) {
+        _pool = MemoryPool(mem, T.sizeof);
+    }
 
     @disable this(this);
 
     T* alloc(Args...)(Args args) {
         auto object = cast(T*) _pool.alloc().ptr;
 
-        static if (args.length) *object = T(args);
-        else                    *object = T.init;
+        static if (args.length)
+            *object = T(args);
+        else
+            *object = T.init;
 
         return object;
     }
 
-    void free(T* t) { _pool.free(t[0 .. 1]); }
+    void free(T* t) {
+        _pool.free(t[0 .. 1]);
+    }
+
+    private MemoryPool _pool;
 }
 
 @("Virtual Allocator and Object Pool")
@@ -167,7 +195,11 @@ unittest {
     }
 
     {
-        struct T { bool a; size_t b; }
+        struct T {
+            bool a;
+            size_t b;
+        }
+
         auto ts = ObjectPool!T(&vm);
 
         auto t1 = ts.alloc();
@@ -223,14 +255,20 @@ struct TreeAllocator(T) {
             list_pool = MemoryPool(_memory, size_of(size_class_index));
     }
 
-    T* alloc(Args...)(Args args) { return _objects.alloc(args); }
+    T* alloc(Args...)(Args args) {
+        return _objects.alloc(args);
+    }
 
-    void free(T* object) { _objects.free(object); }
+    void free(T* object) {
+        _objects.free(object);
+    }
 
-    Appender!T get_appender() { return Appender!T(&this); }
+    Appender!T get_appender() {
+        return Appender!T(&this);
+    }
 
     T*[] alloc_array(int size_class_index) {
-        import std.conv: emplace;
+        import std.conv : emplace;
 
         auto memory = cast(ListHeader*) _list_pools[size_class_index].alloc().ptr;
         auto list = memory.emplace!ListHeader(size_class_index);
@@ -249,7 +287,8 @@ struct TreeAllocator(T) {
 
     void free(T*[] array) {
         auto header = header_of(array);
-        _list_pools[header.size_class_index].free((cast(void*) header)[0 .. size_of(header.size_class_index)]);
+        _list_pools[header.size_class_index].free(
+                (cast(void*) header)[0 .. size_of(header.size_class_index)]);
     }
 
 private:
@@ -267,29 +306,35 @@ private:
         return (cast(ListHeader*) array.ptr) - 1;
     }
 
-    VirtualMemory*  _memory;
-    ObjectPool!T    _objects;
-    MemoryPool[]    _list_pools;
-    const size_t[]  _size_classes;
+    VirtualMemory* _memory;
+    ObjectPool!T _objects;
+    MemoryPool[] _list_pools;
+    const size_t[] _size_classes;
 }
 
 struct Appender(T) {
-    TreeAllocator!T * memory;
+    TreeAllocator!T* memory;
     T*[] array;
     size_t count;
 
-    this(TreeAllocator!T * allocator) {
+    this(TreeAllocator!T* allocator) {
         memory = allocator;
         array = allocator.alloc_array(0);
     }
 
     @disable this(this);
 
-    T*[] get()      { return array[0 .. count]; }
-    void abort()    { memory.free(array); }
+    T*[] get() {
+        return array[0 .. count];
+    }
+
+    void abort() {
+        memory.free(array);
+    }
 
     void opOpAssign(string op = "~")(T* new_element) {
-        if (count == array.length) memory.expand(array);
+        if (count == array.length)
+            memory.expand(array);
 
         array[count] = new_element;
         count++;
@@ -300,29 +345,30 @@ struct Appender(T) {
     auto memory = VirtualMemory(1024);
     auto allocator = TreeAllocator!(uint)(&memory, [3, 5, 8]);
 
-	auto a = allocator.alloc();
-	allocator.free(a);
-	const b = allocator.alloc();
-	assert(b is a);
+    auto a = allocator.alloc();
+    allocator.free(a);
+    const b = allocator.alloc();
+    assert(b is a);
 
-	uint v = 100;
+    uint v = 100;
 
-	auto c = allocator.alloc_array(0);
-	assert(c.length == 3);
-	c[1] = &v;
-	allocator.expand(c);
-	assert(c.length == 5);
-	assert(c[1] is &v);
-	allocator.expand(c);
-	assert(c.length == 8);
-	assert(c[1] is &v);
-	allocator.free(c);
-	const d = allocator.alloc_array(2);
-	assert(c.ptr == d.ptr);
+    auto c = allocator.alloc_array(0);
+    assert(c.length == 3);
+    c[1] = &v;
+    allocator.expand(c);
+    assert(c.length == 5);
+    assert(c[1] is &v);
+    allocator.expand(c);
+    assert(c.length == 8);
+    assert(c[1] is &v);
+    allocator.free(c);
+    const d = allocator.alloc_array(2);
+    assert(c.ptr == d.ptr);
 
     auto appender = allocator.get_appender();
 
-    foreach (i; 0 .. 6) appender ~= &v;
+    foreach (i; 0 .. 6)
+        appender ~= &v;
 
     assert(appender.get().length == 6);
     assert(appender.array.length == 8);

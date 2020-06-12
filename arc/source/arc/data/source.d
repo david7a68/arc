@@ -15,10 +15,12 @@ struct Span {
     uint length;
 
     /// The index of the last character in this span + 1
-    auto end() const { return start + length; }
+    auto end() const {
+        return start + length;
+    }
 
     auto merge(Span rhs) const {
-        import std.algorithm: min, max;
+        import std.algorithm : max, min;
 
         if (this == Span())
             return rhs == Span() ? this : rhs;
@@ -29,8 +31,10 @@ struct Span {
 
     /// Compare starting positions for these spans
     int opCmp(Span rhs) {
-        if (start < rhs.start) return -1;
-        if (start > rhs.start) return 1;
+        if (start < rhs.start)
+            return -1;
+        if (start > rhs.start)
+            return 1;
         return 0;
     }
 }
@@ -39,10 +43,11 @@ struct Span {
  * Merges all non-0 spans together or returns the 0 span if all spans are 0.
  */
 auto merge_all(Span[] spans...) {
-    import std.algorithm: filter, fold;
+    import std.algorithm : filter;
 
     Span result;
-    foreach (span; spans.filter!(s => s != Span())) result = result.merge(span);
+    foreach (span; spans.filter!(s => s != Span()))
+        result = result.merge(span);
     return result;
 }
 
@@ -87,18 +92,20 @@ final class Source {
     uint start_offset;
 
     this(const char[] path, const char[] text, uint start_offset)
-            in (text.length <= uint.max && start_offset + text.length <= uint.max) {
+    in(text.length <= uint.max && start_offset + text.length <= uint.max) {
         this.path = path;
         this.text = text;
         this.start_offset = start_offset;
     }
 
     /// The span encompassing this source file.
-    auto span() const { return Span(start_offset, cast(uint) text.length); }
+    auto span() const {
+        return Span(start_offset, cast(uint) text.length);
+    }
 
     /// Retrieve the source location of this global position.
     SourceLoc get_loc(uint position)
-            in (start_offset <= position && position <= span.end) {
+    in(start_offset <= position && position <= span.end) {
         uint line_num = 1;
         uint column;
 

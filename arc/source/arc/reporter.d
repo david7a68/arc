@@ -34,7 +34,7 @@ struct ArcWarning {
 }
 
 struct Reporter {
-    import arc.data.source: Span;
+    import arc.data.source : Span;
 
     ArcError[] errors;
     ArcWarning[] warnings;
@@ -44,11 +44,7 @@ struct Reporter {
     }
 
     void error(ArcError.Code error_code, Span span, const char[] message) {
-        errors ~= ArcError(
-            error_code,
-            span.start,
-            message.idup
-        );
+        errors ~= ArcError(error_code, span.start, message.idup);
     }
 
     void warn(Args...)(ArcWarning.Code warn_code, Span span, const char[] message, Args args) {
@@ -56,11 +52,7 @@ struct Reporter {
     }
 
     void warn(ArcWarning.Code warn_code, Span span, const char[] message) {
-        warnings ~= ArcWarning(
-            warn_code,
-            span.start,
-            message.idup
-        );
+        warnings ~= ArcWarning(warn_code, span.start, message.idup);
     }
 
     void clear() {
@@ -72,13 +64,13 @@ struct Reporter {
         foreach (error; errors)
             if (error.code == ecode)
                 return true;
-        
+
         return false;
     }
 }
 
 const(char[]) tprint(Args...)(const char[] message, Args args) {
-    import std.format: formattedWrite;
+    import std.format : formattedWrite;
 
     static struct Buffer {
         char[] data;
@@ -90,13 +82,15 @@ const(char[]) tprint(Args...)(const char[] message, Args args) {
             length++;
         }
 
-        const(char[]) text() const { return data[0 .. length]; }
+        const(char[]) text() const {
+            return data[0 .. length];
+        }
     }
 
     static char[4096] temp_buffer;
 
     auto buffer = Buffer(temp_buffer);
     formattedWrite(buffer, message, args);
-    
+
     return buffer.text();
 }

@@ -2,7 +2,7 @@ module arc.output.ast_printer;
 
 import arc.data.ast;
 import arc.data.source_map;
-import std.conv: to;
+import std.conv : to;
 
 const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
     auto printer = AstPrinter(sources);
@@ -43,11 +43,13 @@ const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
  *  ```
  */
 struct AstPrinter {
-    import std.array: appender, Appender;
-    import std.container.array: Array;
+    import std.array : appender, Appender;
+    import std.container.array : Array;
 
-    enum IndentType: ubyte {
-        None, Space, Bar
+    enum IndentType : ubyte {
+        None,
+        Space,
+        Bar
     }
 
     static immutable indent_str = ["NONE", "    ", " │  "];
@@ -81,57 +83,58 @@ struct AstPrinter {
         str.put(prefix);
         str.put(repr(sources, n));
         switch (n.kind) with (AstNode.Kind) {
-            case Invalid:
-                str.put(" \"");
-                str.put(sources.get_spanned_text(n.span));
-                str.put("\"\n");
-                break;
-            case List:
-                put_length();
-                write_children(n, true);
-                break;
-            case Function:
-                write_named_children(n, "Params: ", "Return Type: ", "Body: ");
-                break;
-            case Call:
-                write_named_children(n, "Target: ", "Arguments: ");
-                break;
-            case StaticAccess:
-            case Access:
-                write_named_children(n, "Source: ", "Member: ");
-                break;
-            case Definition:
-            case Variable:
-                str.put(" (");
-                str.put(n.children[0].is_resolved_symbol ? n.children[0].symbol.kind.to!string : "Unresolved");
-                str.put(")");
-                write_named_children(n, "Name: ", "Type: ", "Expr: ");
-                break;
-            case If:
-                write_named_children(n, "Condition: ", "Body: ", "Else: ");
-                break;
-            case Negate:
-            case Not:
-                write_named_children(n, "Operand: ");
-                break;
-            case Add:
-            case Subtract:
-            case Multiply:
-            case Divide:
-            case Power:
-            case Less:
-            case LessEqual:
-            case Greater:
-            case GreaterEqual:
-            case Equal:
-            case NotEqual:
-            case And:
-            case Or:
-            case Assign:
-                write_named_children(n, "Left: ", "Right: ");
-                break;
-            default:
-                write_children(n);
+        case Invalid:
+            str.put(" \"");
+            str.put(sources.get_spanned_text(n.span));
+            str.put("\"\n");
+            break;
+        case List:
+            put_length();
+            write_children(n, true);
+            break;
+        case Function:
+            write_named_children(n, "Params: ", "Return Type: ", "Body: ");
+            break;
+        case Call:
+            write_named_children(n, "Target: ", "Arguments: ");
+            break;
+        case StaticAccess:
+        case Access:
+            write_named_children(n, "Source: ", "Member: ");
+            break;
+        case Definition:
+        case Variable:
+            str.put(" (");
+            str.put(n.children[0].is_resolved_symbol
+                    ? n.children[0].symbol.kind.to!string : "Unresolved");
+            str.put(")");
+            write_named_children(n, "Name: ", "Type: ", "Expr: ");
+            break;
+        case If:
+            write_named_children(n, "Condition: ", "Body: ", "Else: ");
+            break;
+        case Negate:
+        case Not:
+            write_named_children(n, "Operand: ");
+            break;
+        case Add:
+        case Subtract:
+        case Multiply:
+        case Divide:
+        case Power:
+        case Less:
+        case LessEqual:
+        case Greater:
+        case GreaterEqual:
+        case Equal:
+        case NotEqual:
+        case And:
+        case Or:
+        case Assign:
+            write_named_children(n, "Left: ", "Right: ");
+            break;
+        default:
+            write_children(n);
         }
     }
 
@@ -142,7 +145,8 @@ struct AstPrinter {
         }
     }
 
-    void write_named_children(AstNode* n, string[] names...) in (names.length == n.children.length) {
+    void write_named_children(AstNode* n, string[] names...)
+    in(names.length == n.children.length) {
         str.put("\n");
         foreach (i, child; n.children) {
             write_child(child, i + 1 == n.children.length, names[i]);
@@ -169,13 +173,13 @@ struct AstPrinter {
 
 const(char)[] repr(SourceMap sources, AstNode* node) {
     switch (node.kind) with (AstNode.Kind) {
-        case Name:
-        case Integer:
-        case Char:
-            return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
-        case String:
-            return node.kind.to!string ~ "(" ~ sources.get_spanned_text(node.span) ~ ")";
-        default:
-            return node.kind.to!string;
+    case Name:
+    case Integer:
+    case Char:
+        return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
+    case String:
+        return node.kind.to!string ~ "(" ~ sources.get_spanned_text(node.span) ~ ")";
+    default:
+        return node.kind.to!string;
     }
 }

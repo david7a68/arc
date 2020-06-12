@@ -14,6 +14,7 @@ abstract class ArcType {
     }
 
     Kind kind;
+    size_t size;
 
     this(Kind kind) {
         this.kind = kind;
