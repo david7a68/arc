@@ -1,8 +1,9 @@
 module arc.data.ast;
 
-import arc.data.source: Span, merge_all;
-import arc.data.hash: Key;
-import arc.util: case_of;
+import arc.data.source : Span, merge_all;
+import arc.data.hash : Key;
+import arc.data.symbol : Symbol;
+import arc.util : case_of;
 
 struct AstNode {
     enum Kind : ubyte {
@@ -52,13 +53,16 @@ struct AstNode {
 
     // TODO: Make use of unused top 16 bits on x64 (and Aarch64) to store
     //       discriminant, and turn remaining bits to type pointer.
-    private ubyte[7] _type_ptr;
+    private ubyte[6] _type_ptr;
+
+    bool is_resolved_symbol;
 
     union {
         private AstNode*[] _children;
         private AstNode* _child;
         private AstNode*[2] _children_2;
-        Key symbol;
+        Key text;
+        Symbol* symbol;
         ulong value;
     }
 
@@ -67,12 +71,13 @@ struct AstNode {
         this.span = span;
     }
 
-    this(Kind kind, Span span, Key symbol) {
+    this(Kind kind, Span span, Key text) {
         this(kind, span);
-        this.symbol = symbol;
+        this.text = text;
     }
 
-    this(Kind kind, Span prefix, AstNode* child) in (prefix <= child.span) {
+    this(Kind kind, Span prefix, AstNode* child)
+    in(prefix <= child.span) {
         this(kind, prefix.merge(child.span));
         _child = child;
     }
@@ -92,37 +97,51 @@ struct AstNode {
         _children = parts;
     }
 
-    static inferred()   { return cast(AstNode*) &_inferred; }
-    static none()       { return cast(AstNode*) &_none; }
+    static inferred() {
+        return cast(AstNode*)&_inferred;
+    }
 
-    bool is_marker() const { return kind == Kind.None || kind == Kind.Inferred; }
+    static none() {
+        return cast(AstNode*)&_none;
+    }
 
-    AstNode* as_invalid(Span span) return in (children.length == 0) {
+    bool is_marker() const {
+        return kind == Kind.None || kind == Kind.Inferred;
+    }
+
+    bool is_some() const {
+        return !is_marker && kind != Kind.Invalid;
+    }
+
+    AstNode* as_invalid(Span span) return 
+    in(children.length == 0) {
         this = AstNode(Kind.Invalid, span);
         return &this;
     }
 
-    AstNode* respan(Span span) return {
+    AstNode* respan(Span span) return  {
         this.span = span;
         return &this;
     }
 
-    AstNode*[] children() return {
+    AstNode*[] children() return  {
         switch (kind) with (Kind) {
-            mixin(case_of(None, Invalid, Inferred, Name, Integer, Char, String));
-                return [];
-            mixin(case_of(Negate, Not, PointerType, Return, Loop, Import));
-                return (&_child)[0 .. 1]; // JANK
-            case Assign: .. case StaticAccess:
-                return _children_2;
-            default:
-                return _children;
+        mixin(case_of(None, Invalid, Inferred, Name, Integer, Char, String));
+            return [];
+        mixin(case_of(Negate, Not, PointerType, Return, Loop, Import));
+            return (&_child)[0 .. 1]; // JANK
+        case Assign: .. case StaticAccess:
+            return _children_2;
+        default:
+            return _children;
         }
     }
 }
 
 bool is_valid(AstNode*[] nodes...) {
-    foreach (node; nodes) if (node.kind == AstNode.Kind.Invalid) return false;
+    foreach (node; nodes)
+        if (node.kind == AstNode.Kind.Invalid)
+            return false;
     return true;
 }
 

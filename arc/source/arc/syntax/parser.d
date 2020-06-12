@@ -35,6 +35,7 @@
 
 import arc.data.ast;
 import arc.data.source: Span, merge_all;
+import arc.data.symbol: Symbol;
 import arc.reporter;
 import arc.syntax.lexer: Token, TokenBuffer, matches_one;
 import arc.syntax.syntax_allocator;
@@ -205,6 +206,33 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
     return p.make_invalid(span);
 }
 
+Symbol.Kind to_symbol_def(AstNode.Kind kind) {
+    // dfmt off
+    switch (kind) with (AstNode.Kind) {
+        case None:
+        case Invalid:
+        case Inferred:
+        case Definition:
+        case Variable:
+        case If:
+        case Return:
+        case Break:
+        case Continue:
+        case Loop:
+        case Block:
+                            return Symbol.Kind.None;
+        case Integer:       return Symbol.Kind.Integer;
+        case String:        return Symbol.Kind.String;
+        case Char:          return Symbol.Kind.Char;
+        case List:          return Symbol.Kind.List;
+        case Function:      return Symbol.Kind.Function;
+        case FunctionType:  return Symbol.Kind.Function;
+        case Import:        return Symbol.Kind.Import;
+        default:            return Symbol.Kind.ExprResult;
+    }
+    // dfmt on
+}
+
 // ----------------------------------------------------------------------
 //    _____  _          _                                 _        
 //   / ____|| |        | |                               | |       
@@ -254,16 +282,25 @@ AstNode* parse_define(ParsingContext* p) {
     if (!p.skip_required(Token.Colon))
         return name.as_invalid(start.merge(name.span));
 
-    auto type = parse_optional_type(p);
-    auto expr = parse_optional_expr(p);
-    return p.make_node(AstNode.Kind.Definition, p.make_seq(name, type, expr), start);
+    return parse_declaration(p, AstNode.Kind.Definition, name);
 }
 
 AstNode* parse_variable(ParsingContext* p, AstNode* name) {
+    return parse_declaration(p, AstNode.Kind.Variable, name);
+}
+
+AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
     p.skip_required(Token.Colon);
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
-    return p.make_node(AstNode.Kind.Variable, p.make_seq(name, type, expr));
+    auto node = p.make_node(AstNode.Kind.Variable, p.make_seq(name, type, expr));
+
+    auto symbol_kind = expr.is_some ? expr.kind.to_symbol_def() : type.kind.to_symbol_def();
+    // NOTE: This overwrites names.text with the symbol pointer!!!
+    name.symbol = p.alloc_sym(symbol_kind, name.text);
+    name.is_resolved_symbol = true;
+
+    return node;
 }
 
 AstNode* parse_statement(ParsingContext* p) {

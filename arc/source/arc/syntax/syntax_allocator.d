@@ -26,18 +26,14 @@ public:
             else
                 free(node.children);
 
-            // if (node.kind == AstNode.Kind.Name)
-            //     free(node.symbol);
+            if (node.is_resolved_symbol)
+                _sym_allocator.free(node.symbol);
 
             _ast_allocator.free(node);
         }
     }
 
     Symbol* alloc_sym(Args...)(Args args) { return _sym_allocator.alloc(args); }
-
-    void free(Symbol* symbol) {
-        _sym_allocator.free(symbol);
-    }
 
     auto get_ast_appender() {
         return _ast_allocator.get_appender();

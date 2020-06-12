@@ -2,6 +2,7 @@ module arc.output.ast_printer;
 
 import arc.data.ast;
 import arc.data.source_map;
+import std.conv: to;
 
 const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
     auto printer = AstPrinter(sources);
@@ -44,7 +45,6 @@ const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
 struct AstPrinter {
     import std.array: appender, Appender;
     import std.container.array: Array;
-    import std.conv: to;
 
     enum IndentType: ubyte {
         None, Space, Bar
@@ -101,9 +101,10 @@ struct AstPrinter {
                 write_named_children(n, "Source: ", "Member: ");
                 break;
             case Definition:
-                write_named_children(n, "Name: ", "Type: ", "Expr: ");
-                break;
             case Variable:
+                str.put(" (");
+                str.put(n.children[0].is_resolved_symbol ? n.children[0].symbol.kind.to!string : "Unresolved");
+                str.put(")");
                 write_named_children(n, "Name: ", "Type: ", "Expr: ");
                 break;
             case If:
@@ -167,8 +168,6 @@ struct AstPrinter {
 }
 
 const(char)[] repr(SourceMap sources, AstNode* node) {
-    import std.conv: to;
-
     switch (node.kind) with (AstNode.Kind) {
         case Name:
         case Integer:

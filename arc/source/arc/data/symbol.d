@@ -8,14 +8,22 @@ import arc.data.hash: Key;
 struct Symbol {
     enum Kind {
         None,
-        Type,
-        Value,
-        Variable,
+        Unknown,
+        Unresolved,
+        Char,
+        Integer,
+        String,
+        List,
         Function,
         Import,
-        ListMember,
-        Namespace
+        ExprResult
     }
 
+    Kind kind;
     Key name;
+
+    static unresolved() { return cast(Symbol*) &_unresolved; }
+    bool is_marker() const { return kind == Kind.Unresolved; }
 }
+
+private const _unresolved = Symbol(Symbol.Kind.Unresolved, 0);
