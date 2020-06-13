@@ -23,6 +23,7 @@ struct AstNode {
         Char,
         String,
         List,
+        ListMember,
         Block,
         Negate,
         Not,
