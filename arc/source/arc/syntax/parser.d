@@ -333,7 +333,7 @@ AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) 
 AstNode* parse_statement(ParsingContext* p) {
     auto stmt = () {
         switch (p.current.type) with (Token.Type) {
-        // dfmt off
+            // dfmt off
         case If:        return parse_if(p);
         case Loop:      return parse_loop(p);
         case Return:    return parse_return(p);
@@ -398,12 +398,12 @@ AstNode* parse_unary(ParsingContext* p, in AstNode.Kind kind) {
 AstNode* parse_list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type close) {
     static parse_member(bool is_type)(ParsingContext* p) {
         auto first = parse_expression(p, Precedence.Logic);
-        if (p.current.type == Token.Colon)
-            return parse_variable(p, first);
+        if (p.skip(Token.Colon))
+            return parse_declaration(p, AstNode.Kind.ListMember, first);
 
         auto parts = is_type ? p.make_seq(AstNode.none, first,
                 AstNode.inferred) : p.make_seq(AstNode.none, AstNode.inferred, first);
-        return p.make_node(AstNode.Kind.Variable, parts);
+        return p.make_node(AstNode.Kind.ListMember, parts);
     }
 
     auto list = parse_seq!(parse_member!is_type)(p,

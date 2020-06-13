@@ -125,11 +125,11 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
             Definition,
                 Name,
                 List,
-                    Variable,
+                    ListMember,
                         None,
                         Name,
                         Inferred,
-                    Variable,
+                    ListMember,
                         Name,
                         Name,
                         Inferred,
@@ -347,15 +347,15 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         assert(list.span == Span(0, 22));
         assert(check_types(list,
             List,
-                Variable,
+                ListMember,
                     Name,
                     Inferred,
                     Integer,
-                Variable,
+                ListMember,
                     None,
                     Inferred,
                     Integer,
-                Variable,
+                ListMember,
                     Name,
                     Name,
                     Access,
@@ -367,7 +367,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     with (AstNode.Kind) {
         assert(check_types("(a: T[])".parse!"expression"(),
             List,
-                Variable,
+                ListMember,
                     Name,
                     Call,
                         Name,
@@ -391,7 +391,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
             Call,
                 StaticAccess,
                     List,
-                        Variable,
+                        ListMember,
                             None,
                             Inferred,
                             Import,
@@ -427,7 +427,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         assert(check_types("(a) -> b".parse!"expression"(),
             Function,
                 List,
-                    Variable,
+                    ListMember,
                         None,
                         Inferred,
                         Name,
@@ -452,14 +452,14 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         assert(check_types("(a) -> (b) -> c".parse!"expression"(),
             Function,
                 List,
-                    Variable,
+                    ListMember,
                         None,
                         Inferred,
                         Name,
                 Inferred,
                 Function,
                     List,
-                        Variable,
+                        ListMember,
                             None,
                             Inferred,
                             Name,
@@ -473,7 +473,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expression"(),
         Function,
             List,
-                Variable,
+                ListMember,
                     None,
                     Inferred,
                     Name,
@@ -505,11 +505,11 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
         assert(check_types("a.b".parse!"type"(), Access, Name, Name));
 
-        assert(check_types("(a)".parse!"type"(), List, Variable, None, Name, Inferred));
+        assert(check_types("(a)".parse!"type"(), List, ListMember, None, Name, Inferred));
 
-        assert(check_types("(a:b)".parse!"type"(), List, Variable, Name, Name, Inferred));
+        assert(check_types("(a:b)".parse!"type"(), List, ListMember, Name, Name, Inferred));
 
-        assert(check_types("(a := 3)".parse!"type"(), List, Variable, Name, Inferred, Integer));
+        assert(check_types("(a := 3)".parse!"type"(), List, ListMember, Name, Inferred, Integer));
 
         assert(check_types("*T".parse!"type"(), PointerType, Name));
 
