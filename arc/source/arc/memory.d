@@ -20,10 +20,15 @@ size_t round_to_nearest_page_size(size_t n) {
 
 /**
  Allocates a large span of virtual memory from the OS. The allocator works as a
- simple bump allocator, with no deallocation ability.
+ simple bump allocator, with no deallocation ability. This allocator is useful
+ as a memory region that can be created, allocated from, and then freed all at
+ once, with the added bonus of only using as much physical RAM as you actually
+ use (plus a little bit more, on average).
  */
 struct VirtualMemory {
     import std.algorithm : max;
+
+    enum standard_alignment = 8;
 
 private:
     // The start of the virtual address range.
@@ -40,6 +45,11 @@ private:
     enum extra_pages_per_alloc = 1000;
 
     size_t extra_bytes_per_alloc;
+
+    size_t alloc_size(size_t size, size_t alignment) {
+        const remainder = size % alignment;
+        return size + (remainder ? size + alignment - remainder : remainder);
+    }
 
 public:
     this(size_t size_bytes) {
@@ -74,15 +84,23 @@ public:
             static assert(false, "Platform not supported for IndexedRegion.");
     }
 
+    /**
+     Allocates n bytes of memory.
+
+     For simplicity, this function will always return memory aligned to the
+     standard alignment, which is described at the top of the struct.
+     */
     void[] alloc(size_t n)
-    in(capacity >= n) {
-        const next_after_alloc = next_alloc + n;
+    in(alloc_size(n, standard_alignment) <= capacity) {
+        const alloc_size = alloc_size(n, standard_alignment);
+        const alloc_diff = alloc_size - n; // We do work already done in alloc_size here
+        auto next_after_alloc = next_alloc + alloc_size;
 
         if (next_after_alloc > top)
             reserve(next_after_alloc - top);
 
-        auto mem = next_alloc[0 .. n];
-        next_alloc += n;
+        auto mem = next_alloc[alloc_diff .. alloc_size];
+        next_alloc = next_after_alloc;
         return mem;
     }
 
