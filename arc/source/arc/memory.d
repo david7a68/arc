@@ -26,7 +26,7 @@ size_t round_to_nearest_page_size(size_t n) {
  use (plus a little bit more, on average).
  */
 struct VirtualMemory {
-    import std.algorithm : max;
+    import std.algorithm : min, max;
 
     enum standard_alignment = 8;
 
@@ -56,7 +56,7 @@ public:
         extra_bytes_per_alloc = extra_pages_per_alloc * pageSize;
 
         // round to nearest page size
-        num_reserved_bytes = max(round_to_nearest_page_size(size_bytes), extra_bytes_per_alloc);
+        num_reserved_bytes = round_to_page(size_bytes);
 
         version (Windows) {
             import core.sys.windows.windows : MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc;
@@ -110,8 +110,8 @@ public:
 
     void reserve(size_t n)
     in(capacity >= n) {
-        n = round_to_nearest_page_size(n);
-        const bytes_needed = max(extra_bytes_per_alloc, n);
+        n = round_to_page(n);
+        const bytes_needed = min(max(extra_bytes_per_alloc, n), capacity);
 
         version (Windows) {
             import core.sys.windows.windows : MEM_COMMIT, PAGE_READWRITE, VirtualAlloc;
