@@ -228,108 +228,84 @@ unittest {
     }
 }
 
-/**
- Specifically for the implementation of homogenous trees, it supports two kinds
- of allocations: a type (`T`), and an array of pointers to that type (`T*[]`).
- An implementation of an appender is also supplied for cases where the final
- size of an array is not known.
-
- When constructing a tree allocator, you need to provide a list of size classes
- in ascending order. These size classes describe the valid sizes that an array
- can have, as well as the size increase per-step when expanding an array. This
- means that all arrays have a maximum bound. This may or may not cause problems,
- though it has so far been simple to just use a size class so ridiculously large
- that other parts of the compiler should fail first.
- */
-struct TreeAllocator(T) {
+struct ArrayAllocator(T) {
+public:
     this(VirtualMemory* memory, in size_t[] size_classes) {
-        _memory = memory;
-        _objects = ObjectPool!T(_memory);
         _size_classes = size_classes;
+        _memory = memory;
 
-        _list_pools = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
-        foreach (size_class_index, ref list_pool; _list_pools)
-            list_pool = MemoryPool(_memory, size_of(size_class_index));
+        _chunks = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
+        foreach (size_class_index, ref pool; _chunks)
+            pool = MemoryPool(_memory, size_of(size_class_index));
     }
 
-    T* alloc(Args...)(Args args) {
-        return _objects.alloc(args);
-    }
+    T[] alloc_size_class(int class_index) {
+        import std.conv : emplace;
 
-    void free(T* object) {
-        _objects.free(object);
+        auto memory = cast(Header*) _chunks[class_index].alloc().ptr;
+        auto list = memory.emplace!Header(class_index);
+        return list.objects.ptr[0 .. _size_classes[class_index]];
     }
 
     Appender!T get_appender() {
         return Appender!T(&this);
     }
 
-    T*[] alloc_array(int size_class_index) {
-        import std.conv : emplace;
-
-        auto memory = cast(ListHeader*) _list_pools[size_class_index].alloc().ptr;
-        auto list = memory.emplace!ListHeader(size_class_index);
-        return list.objects.ptr[0 .. _size_classes[size_class_index]];
-    }
-
-    void expand(ref T*[] array) {
+    void expand(ref T[] array) {
         auto header = header_of(array);
-
-        auto new_array = alloc_array(header.size_class_index + 1);
+        auto new_array = alloc_size_class(header.class_index + 1);
         new_array[0 .. array.length] = array;
         free(array);
-
         array = new_array;
     }
 
-    void free(T*[] array) {
+    void free(T[] array) {
         auto header = header_of(array);
-        _list_pools[header.size_class_index].free(
-                (cast(void*) header)[0 .. size_of(header.size_class_index)]);
+        _chunks[header.class_index].free((cast(void*) header)[0 .. size_of(header.class_index)]);
     }
 
 private:
-    struct ListHeader {
-        int size_class_index;
+    struct Header {
+        int class_index;
         ubyte[4] padding;
-        T*[0] objects;
+        T[0] objects;
     }
 
-    size_t size_of(size_t size_class_index) {
-        return ListHeader.sizeof + (void*).sizeof * _size_classes[size_class_index];
+    size_t size_of(size_t class_index) {
+        return Header.sizeof + (void*).sizeof * _size_classes[class_index];
     }
 
-    ListHeader* header_of(T*[] array) {
-        return (cast(ListHeader*) array.ptr) - 1;
+    Header* header_of(T[] array) {
+        return (cast(Header*) array.ptr) - 1;
     }
 
-    VirtualMemory* _memory;
-    ObjectPool!T _objects;
-    MemoryPool[] _list_pools;
     const size_t[] _size_classes;
+    VirtualMemory* _memory;
+    MemoryPool[] _chunks;
 }
 
 struct Appender(T) {
-    TreeAllocator!T* memory;
-    T*[] array;
+    ArrayAllocator!T* memory;
+    T[] array;
     size_t count;
 
-    this(TreeAllocator!T* allocator) {
+    this(ArrayAllocator!T* allocator) {
         memory = allocator;
-        array = allocator.alloc_array(0);
+        array = allocator.alloc_size_class(0);
     }
 
     @disable this(this);
 
-    T*[] get() {
+    T[] get() {
         return array[0 .. count];
     }
 
     void abort() {
         memory.free(array);
+        array = [];
     }
 
-    void opOpAssign(string op = "~")(T* new_element) {
+    void opOpAssign(string op = "~")(T new_element) {
         if (count == array.length)
             memory.expand(array);
 
@@ -338,34 +314,28 @@ struct Appender(T) {
     }
 }
 
-@("Tree Allocator") unittest {
+@("Array Allocator") unittest {
     auto memory = VirtualMemory(1024);
-    auto allocator = TreeAllocator!(uint)(&memory, [3, 5, 8]);
+    auto allocator = ArrayAllocator!uint(&memory, [3, 5, 8]);
 
-    auto a = allocator.alloc();
-    allocator.free(a);
-    const b = allocator.alloc();
-    assert(b is a);
+    auto v = 100u;
 
-    uint v = 100;
-
-    auto c = allocator.alloc_array(0);
+    auto c = allocator.alloc_size_class(0);
     assert(c.length == 3);
-    c[1] = &v;
+    c[1] = v;
     allocator.expand(c);
     assert(c.length == 5);
-    assert(c[1] is &v);
+    assert(c[1] is v);
     allocator.expand(c);
     assert(c.length == 8);
-    assert(c[1] is &v);
+    assert(c[1] is v);
     allocator.free(c);
-    const d = allocator.alloc_array(2);
+    const d = allocator.alloc_size_class(2);
     assert(c.ptr == d.ptr);
 
     auto appender = allocator.get_appender();
-
     foreach (i; 0 .. 6)
-        appender ~= &v;
+        appender ~= v;
 
     assert(appender.get().length == 6);
     assert(appender.array.length == 8);
