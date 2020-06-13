@@ -309,7 +309,9 @@ AstNode* parse_define(ParsingContext* p) {
     if (!p.skip_required(Token.Colon))
         return name.as_invalid(start.merge(name.span));
 
-    return parse_declaration(p, AstNode.Kind.Definition, name);
+    auto node = parse_declaration(p, AstNode.Kind.Definition, name);
+    node.span = node.span.merge(start);
+    return node;
 }
 
 AstNode* parse_variable(ParsingContext* p, AstNode* name) {
@@ -320,14 +322,12 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
 AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
-    auto node = p.make_node(AstNode.Kind.Variable, p.make_seq(name, type, expr));
 
     auto symbol_kind = expr.is_some ? expr.kind.to_symbol_def() : type.kind.to_symbol_def();
-    // NOTE: This overwrites names.text with the symbol pointer!!!
-    name.symbol = p.alloc_sym(symbol_kind, name.text);
+    name.symbol = p.alloc_sym(symbol_kind, name.text); // NOTE: Overwrites names.text with the symbol pointer!!!
     name.is_resolved_symbol = true;
 
-    return node;
+    return p.make_node(kind, p.make_seq(name, type, expr));
 }
 
 AstNode* parse_statement(ParsingContext* p) {
