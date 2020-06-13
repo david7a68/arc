@@ -33,31 +33,17 @@ struct VirtualMemory {
             PAGE_READWRITE, PAGE_NOACCESS;
     }
 
-private:
-    void* region_start, region_end, next_alloc_start;
-
-    const size_t num_bytes_reserved;
-    const size_t extra_bytes_per_alloc;
-
-    // The number of additional pages allocated whenever more pages are needed.
-    enum extra_pages_per_alloc = 1000;
-
-    size_t alloc_size(size_t size, size_t alignment) {
-        const remainder = size % alignment;
-        return size + (remainder ? size + alignment - remainder : remainder);
-    }
-
 public:
     this(size_t size_bytes) {
-        extra_bytes_per_alloc = extra_pages_per_alloc * pageSize;
-        num_bytes_reserved = round_to_page(size_bytes);
+        _extra_bytes_per_alloc = extra_pages_per_alloc * pageSize;
+        _num_bytes_reserved = round_to_page(size_bytes);
 
         version (Windows) {
-            region_start = VirtualAlloc(null, num_bytes_reserved, MEM_RESERVE, PAGE_NOACCESS);
-            if (!region_start)
+            _region_start = VirtualAlloc(null, _num_bytes_reserved, MEM_RESERVE, PAGE_NOACCESS);
+            if (!_region_start)
                 assert(0, "Failed to allocate memory.");
 
-            region_end = next_alloc_start = region_start;
+            _region_end = _next_alloc_start = _region_start;
         }
         else
             static assert(false, "Platform not supported.");
@@ -67,7 +53,7 @@ public:
 
     ~this() {
         version (Windows) {
-            const status = VirtualFree(region_start, 0, MEM_RELEASE);
+            const status = VirtualFree(_region_start, 0, MEM_RELEASE);
             assert(status, "Failed to free memory.");
         }
         else
@@ -84,34 +70,48 @@ public:
     in(alloc_size(n, standard_alignment) <= capacity) {
         const alloc_size = alloc_size(n, standard_alignment);
         const alloc_diff = alloc_size - n; // This subtraction could be avoided by unpacking alloc_size
-        auto next_after_alloc = next_alloc_start + alloc_size;
+        auto next_after_alloc = _next_alloc_start + alloc_size;
 
-        if (next_after_alloc > region_end)
-            reserve(next_after_alloc - region_end);
+        if (next_after_alloc > _region_end)
+            reserve(next_after_alloc - _region_end);
 
-        auto mem = next_alloc_start[alloc_diff .. alloc_size];
-        next_alloc_start = next_after_alloc;
+        auto mem = _next_alloc_start[alloc_diff .. alloc_size];
+        _next_alloc_start = next_after_alloc;
         return mem;
     }
 
     size_t capacity() {
-        return num_bytes_reserved - (next_alloc_start - region_start);
+        return _num_bytes_reserved - (_next_alloc_start - _region_start);
     }
 
     void reserve(size_t n)
-    in(capacity >= n) {
+    in(n <= capacity) {
         n = round_to_page(n);
-        const bytes_needed = min(max(extra_bytes_per_alloc, n), capacity);
+        const bytes_needed = min(max(_extra_bytes_per_alloc, n), capacity);
 
         version (Windows) {
-            const status = VirtualAlloc(region_end, bytes_needed, MEM_COMMIT, PAGE_READWRITE);
+            const status = VirtualAlloc(_region_end, bytes_needed, MEM_COMMIT, PAGE_READWRITE);
             if (!status)
                 assert(0, "Failed to allocate memory.");
         }
         else
             static assert(false, "Platform not supported.");
 
-        region_end += bytes_needed;
+        _region_end += bytes_needed;
+    }
+
+private:
+    void* _region_start, _region_end, _next_alloc_start;
+
+    const size_t _num_bytes_reserved;
+    const size_t _extra_bytes_per_alloc;
+
+    // The number of additional pages allocated whenever more pages are needed.
+    enum extra_pages_per_alloc = 1000;
+
+    size_t alloc_size(size_t size, size_t alignment) {
+        const remainder = size % alignment;
+        return size + (remainder ? size + alignment - remainder : remainder);
     }
 }
 
@@ -279,39 +279,41 @@ private:
         return (cast(Header*) array.ptr) - 1;
     }
 
-    const size_t[] _size_classes;
     VirtualMemory* _memory;
     MemoryPool[] _chunks;
+
+    const size_t[] _size_classes;
 }
 
 struct Appender(T) {
-    ArrayAllocator!T* memory;
-    T[] array;
-    size_t count;
-
     this(ArrayAllocator!T* allocator) {
-        memory = allocator;
-        array = allocator.alloc_size_class(0);
+        _memory = allocator;
+        _array = allocator.alloc_size_class(0);
     }
 
     @disable this(this);
 
     T[] get() {
-        return array[0 .. count];
+        return _array[0 .. _count];
     }
 
     void abort() {
-        memory.free(array);
-        array = [];
+        _memory.free(_array);
+        _array = [];
     }
 
     void opOpAssign(string op = "~")(T new_element) {
-        if (count == array.length)
-            memory.expand(array);
+        if (_count == _array.length)
+            _memory.expand(_array);
 
-        array[count] = new_element;
-        count++;
+        _array[_count] = new_element;
+        _count++;
     }
+
+private:
+    T[] _array;
+    size_t _count;
+    ArrayAllocator!T* _memory;
 }
 
 @("Array Allocator") unittest {
