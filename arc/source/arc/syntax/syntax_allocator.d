@@ -47,6 +47,10 @@ public:
         return _symbols.alloc(args);
     }
 
+    void free_sym(Symbol* symbol) {
+        _symbols.free(symbol);
+    }
+
     auto get_ast_appender() {
         return _ast_arrays.get_appender();
     }
@@ -62,6 +66,7 @@ public:
     }
 
     void free_seq(AstNode*[] nodes) {
+        free(nodes);
         _ast_arrays.free(nodes);
     }
 
