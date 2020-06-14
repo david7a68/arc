@@ -17,10 +17,10 @@ final class SyntaxAllocator {
     import std.algorithm : filter;
 
 public:
-    this() {
-        _memory = VirtualMemory(128.gib);
-        _ast_nodes = ObjectPool!AstNode(&_memory);
-        _ast_arrays = ArrayPool!(AstNode*)(&_memory, ast_size_classes);
+    this(VirtualMemory* memory) {
+        _memory = memory;
+        _ast_nodes = ObjectPool!AstNode(_memory);
+        _ast_arrays = ArrayPool!(AstNode*)(_memory, ast_size_classes);
     }
 
     AstNode* alloc_ast(Args...)(Args args) {
@@ -58,7 +58,7 @@ public:
     }
 
 private:
-    VirtualMemory _memory;
+    VirtualMemory* _memory;
     ObjectPool!AstNode _ast_nodes;
     ArrayPool!(AstNode*) _ast_arrays;
 }

@@ -7,15 +7,17 @@ import arc.data.source: Span;
 import arc.syntax.parser;
 import arc.syntax.syntax_allocator;
 import arc.reporter;
-
+import arc.memory : VirtualMemory, mib;
 import std.stdio: writefln;
 
 Reporter reporter;
 ParsingContext parser;
+VirtualMemory ast_memory;
 SyntaxAllocator nodes = void;
 
 static this() {
-    nodes = new SyntaxAllocator();
+    ast_memory = VirtualMemory(1.mib);
+    nodes = new SyntaxAllocator(&ast_memory);
     parser = ParsingContext(&reporter, nodes);
 }
 

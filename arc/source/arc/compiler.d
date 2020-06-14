@@ -10,14 +10,17 @@ import arc.data.source : Source;
 import arc.data.source_map : SourceMap;
 import arc.reporter : Reporter;
 import arc.syntax.syntax_allocator;
+import arc.memory;
 
 final class Compiler {
+    VirtualMemory ast_memory;
     SyntaxAllocator syntax_allocator;
     SourceMap source_map;
     Reporter reporter;
 
     this() {
-        syntax_allocator = new SyntaxAllocator();
+        ast_memory = VirtualMemory(128.gib);
+        syntax_allocator = new SyntaxAllocator(&ast_memory);
         source_map = new SourceMap();
     }
 
