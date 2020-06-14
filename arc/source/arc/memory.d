@@ -135,6 +135,7 @@ public:
     }
 
     void[] alloc() {
+        assert(_allocator);
         if (_first_free_node is null)
             return _allocator.alloc(_chunk_size);
 
@@ -146,6 +147,7 @@ public:
 
     void free(void[] object)
     in(object.length == chunk_size) {
+        assert(_allocator);
         auto n = cast(Node*)&object[0];
         n.next = _first_free_node;
         _first_free_node = n;
@@ -228,9 +230,14 @@ unittest {
     }
 }
 
-struct ArrayAllocator(T) {
+struct ArrayPool(T) {
+    static immutable size_t[] default_size_classes = [
+        2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16_384,
+        32_768, 65_536, 131_072, 262_144
+    ];
+
 public:
-    this(VirtualMemory* memory, in size_t[] size_classes) {
+    this(VirtualMemory* memory, in size_t[] size_classes = default_size_classes) in (memory !is null) {
         _size_classes = size_classes;
         _memory = memory;
 
@@ -242,16 +249,19 @@ public:
     T[] alloc_size_class(int class_index) {
         import std.conv : emplace;
 
+        assert(_memory);
         auto memory = cast(Header*) _chunks[class_index].alloc().ptr;
         auto list = memory.emplace!Header(class_index);
         return list.objects.ptr[0 .. _size_classes[class_index]];
     }
 
     Appender!T get_appender() {
+        assert(_memory);
         return Appender!T(&this);
     }
 
     void expand(ref T[] array) {
+        assert(_memory);
         auto header = header_of(array);
         auto new_array = alloc_size_class(header.class_index + 1);
         new_array[0 .. array.length] = array;
@@ -260,6 +270,7 @@ public:
     }
 
     void free(T[] array) {
+        assert(_memory);
         auto header = header_of(array);
         _chunks[header.class_index].free((cast(void*) header)[0 .. size_of(header.class_index)]);
     }
@@ -286,7 +297,7 @@ private:
 }
 
 struct Appender(T) {
-    this(ArrayAllocator!T* allocator) {
+    this(ArrayPool!T* allocator) in (allocator !is null) {
         _memory = allocator;
         _array = allocator.alloc_size_class(0);
     }
@@ -298,6 +309,7 @@ struct Appender(T) {
     }
 
     void abort() {
+        assert(_memory);
         _memory.free(_array);
         _array = [];
     }
@@ -313,12 +325,12 @@ struct Appender(T) {
 private:
     T[] _array;
     size_t _count;
-    ArrayAllocator!T* _memory;
+    ArrayPool!T* _memory;
 }
 
 @("Array Allocator") unittest {
     auto memory = VirtualMemory(1024);
-    auto allocator = ArrayAllocator!uint(&memory, [3, 5, 8]);
+    auto allocator = ArrayPool!uint(&memory, [3, 5, 8]);
 
     auto v = 100u;
 
@@ -337,8 +349,13 @@ private:
 
     auto appender = allocator.get_appender();
     foreach (i; 0 .. 6)
-        appender ~= v;
+        appender ~= i;
 
     assert(appender.get().length == 6);
-    assert(appender.array.length == 8);
+    assert(appender._array.length == 8);
+
+    import std.stdio; writeln(appender._array);
+
+    foreach (i; 0 .. 6)
+        assert(appender._array[i] == i);
 }

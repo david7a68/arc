@@ -22,7 +22,7 @@ public:
         _memory = VirtualMemory(128.gib);
         _symbols = ObjectPool!Symbol(&_memory);
         _ast_nodes = ObjectPool!AstNode(&_memory);
-        _ast_arrays = ArrayAllocator!(AstNode*)(&_memory, ast_size_classes);
+        _ast_arrays = ArrayPool!(AstNode*)(&_memory, ast_size_classes);
     }
 
     AstNode* alloc_ast(Args...)(Args args) {
@@ -74,5 +74,5 @@ private:
     VirtualMemory _memory;
     ObjectPool!Symbol _symbols;
     ObjectPool!AstNode _ast_nodes;
-    ArrayAllocator!(AstNode*) _ast_arrays;
+    ArrayPool!(AstNode*) _ast_arrays;
 }
