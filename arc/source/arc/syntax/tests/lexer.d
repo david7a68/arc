@@ -1,5 +1,7 @@
 module arc.syntax.tests.lexer;
 
+version (unittest):
+
 import arc.data.source: Span;
 import arc.data.hash: digest;
 import arc.syntax.lexer: Token, TokenBuffer;
