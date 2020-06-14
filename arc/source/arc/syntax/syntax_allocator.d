@@ -34,9 +34,6 @@ public:
             else
                 free(node.children);
 
-            if (node.is_resolved_symbol)
-                _symbols.free(node.symbol);
-
             _ast_nodes.free(node);
         }
     }
