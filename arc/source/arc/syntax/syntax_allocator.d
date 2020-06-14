@@ -1,7 +1,6 @@
 module arc.syntax.syntax_allocator;
 
 import arc.data.ast;
-import arc.data.symbol;
 import arc.memory;
 
 /// The size of each sequence pool, calculated in number of nodes stored.
@@ -20,7 +19,6 @@ final class SyntaxAllocator {
 public:
     this() {
         _memory = VirtualMemory(128.gib);
-        _symbols = ObjectPool!Symbol(&_memory);
         _ast_nodes = ObjectPool!AstNode(&_memory);
         _ast_arrays = ArrayPool!(AstNode*)(&_memory, ast_size_classes);
     }
@@ -41,14 +39,6 @@ public:
 
             _ast_nodes.free(node);
         }
-    }
-
-    Symbol* alloc_sym(Args...)(Args args) {
-        return _symbols.alloc(args);
-    }
-
-    void free_sym(Symbol* symbol) {
-        _symbols.free(symbol);
     }
 
     auto get_ast_appender() {
@@ -72,7 +62,6 @@ public:
 
 private:
     VirtualMemory _memory;
-    ObjectPool!Symbol _symbols;
     ObjectPool!AstNode _ast_nodes;
     ArrayPool!(AstNode*) _ast_arrays;
 }

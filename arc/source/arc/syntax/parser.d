@@ -35,7 +35,6 @@ module arc.syntax.parser;
 
 import arc.data.ast;
 import arc.data.source : merge_all, Span;
-import arc.data.symbol : Symbol;
 import arc.reporter;
 import arc.syntax.lexer : matches_one, Token, TokenBuffer;
 import arc.syntax.syntax_allocator;
@@ -233,33 +232,6 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
     return p.make_invalid(span);
 }
 
-Symbol.Kind to_symbol_def(AstNode.Kind kind) {
-    // dfmt off
-    switch (kind) with (AstNode.Kind) {
-        case None:
-        case Invalid:
-        case Inferred:
-        case Definition:
-        case Variable:
-        case If:
-        case Return:
-        case Break:
-        case Continue:
-        case Loop:
-        case Block:
-                            return Symbol.Kind.None;
-        case Integer:       return Symbol.Kind.Integer;
-        case String:        return Symbol.Kind.String;
-        case Char:          return Symbol.Kind.Char;
-        case List:          return Symbol.Kind.List;
-        case Function:      return Symbol.Kind.Function;
-        case FunctionType:  return Symbol.Kind.Function;
-        case Import:        return Symbol.Kind.Import;
-        default:            return Symbol.Kind.ExprResult;
-    }
-    // dfmt on
-}
-
 // ----------------------------------------------------------------------
 //    _____  _          _                                 _        
 //   / ____|| |        | |                               | |       
@@ -322,10 +294,6 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
 AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
-
-    auto symbol_kind = expr.is_some ? expr.kind.to_symbol_def() : type.kind.to_symbol_def();
-    name.symbol = p.alloc_sym(symbol_kind, name.text); // NOTE: Overwrites names.text with the symbol pointer!!!
-    name.is_resolved_symbol = true;
 
     return p.make_node(kind, p.make_seq(name, type, expr));
 }
