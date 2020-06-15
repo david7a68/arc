@@ -133,3 +133,22 @@ import arc.memory;
     as.free(a1);
     assert(as.alloc_size_class(1) is a1);
 }
+
+@("Nesting Array Allocators") unittest {
+    auto vm = VirtualMemory(1.kib);
+    auto as = ArrayPool!uint(&vm);
+
+    auto a1 = as.get_appender();
+    a1 ~= 1;
+    a1 ~= 2;
+    a1 ~= 3;
+
+    auto a2 = as.get_appender();
+    a2 ~= 4;
+    a2 ~= 5;
+
+    a1 ~= 6;
+
+    assert(a1.get() == [1, 2, 3, 6]);
+    assert(a2.get() == [4, 5]);
+}

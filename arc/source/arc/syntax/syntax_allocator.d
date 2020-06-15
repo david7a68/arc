@@ -18,13 +18,11 @@ final class SyntaxAllocator {
 
 public:
     this(VirtualMemory* memory) {
-        _memory = memory;
-        _ast_nodes = ObjectPool!AstNode(_memory);
-        _ast_arrays = ArrayPool!(AstNode*)(_memory, ast_size_classes);
+        _allocator = TreeAllocator!AstNode(memory, ast_size_classes);
     }
 
     AstNode* alloc_ast(Args...)(Args args) {
-        return _ast_nodes.alloc(args);
+        return _allocator.objects.alloc(args);
     }
 
     void free(AstNode*[] nodes...) {
@@ -34,31 +32,25 @@ public:
             else
                 free(node.children);
 
-            _ast_nodes.free(node);
+            _allocator.objects.free(node);
         }
     }
 
     auto get_ast_appender() {
-        return _ast_arrays.get_appender();
+        return _allocator.arrays.get_appender();
     }
 
     AstNode*[] make_seq(AstNode*[] nodes...) {
-        auto size_class = 0;
-        for (; ast_size_classes[size_class] < nodes.length; size_class++) {
-        }
-
-        auto array = _ast_arrays.alloc_size_class(size_class)[0 .. nodes.length];
+        auto array = _allocator.arrays.alloc(nodes.length);
         array[] = nodes;
         return array;
     }
 
     void free_seq(AstNode*[] nodes) {
         free(nodes);
-        _ast_arrays.free(nodes);
+        _allocator.arrays.free(nodes);
     }
 
 private:
-    VirtualMemory* _memory;
-    ObjectPool!AstNode _ast_nodes;
-    ArrayPool!(AstNode*) _ast_arrays;
+    TreeAllocator!AstNode _allocator;
 }
