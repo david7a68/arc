@@ -115,6 +115,14 @@ private:
     }
 }
 
+@("Virtual Memory") unittest {
+    auto vm = VirtualMemory(1.kib);
+
+    const m1 = vm.alloc(10);
+    assert(m1.ptr !is null);
+    assert(m1.length == 10);
+}
+
 /**
  Allocates memory in fixed-sized chunks. Freed chunks are
  tracked and reused for new allocations. It does not
@@ -169,67 +177,105 @@ private:
  instead of blocks of bits.
  */
 struct ObjectPool(T) {
+    static if (is(T == class)) {
+        enum object_size = __traits(classInstanceSize, T);
+        alias PtrType = T;
+    }
+    else {
+        enum object_size = T.sizeof;
+        alias PtrType = T*;
+    }
+
     this(VirtualMemory* mem) {
-        _chunks = MemoryPool(mem, T.sizeof);
+        _chunks = MemoryPool(mem, object_size);
     }
 
     @disable this(this);
 
-    T* alloc(Args...)(Args args) {
-        auto object = cast(T*) _chunks.alloc().ptr;
-        *object = T(args); // could be a std.algorithm.moveEmplace?
+    PtrType alloc(Args...)(Args args) {
+        import std.conv : emplace;
+
+        auto object = cast(PtrType) _chunks.alloc().ptr;
+        emplace(object, args);
         return object;
     }
 
-    void free(T* t) {
-        _chunks.free(t[0 .. 1]); // automatic conversion from T[1] to void[T.sizeof]
+    void free(PtrType t) {
+        _chunks.free((cast(void*) t)[0 .. object_size]);
     }
 
     private MemoryPool _chunks;
 }
 
-@("Virtual Allocator and Object Pool")
-unittest {
-    auto vm = VirtualMemory(4.kib);
+@("Object Pool") unittest {
+    auto vm = VirtualMemory(1.kib);
 
-    {
-        const m1 = vm.alloc(10);
-        assert(m1.ptr !is null);
-        assert(m1.length == 10);
+    struct T {
+        bool a;
+        size_t b;
     }
 
-    {
-        struct T {
-            bool a;
-            size_t b;
-        }
+    auto ts = ObjectPool!T(&vm);
 
-        auto ts = ObjectPool!T(&vm);
+    auto t1 = ts.alloc();
+    assert(t1 !is null);
+    assert(ts._chunks._first_free_node is null);
 
-        auto t1 = ts.alloc();
-        assert(t1 !is null);
-        assert(ts._chunks._first_free_node is null);
+    auto t2 = ts.alloc();
+    assert(t2 !is null);
+    assert(ts._chunks._first_free_node is null);
 
-        auto t2 = ts.alloc();
-        assert(t2 !is null);
-        assert(ts._chunks._first_free_node is null);
+    ts.free(t1);
+    assert(ts._chunks._first_free_node is cast(void*) t1);
 
-        ts.free(t1);
-        assert(ts._chunks._first_free_node is cast(void*) t1);
+    auto t3 = ts.alloc();
+    assert(t3 !is null);
+    assert(ts._chunks._first_free_node is null);
+    assert(t3 == t1);
 
-        auto t3 = ts.alloc();
-        assert(t3 !is null);
-        assert(ts._chunks._first_free_node is null);
-        assert(t3 == t1);
+    ts.free(t2);
+    ts.free(t3);
 
-        ts.free(t2);
-        ts.free(t3);
-
-        assert(ts.alloc() == t3);
-        assert(ts.alloc() == t2);
-    }
+    assert(ts.alloc() == t3);
+    assert(ts.alloc() == t2);
 }
 
+@("Object Pool 2") unittest {
+    class T {
+        bool a;
+        size_t b;
+    }
+
+    auto vm = VirtualMemory(1.kib);
+    auto ts = ObjectPool!T(&vm);
+
+    auto t1 = ts.alloc();
+    assert(t1);
+    t1.b = 3;
+
+    auto t2 = ts.alloc();
+    assert(t2 && t2.b == 0);
+
+    ts.free(t1);
+    ts.free(t2);
+
+    assert(ts.alloc() == t2);
+    assert(ts.alloc() == t1);
+}
+
+/**
+ An array pool provides a mechanism to allocate arrays of varying sizes from a
+ virtual memory region, such that the array size does not need to be known
+ beforehand.
+
+ As arrays are promoted in size, the old array is preserved in a pool for future
+ array allocations to use.
+
+ In keeping with D's arrays, arrays of class types only contains references to
+ memory where the actual objects reside and not the object's memory itself.
+ Managing memory for classes is thus best done in conjunction with an object
+ pool.
+ */
 struct ArrayPool(T) {
     static immutable size_t[] default_size_classes = [
         2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16_384,
@@ -237,13 +283,22 @@ struct ArrayPool(T) {
     ];
 
 public:
-    this(VirtualMemory* memory, in size_t[] size_classes = default_size_classes) in (memory !is null) {
+    this(VirtualMemory* memory, in size_t[] size_classes = default_size_classes)
+    in(memory !is null) {
         _size_classes = size_classes;
         _memory = memory;
 
         _chunks = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
         foreach (size_class_index, ref pool; _chunks)
             pool = MemoryPool(_memory, size_of(size_class_index));
+    }
+
+    T[] alloc(size_t length) {
+        auto size_class = 0;
+        for (; _size_classes[size_class] < length; size_class++) {
+        }
+
+        return alloc_size_class(size_class);
     }
 
     T[] alloc_size_class(int class_index) {
@@ -283,7 +338,7 @@ private:
     }
 
     size_t size_of(size_t class_index) {
-        return Header.sizeof + (void*).sizeof * _size_classes[class_index];
+        return Header.sizeof + T.sizeof * _size_classes[class_index];
     }
 
     Header* header_of(T[] array) {
@@ -297,7 +352,8 @@ private:
 }
 
 struct Appender(T) {
-    this(ArrayPool!T* allocator) in (allocator !is null) {
+    this(ArrayPool!T* allocator)
+    in(allocator !is null) {
         _memory = allocator;
         _array = allocator.alloc_size_class(0);
     }
@@ -332,6 +388,11 @@ private:
     auto memory = VirtualMemory(1024);
     auto allocator = ArrayPool!uint(&memory, [3, 5, 8]);
 
+    assert(allocator._chunks.length == 3);
+    assert(allocator._chunks[0].chunk_size == allocator.Header.sizeof + 3 * uint.sizeof);
+    assert(allocator._chunks[1].chunk_size == allocator.Header.sizeof + 5 * uint.sizeof);
+    assert(allocator._chunks[2].chunk_size == allocator.Header.sizeof + 8 * uint.sizeof);
+
     auto v = 100u;
 
     auto c = allocator.alloc_size_class(0);
@@ -354,8 +415,50 @@ private:
     assert(appender.get().length == 6);
     assert(appender._array.length == 8);
 
-    import std.stdio; writeln(appender._array);
-
     foreach (i; 0 .. 6)
         assert(appender._array[i] == i);
+}
+
+@("Array Allocator with Reference Types") unittest {
+    class T {
+        bool a;
+        size_t b;
+    }
+
+    auto vm = VirtualMemory(1.kib);
+    auto ts = ObjectPool!T(&vm);
+    auto as = ArrayPool!T(&vm);
+
+    auto t1 = ts.alloc();
+    auto t2 = ts.alloc();
+    auto a1 = as.alloc_size_class(0);
+    assert(as.header_of(a1).class_index == 0);
+    assert(a1.length == 2);
+
+    a1[0] = t1;
+    assert(a1[0] is t1);
+    assert(a1[1] is null);
+
+    a1[1] = t2;
+    assert(a1 == [t1, t2]);
+
+    as.expand(a1);
+    assert(as.header_of(a1).class_index == 1);
+    assert(a1.length == 4); 
+    assert(a1 == [t1, t2, null, null]);
+
+    as.free(a1);
+    assert(as.alloc_size_class(1) is a1);
+}
+
+struct TreeAllocator(T) {
+    VirtualMemory* memory;
+    ArrayPool!(T*) arrays;
+    ObjectPool!T objects;
+
+    this(VirtualMemory* memory, in size_t[] size_classes = ArrayPool!(T*).default_size_classes) {
+        this.memory = memory;
+        arrays = ArrayPool!(T*)(memory, size_classes);
+        objects = ObjectPool!T(memory);
+    }
 }
