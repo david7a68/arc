@@ -3,4 +3,9 @@ description "A minimal D application."
 authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
-dependency "silly" version="~>1.0.2"
+
+configuration "unittest" {
+    dependency "silly" version="~>1.0.2"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

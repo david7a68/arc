@@ -1,6 +1,4 @@
-module arc.syntax.tests.parser;
-
-version (unittest):
+module tests.arc.parser;
 
 import arc.data.ast;
 import arc.data.source: Span;

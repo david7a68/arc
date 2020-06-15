@@ -1,6 +1,4 @@
-module arc.syntax.tests.lexer;
-
-version (unittest):
+module tests.arc.lexer;
 
 import arc.data.source: Span;
 import arc.data.hash: digest;
