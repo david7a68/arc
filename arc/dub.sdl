@@ -13,6 +13,7 @@ configuration "executable" {
 
 configuration "unittest" {
     dependency "silly" version="~>1.0.2"
+    excludedSourceFiles "source/app.d"
     sourcePaths "source" "tests"
     importPaths "source" "tests"
 }
