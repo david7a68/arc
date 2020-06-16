@@ -4,7 +4,14 @@ authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
 
-buildType "unittest" {
+sourcePaths "source" "tests"
+importPaths "source" "tests"
+
+configuration "executable" {
+    targetType "executable"
+}
+
+configuration "unittest" {
     dependency "silly" version="~>1.0.2"
     sourcePaths "source" "tests"
     importPaths "source" "tests"

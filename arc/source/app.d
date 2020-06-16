@@ -12,12 +12,10 @@ int do_cli(string[] args) {
 	return 0;
 }
 
-version (unittest) {}
-else
 int main(string[] args) {
-	return do_cli(args);
+	// return do_cli(args);
 	// return do_cli(["", "lexer.arc"]);
-	// import arc.semantic.tests.collect_info;
-	// test();
-	// return 0;
+	import tests.arc.collect_info;
+	test();
+	return 0;
 }
