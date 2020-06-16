@@ -2,11 +2,10 @@ module arc.data.symbol;
 
 import arc.data.hash : Key;
 
-/**
- A symbol is represents a single usage of a named entity.
- */
 struct Symbol {
-    enum Kind {
+    import arc.util: case_of;
+
+    enum Kind : ubyte {
         None,
         Unknown,
         Unresolved,
@@ -19,10 +18,20 @@ struct Symbol {
         ExprResult
     }
 
+public:
     Kind kind;
+    private ubyte[7] padding;
+
     Key name;
+    void* type;
+
+    this(Kind kind, Key name) {
+        this.kind = kind;
+        this.name = name;
+    }
 
     static unresolved() {
+        static immutable _unresolved = Symbol(Kind.Unresolved, 0);
         return cast(Symbol*)&_unresolved;
     }
 
@@ -30,5 +39,3 @@ struct Symbol {
         return kind == Kind.Unresolved;
     }
 }
-
-private const _unresolved = Symbol(Symbol.Kind.Unresolved, 0);
