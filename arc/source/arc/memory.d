@@ -235,7 +235,7 @@ public:
         for (; _size_classes[size_class] < length; size_class++) {
         }
 
-        return alloc_size_class(size_class);
+        return alloc_size_class(size_class)[0 .. length];
     }
 
     T[] alloc_size_class(int class_index) {
