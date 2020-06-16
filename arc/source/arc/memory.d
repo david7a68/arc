@@ -222,11 +222,10 @@ public:
     this(VirtualMemory* memory, in size_t[] size_classes = default_size_classes)
     in(memory !is null) {
         _size_classes = size_classes;
-        _memory = memory;
 
-        _chunks = cast(MemoryPool[]) _memory.alloc(MemoryPool.sizeof * size_classes.length);
+        _chunks = cast(MemoryPool[]) memory.alloc(MemoryPool.sizeof * size_classes.length);
         foreach (size_class_index, ref pool; _chunks)
-            pool = MemoryPool(_memory, size_of(size_class_index));
+            pool = MemoryPool(memory, size_of(size_class_index));
     }
 
     T[] alloc(size_t length) {
@@ -240,19 +239,19 @@ public:
     T[] alloc_size_class(int class_index) {
         import std.conv : emplace;
 
-        assert(_memory);
+        assert(_chunks);
         auto memory = cast(Header*) _chunks[class_index].alloc().ptr;
         auto list = memory.emplace!Header(class_index);
         return list.objects.ptr[0 .. _size_classes[class_index]];
     }
 
     Appender!T get_appender() {
-        assert(_memory);
+        assert(_chunks);
         return Appender!T(&this);
     }
 
     void expand(ref T[] array) {
-        assert(_memory);
+        assert(_chunks);
         auto header = header_of(array);
         auto new_array = alloc_size_class(header.class_index + 1);
         new_array[0 .. array.length] = array;
@@ -261,7 +260,7 @@ public:
     }
 
     void free(T[] array) {
-        assert(_memory);
+        assert(_chunks);
         auto header = header_of(array);
         _chunks[header.class_index].free((cast(void*) header)[0 .. size_of(header.class_index)]);
     }
@@ -281,7 +280,6 @@ private:
         return (cast(Header*) array.ptr) - 1;
     }
 
-    VirtualMemory* _memory;
     MemoryPool[] _chunks;
 
     const size_t[] _size_classes;
@@ -321,12 +319,10 @@ private:
 }
 
 struct TreeAllocator(T) {
-    VirtualMemory* memory;
     ArrayPool!(T*) arrays;
     ObjectPool!T objects;
 
     this(VirtualMemory* memory, in size_t[] size_classes = ArrayPool!(T*).default_size_classes) {
-        this.memory = memory;
         arrays = ArrayPool!(T*)(memory, size_classes);
         objects = ObjectPool!T(memory);
     }
