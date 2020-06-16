@@ -229,6 +229,8 @@ public:
     }
 
     T[] alloc(size_t length) {
+        if (length == 0) return [];
+
         auto size_class = 0;
         for (; _size_classes[size_class] < length; size_class++) {
         }
