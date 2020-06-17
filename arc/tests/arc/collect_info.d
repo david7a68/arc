@@ -27,7 +27,8 @@ bool is_symbol_equivalent(TestData data, Symbol.Kind[] expected_symbols...) {
     import std.stdio : writefln;
 
     Symbol.Kind[] flattened;
-    void flatten(ScopeTreeNode* s) in (s) {
+    void flatten(ScopeTreeNode* s)
+    in(s) {
         if (s.kind == ScopeTreeNode.Kind.Symbol) {
             flattened ~= s.symbol.kind;
         }
@@ -52,29 +53,77 @@ bool is_symbol_equivalent(TestData data, Symbol.Kind[] expected_symbols...) {
     return are_equal;
 }
 
-bool check_types(TestData data, Symbol.Kind[] expected_symbols...) {
+bool check_symbols(TestData data, Symbol.Kind[] expected_symbols...) {
     return is_symbol_equivalent(data, expected_symbols);
 }
 
-@("Generating Scope Trees from Variables") unittest {
+@("Scope Trees from Variables") unittest {
     auto vm = VirtualMemory(4.kib);
     auto syntax = new SyntaxAllocator(&vm);
 
     // dfmt off
-    auto ast = syntax.alloc_ast(
-        AstNode.Kind.Variable, Span(), syntax.make_seq(
-            syntax.alloc_ast(AstNode.Kind.Name, Span(), 0),
-            AstNode.inferred,
-            syntax.alloc_ast(AstNode.Kind.Add,
-                syntax.alloc_ast(AstNode.Kind.Name, Span(), 0),
-                syntax.alloc_ast(AstNode.Kind.Name, Span(), 0)
-            )
-        ));
-    // dfmt on
-    scope (exit)
-        syntax.free(ast);
+    // a := b + c;
+    with (AstNode.Kind) {
+        auto ast = syntax.alloc_ast(
+            Variable, Span(), syntax.make_seq(
+                syntax.alloc_ast(Name, Span(), 0),
+                AstNode.inferred,
+                syntax.alloc_ast(Add,
+                    syntax.alloc_ast(Name, Span(), 0),
+                    syntax.alloc_ast(Name, Span(), 0))));
 
-    with (Symbol.Kind)
-        assert(get_semantic_info(&vm, "Variable with Value", ast)
-                .check_types(ExprResult, Unresolved, Unresolved));
+        with (Symbol.Kind)
+            assert(get_semantic_info(&vm, "Variable with Value", ast)
+                    .check_symbols(Variable, Unresolved, Unresolved));
+    }
+    // dfmt on
+}
+
+@("Scope Trees from Blocks") unittest {
+    auto vm = VirtualMemory(4.kib);
+    auto syntax = new SyntaxAllocator(&vm);
+
+    // dfmt off
+    with (AstNode.Kind) {
+        auto ast = syntax.alloc_ast(
+            Block, syntax.make_seq(
+                syntax.alloc_ast(Block, Span()),
+                syntax.alloc_ast(Block, Span()),
+                syntax.alloc_ast(Block, Span()),
+                syntax.alloc_ast(Block, syntax.make_seq(
+                    syntax.alloc_ast(Block, Span()),
+                    syntax.alloc_ast(Block, Span()),
+                    syntax.alloc_ast(Block, Span()),
+                    syntax.alloc_ast(Block, Span()))),
+                syntax.alloc_ast(Block, Span()),
+                syntax.alloc_ast(Block, Span())));
+        // dfmt on
+
+        assert(get_semantic_info(&vm, "Scopes Trees from Blocks", ast).check_symbols());
+    }
+}
+
+@("Scope Trees from Functions") unittest {
+    auto vm = VirtualMemory(4.kib);
+    auto syntax = new SyntaxAllocator(&vm);
+
+    // dfmt off
+    // (a : T) -> return a
+    with (AstNode.Kind) {
+        auto ast = syntax.alloc_ast(
+            Function, syntax.make_seq(
+                syntax.alloc_ast(List, syntax.make_seq(
+                    syntax.alloc_ast(ListMember, syntax.make_seq(
+                        syntax.alloc_ast(Name, Span(), 0),
+                        syntax.alloc_ast(Name, Span(), 0),
+                        AstNode.inferred)))),
+                    AstNode.inferred,
+                    syntax.alloc_ast(Return, Span(),
+                        syntax.alloc_ast(Name, Span(), 0))));
+
+        assert(get_semantic_info(&vm, "Scope Trees from Functions", ast).check_symbols(
+                Symbol.Kind.FunctionParam, Symbol.Kind.Unresolved,
+                Symbol.Kind.Unresolved));
+    }
+    // dfmt on
 }

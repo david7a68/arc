@@ -5,17 +5,23 @@ import arc.data.hash : Key;
 struct Symbol {
     import arc.util: case_of;
 
+    /**
+     Different kinds of symbols can be used in different syntactical constructs
+     such as binary operations, indexing, calling, etc.
+
+     These serve as a kind of rough type system, which are further refined
+     during type checking.
+     */
     enum Kind : ubyte {
         None,
         Unknown,
         Unresolved,
-        Char,
-        Integer,
-        String,
         List,
         Function,
+        FunctionParam,
         Import,
-        ExprResult
+        Variable,
+        Constant,
     }
 
 public:

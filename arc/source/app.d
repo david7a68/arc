@@ -13,9 +13,6 @@ int do_cli(string[] args) {
 }
 
 int main(string[] args) {
-	// return do_cli(args);
-	// return do_cli(["", "lexer.arc"]);
-	import tests.arc.collect_info;
-	test();
-	return 0;
+	return do_cli(args);
+	// return 0;
 }

@@ -18,8 +18,8 @@ import arc.semantic.scope_tree;
     assert(builder.current.kind == ScopeTreeNode.Kind.FileScope);
 
     {
-        const symbol1 = builder.add_symbol(Symbol.Kind.Char, 1234);
-        assert(symbol1 && symbol1.kind == Symbol.Kind.Char && symbol1.name == 1234);
+        const symbol1 = builder.add_symbol(Symbol.Kind.Unknown, 1234);
+        assert(symbol1 && symbol1.kind == Symbol.Kind.Unknown && symbol1.name == 1234);
         const node1 = builder.current.children.get()[0];
         assert(node1.kind == ScopeTreeNode.Kind.Symbol && node1.symbol is symbol1);
     }
