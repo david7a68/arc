@@ -16,8 +16,6 @@ struct Symbol {
         None,
         Unknown,
         Unresolved,
-        List,
-        Function,
         FunctionParam,
         Import,
         Variable,

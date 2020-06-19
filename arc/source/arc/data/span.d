@@ -7,7 +7,8 @@ module arc.data.span;
  In its compressed format, the span supports a total compilation size of 128
  gibibytes, and a per-file size of up to 128 mebibytes. This should be plenty
  of space for now. If there ever comes a time where larger spans are needed,
- it should be simple to use a large virtual array to hold expanded spans indexed by `start`. 128 billion large spans should be enough, right?
+ it should be simple to use a large virtual array to hold expanded spans indexed
+ by `start`. 128 billion large spans should be enough, right?
  */
 struct Span {
     import std.bitmanip : bitfields;
