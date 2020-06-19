@@ -4,10 +4,16 @@ import arc.data.ast;
 import arc.data.symbol;
 import arc.memory : VirtualMemory;
 
-void collect_semantic_info(SymbolTable* symbols, AstNode*[] syntax...) {
+void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
+    static make_decl_symbol(SymbolTable* symbols, Symbol.Kind kind, AstNode* name)
+    in(name.kind == AstNode.Kind.Name) {
+        auto symbol = symbols.make_symbol(kind, name.text);
+        name.symbol = symbol;
+    }
+
     foreach (node; syntax) switch (node.kind) with (AstNode.Kind) {
     default:
-        collect_semantic_info(symbols, node.children);
+        collect_declarations(symbols, node.children);
         break;
 
     case Block:
@@ -17,7 +23,7 @@ void collect_semantic_info(SymbolTable* symbols, AstNode*[] syntax...) {
         // }
         symbols.push_scope();
         foreach (child; node.children)
-            collect_semantic_info(symbols, child);
+            collect_declarations(symbols, child);
         symbols.pop_scope();
         break;
 
@@ -39,11 +45,11 @@ void collect_semantic_info(SymbolTable* symbols, AstNode*[] syntax...) {
 
             make_decl_symbol(symbols, Symbol.Kind.FunctionParam, name);
 
-            collect_semantic_info(symbols, type);
-            collect_semantic_info(symbols, expr);
+            collect_declarations(symbols, type);
+            collect_declarations(symbols, expr);
         }
 
-        collect_semantic_info(symbols, node.children[1 .. $]);
+        collect_declarations(symbols, node.children[1 .. $]);
         symbols.pop_scope();
         break;
 
@@ -56,12 +62,12 @@ void collect_semantic_info(SymbolTable* symbols, AstNode*[] syntax...) {
         if (node.children[0].is_some)
             make_decl_symbol(symbols, Symbol.Kind.FunctionParam, node.children[0]);
 
-        collect_semantic_info(symbols, node.children[1 .. $]);
+        collect_declarations(symbols, node.children[1 .. $]);
         break;
 
     case Definition:
         make_decl_symbol(symbols, Symbol.Kind.Constant, node.children[0]);
-        collect_semantic_info(symbols, node.children[1 .. $]);
+        collect_declarations(symbols, node.children[1 .. $]);
         break;
 
     case Variable:
@@ -71,14 +77,9 @@ void collect_semantic_info(SymbolTable* symbols, AstNode*[] syntax...) {
         //     Value
         // }
         make_decl_symbol(symbols, Symbol.Kind.Variable, node.children[0]);
-        collect_semantic_info(symbols, node.children[1 .. $]);
+        collect_declarations(symbols, node.children[1 .. $]);
         break;
     }
 }
 
-void make_decl_symbol(SymbolTable* symbols, Symbol.Kind kind, AstNode* name)
-in(name.kind == AstNode.Kind.Name) {
-    auto symbol = symbols.make_symbol(kind, name.text);
-    name.symbol = symbol;
-    name.is_resolved_symbol = true;
-}
+
