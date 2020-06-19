@@ -247,6 +247,10 @@ public:
         return list.objects.ptr[0 .. _size_classes[class_index]];
     }
 
+    T[] alloc_one_size_larger(T[] reference) {
+        return alloc_size_class(header_of(reference).class_index + 1);
+    }
+
     Appender!T get_appender() {
         assert(_chunks);
         return Appender!T(&this);
