@@ -4,9 +4,6 @@ authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
 
-sourcePaths "source" "tests"
-importPaths "source" "tests"
-
 configuration "executable" {
     targetType "executable"
 }
