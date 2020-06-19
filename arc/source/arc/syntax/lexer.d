@@ -146,7 +146,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
     auto make_2_op(char second, Token.Type two_char_type, Token.Type one_char_type) {
         static const length = [2, 1];
         Token.Type[2] ttype = [two_char_type, one_char_type];
-        bool is_single_char = (current + 1 == end) | (*(current + 1) != second); //bit to avoid short circuit
+        const is_single_char = (current + 1 == end) | (*(current + 1) != second); //bit to avoid short circuit
         return make_token(ttype[is_single_char], length[is_single_char]);
     }
 

@@ -332,7 +332,7 @@ AstNode* parse_statement(ParsingContext* p) {
         return stmt;
 
     default:
-        auto semicolon = p.take_required(Token.Semicolon);
+        const semicolon = p.take_required(Token.Semicolon);
         if (semicolon.type == Token.Semicolon) {
             stmt.span += semicolon.span;
             return stmt;

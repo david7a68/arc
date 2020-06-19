@@ -1,12 +1,12 @@
 module tests.arc.parser;
 
 import arc.data.ast;
-import arc.data.span: Span;
+import arc.data.span : Span;
 import arc.syntax.parser;
 import arc.syntax.syntax_allocator;
 import arc.reporter;
 import arc.memory : VirtualMemory, mib;
-import std.stdio: writefln;
+import std.stdio : writefln;
 
 Reporter reporter;
 ParsingContext parser;
@@ -28,16 +28,17 @@ struct ParseResult {
 auto parse(string op)(string text) {
     parser.begin(text);
     reporter.clear();
-    mixin ("return ParseResult(parse_" ~ op ~ "(&parser), text);");
+    mixin("return ParseResult(parse_" ~ op ~ "(&parser), text);");
 }
 
 bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
-    import std.algorithm: equal;
+    import std.algorithm : equal;
 
     AstNode.Kind[] tree_types;
 
     void flatten(AstNode* n) {
-        if (n is null) return;
+        if (n is null)
+            return;
         tree_types ~= n.kind;
 
         foreach (child; n.children)
@@ -63,8 +64,9 @@ bool check_types(ParseResult result, AstNode.Kind[] types...) {
 }
 
 bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
-    if (!type_equivalent(result, AstNode.Kind.Invalid)) return false;
-    
+    if (!type_equivalent(result, AstNode.Kind.Invalid))
+        return false;
+
     if (!reporter.has_error(error)) {
         writefln("The parser did not encounter the expected error.");
         writefln("Source: %s\nExpected: %s\nErrors: %s", result.text, error, reporter.errors);
@@ -72,7 +74,9 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     if (reporter.errors.length != count) {
-        writefln("The number of errors encountered was unexpected.\nSource: %s\nExpected:    %s\nEncountered: %s\nErrors:\n\t%s", result.text, count, reporter.errors.length, reporter.errors);
+        writefln("The number of errors encountered was unexpected."
+                ~ "\nSource: %s\nExpected:    %s\nEncountered: %s\nErrors:\n\t%s",
+                result.text, count, reporter.errors.length, reporter.errors);
         return false;
     }
 
@@ -484,7 +488,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Function Error") unittest {
     auto err = "() ->;".parse!"expression"();
-//  We don't care what error occurs, as long as one does
+    //  We don't care what error occurs, as long as one does
     assert(check_types(err, AstNode.Kind.Invalid));
 }
 
@@ -537,7 +541,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parser Resynchronization")
 unittest {
     with (AstNode.Kind) {
-        auto stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"statement";
+        const stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"statement";
         assert(stmt.span == Span(0, 17));
         assert(!parser.is_done);
     }
