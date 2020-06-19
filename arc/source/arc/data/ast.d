@@ -142,6 +142,10 @@ struct AstNode {
             return _children[0 .. num_children];
         }
     }
+
+    bool opCast(T : bool)() const {
+        return is_some();
+    }
 }
 
 bool is_valid(AstNode*[] nodes...) {

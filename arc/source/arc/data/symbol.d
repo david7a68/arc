@@ -67,9 +67,10 @@ public:
         return _num_symbols;
     }
 
-    void push_scope() {
+    ScopedSymbolTable* push_scope() {
         _current = _tables.alloc(_current, &_table_entries);
         _num_scopes++;
+        return _current;
     }
 
     Symbol* make_symbol(Args...)(Args args) {

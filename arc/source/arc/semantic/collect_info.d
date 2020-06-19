@@ -5,12 +5,6 @@ import arc.data.symbol;
 import arc.memory : VirtualMemory;
 
 void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
-    static make_decl_symbol(SymbolTable* symbols, Symbol.Kind kind, AstNode* name)
-    in(name.kind == AstNode.Kind.Name) {
-        auto symbol = symbols.make_symbol(kind, name.text);
-        name.symbol = symbol;
-    }
-
     foreach (node; syntax) switch (node.kind) with (AstNode.Kind) {
     default:
         collect_declarations(symbols, node.children);
@@ -21,7 +15,7 @@ void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
         // Scope {
         //     Body
         // }
-        symbols.push_scope();
+        node.symbol_table = symbols.push_scope();
         foreach (child; node.children)
             collect_declarations(symbols, child);
         symbols.pop_scope();
@@ -36,15 +30,14 @@ void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
         auto parameters = node.children[0];
         assert(parameters.kind == AstNode.Kind.List);
 
-        symbols.push_scope();
+        node.symbol_table = symbols.push_scope();
         foreach (param; parameters.children) {
             assert(param.kind == AstNode.Kind.ListMember);
             auto name = param.children[0];
             auto type = param.children[1];
             auto expr = param.children[2];
 
-            make_decl_symbol(symbols, Symbol.Kind.FunctionParam, name);
-
+            name.symbol = symbols.make_symbol(Symbol.Kind.FunctionParam, name.text);
             collect_declarations(symbols, type);
             collect_declarations(symbols, expr);
         }
@@ -59,14 +52,15 @@ void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
         //     Type
         //     Value
         // }
-        if (node.children[0].is_some)
-            make_decl_symbol(symbols, Symbol.Kind.FunctionParam, node.children[0]);
+        if (auto name = node.children[0])
+            name.symbol = symbols.make_symbol(Symbol.Kind.Variable, name.text);
 
         collect_declarations(symbols, node.children[1 .. $]);
         break;
 
     case Definition:
-        make_decl_symbol(symbols, Symbol.Kind.Constant, node.children[0]);
+        auto name = node.children[0];
+        name.symbol = symbols.make_symbol(Symbol.Kind.Constant, name.text);
         collect_declarations(symbols, node.children[1 .. $]);
         break;
 
@@ -76,10 +70,9 @@ void collect_declarations(SymbolTable* symbols, AstNode*[] syntax...) {
         //     Type
         //     Value
         // }
-        make_decl_symbol(symbols, Symbol.Kind.Variable, node.children[0]);
+        auto name = node.children[0];
+        name.symbol = symbols.make_symbol(Symbol.Kind.Variable, name.text);
         collect_declarations(symbols, node.children[1 .. $]);
         break;
     }
 }
-
-

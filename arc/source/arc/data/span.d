@@ -32,7 +32,7 @@ public:
         return start + length;
     }
 
-    int opCmp(Span rhs) {
+    int opCmp(Span rhs) const {
         if (start < rhs.start)
             return -1;
         if (start > rhs.start)
