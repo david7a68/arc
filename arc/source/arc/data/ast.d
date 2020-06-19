@@ -2,7 +2,7 @@ module arc.data.ast;
 
 import arc.data.span;
 import arc.data.hash : Key;
-import arc.data.symbol : Symbol;
+import arc.data.symbol : Symbol, ScopedSymbolTable;
 import arc.util : case_of;
 
 struct AstNode {
@@ -49,22 +49,24 @@ struct AstNode {
         PointerType
     }
 
-    Span span;
     Kind kind;
-
-    // TODO: Make use of unused top 16 bits on x64 (and Aarch64) to store
-    //       discriminant, and turn remaining bits to type pointer.
-    private ubyte[6] _type_ptr;
-
-    bool is_resolved_symbol;
+    uint num_children;
+    Span span;
 
     union {
-        private AstNode*[] _children;
-        private AstNode* _child;
+        struct {
+            union {
+                Symbol* symbol;
+                ScopedSymbolTable* symbol_table;
+            }
+            union {
+                ulong value;
+                Key text;
+                private AstNode* _child;
+                private AstNode** _children;
+            }
+        }
         private AstNode*[2] _children_2;
-        Key text;
-        Symbol* symbol;
-        ulong value;
     }
 
     this(Kind kind, Span span) {
@@ -79,8 +81,9 @@ struct AstNode {
 
     this(Kind kind, Span prefix, AstNode* child)
     in(prefix <= child.span) {
-        this(kind, prefix.merge(child.span));
+        this(kind, prefix + child.span);
         _child = child;
+        num_children = 1;
     }
 
     this(Kind kind, AstNode* left, AstNode* right, Span prefix = Span()) {
@@ -90,12 +93,14 @@ struct AstNode {
 
     this(Kind kind, Span outer, AstNode*[] parts) {
         this(kind, outer);
-        _children = parts;
+        _children = parts.ptr;
+        num_children = cast(uint) parts.length;
     }
 
     this(Kind kind, AstNode*[] parts, Span extra = Span()) {
         this(kind, merge_all(extra, parts[0].span, parts[$ - 1].span));
-        _children = parts;
+        _children = parts.ptr;
+        num_children = cast(uint) parts.length;
     }
 
     static inferred() {
@@ -134,7 +139,7 @@ struct AstNode {
         case Assign: .. case StaticAccess:
             return _children_2;
         default:
-            return _children;
+            return _children[0 .. num_children];
         }
     }
 }
