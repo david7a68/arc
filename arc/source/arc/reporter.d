@@ -15,7 +15,7 @@ struct ArcError {
 
     Code code;
     // Source parsed_file;
-    uint location;
+    size_t location;
     string message;
 }
 
@@ -29,12 +29,12 @@ struct ArcWarning {
     alias Code this;
 
     Code code;
-    uint location;
+    size_t location;
     string message;
 }
 
 struct Reporter {
-    import arc.data.source : Span;
+    import arc.data.span : Span;
 
     ArcError[] errors;
     ArcWarning[] warnings;

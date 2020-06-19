@@ -1,6 +1,6 @@
 module tests.arc.lexer;
 
-import arc.data.source: Span;
+import arc.data.span: Span;
 import arc.data.hash: digest;
 import arc.syntax.lexer: Token, TokenBuffer;
 

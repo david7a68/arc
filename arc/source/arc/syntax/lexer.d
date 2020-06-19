@@ -1,7 +1,7 @@
 module arc.syntax.lexer;
 
 import arc.data.hash : digest, Key;
-import arc.data.source : Span;
+import arc.data.span;
 import arc.util : case_of;
 
 /// A `Token` is the smallest discrete unit of the source text that the compiler
@@ -54,9 +54,9 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
  */
 struct TokenBuffer(size_t buffer_size) {
 private:
-    uint _current_token_index;
-    uint _buffer_span_offset;
-    uint _next_buffer_index;
+    size_t _current_token_index;
+    size_t _buffer_span_offset;
+    size_t _next_buffer_index;
 
 public:
     Token[buffer_size] tokens;
@@ -64,7 +64,7 @@ public:
     Token current;
     bool done;
 
-    this(const(char)[] text, uint span_offset = 0) {
+    this(const(char)[] text, size_t span_offset = 0) {
         source_text = text;
         _buffer_span_offset = span_offset;
         fill_buffer();
@@ -72,7 +72,7 @@ public:
         done = current.type == Token.Done;
     }
 
-    void begin(const(char)[] text, uint span_offset = 0) {
+    void begin(const(char)[] text, size_t span_offset = 0) {
         this = typeof(this)(text, span_offset);
     }
 
@@ -131,11 +131,11 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, uint span_offset) {
+Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, size_t span_offset) {
     auto start = current;
 
     auto final_span() {
-        return Span(cast(uint)(start - base) + span_offset, cast(uint)(current - start));
+        return Span(start - base + span_offset, current - start);
     }
 
     auto make_token(Token.Type t, size_t advance_n, Key key = 0) {

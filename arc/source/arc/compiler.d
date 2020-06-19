@@ -68,7 +68,7 @@ final class Compiler {
 
 void report_errors(Reporter* reporter, SourceMap sources) {
     import std.stdio : writefln;
-    import arc.data.source : Span;
+    import arc.data.span : Span;
 
     foreach (error; reporter.errors) {
         auto coords = sources.coordinates_of(Span(error.location, 0));

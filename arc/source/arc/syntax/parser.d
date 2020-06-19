@@ -34,7 +34,7 @@
 module arc.syntax.parser;
 
 import arc.data.ast;
-import arc.data.source : merge_all, Span;
+import arc.data.span;
 import arc.reporter;
 import arc.syntax.lexer : matches_one, Token, TokenBuffer;
 import arc.syntax.syntax_allocator;
@@ -151,7 +151,7 @@ struct ParsingContext {
             return nodes.alloc_ast(kind, prefix, node);
         scope (exit)
             nodes.free(node);
-        return make_invalid(prefix.merge(node.span));
+        return make_invalid(prefix + node.span);
     }
 
     AstNode* make_node(AstNode.Kind kind, AstNode*[] seq, Span extra = Span()) {
@@ -162,7 +162,7 @@ struct ParsingContext {
             nodes.free_seq(seq);
         auto span = extra;
         foreach (node; seq)
-            span = span.merge(node.span);
+            span += node.span;
         return make_invalid(span);
     }
 
@@ -171,7 +171,7 @@ struct ParsingContext {
             return nodes.alloc_ast(kind, first, second);
         scope (exit)
             nodes.free(first, second);
-        return make_invalid(first.span.merge(second.span));
+        return make_invalid(first.span + second.span);
     }
 
     AstNode* make_invalid(Span span) {
@@ -207,7 +207,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
         if (!node.is_valid) {
             scope (exit)
                 seq.abort();
-            return p.make_invalid(start.merge(node.span));
+            return p.make_invalid(start + node.span);
         }
 
         if (info.delim) {
@@ -215,7 +215,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
                     && !p.skip_required(info.delim)) {
                 scope (exit)
                     seq.abort();
-                return p.make_invalid(start.merge(node.span));
+                return p.make_invalid(start + node.span);
             }
             while (p.current.type == info.delim)
                 p.advance();
@@ -224,7 +224,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
         seq ~= node;
     }
 
-    auto span = p.current.span.merge(start);
+    auto span = p.current.span + start;
     if (p.skip_required(info.close))
         return p.alloc_ast(info.kind, span, seq.get());
 
@@ -279,10 +279,10 @@ AstNode* parse_define(ParsingContext* p) {
     auto name = parse_symbol(p, AstNode.Kind.Name);
 
     if (!p.skip_required(Token.Colon))
-        return name.as_invalid(start.merge(name.span));
+        return name.as_invalid(start + name.span);
 
     auto node = parse_declaration(p, AstNode.Kind.Definition, name);
-    node.span = node.span.merge(start);
+    node.span += start;
     return node;
 }
 
@@ -334,7 +334,7 @@ AstNode* parse_statement(ParsingContext* p) {
     default:
         auto semicolon = p.take_required(Token.Semicolon);
         if (semicolon.type == Token.Semicolon) {
-            stmt.span = stmt.span.merge(semicolon.span);
+            stmt.span += semicolon.span;
             return stmt;
         }
         scope (exit)

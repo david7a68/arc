@@ -1,6 +1,6 @@
 module arc.data.ast;
 
-import arc.data.source : Span, merge_all;
+import arc.data.span;
 import arc.data.hash : Key;
 import arc.data.symbol : Symbol;
 import arc.util : case_of;

@@ -1,70 +1,6 @@
 module arc.data.source;
 
-/**
- * A fixed region of a source text. These are used basically everywhere for
- * error reporting, so they have to be as small as possible. For convenience,
- * a 0-initialized span is considered invalid.
- *
- * A span is indexed from the start of the file map, so that information about
- * the source file may be retrieved by searching through the map.
- */
-struct Span {
-    /// The global index of the first character in this span
-    uint start;
-    /// The number of characters in this span
-    uint length;
-
-    /// The index of the last character in this span + 1
-    auto end() const {
-        return start + length;
-    }
-
-    auto merge(Span rhs) const {
-        import std.algorithm : max, min;
-
-        if (this == Span())
-            return rhs == Span() ? this : rhs;
-
-        const lo = min(start, rhs.start);
-        return Span(lo, max(end, rhs.end) - lo);
-    }
-
-    /// Compare starting positions for these spans
-    int opCmp(Span rhs) {
-        if (start < rhs.start)
-            return -1;
-        if (start > rhs.start)
-            return 1;
-        return 0;
-    }
-}
-
-/**
- * Merges all non-0 spans together or returns the 0 span if all spans are 0.
- */
-auto merge_all(Span[] spans...) {
-    import std.algorithm : filter;
-
-    Span result;
-    foreach (span; spans.filter!(s => s != Span()))
-        result = result.merge(span);
-    return result;
-}
-
-@("merge spans") unittest {
-    auto a = Span(10, 20);
-    auto b = Span(5, 15);
-    auto c = Span(15, 25);
-    auto d = Span(5, 25);
-    assert(a.merge(a) == Span(10, 20));
-    assert(a.merge(b) == Span(5, 25));
-    assert(a.merge(c) == Span(10, 30));
-    assert(a.merge(d) == Span(5, 25));
-    assert(b.merge(c) == Span(5, 35));
-
-    assert(merge_all(a, b, c, d) == Span(5, 35));
-    assert(merge_all(Span(), Span()) == Span());
-}
+import arc.data.span;
 
 /**
  * The SourceLoc bundles together the line/column information of a single
@@ -89,10 +25,9 @@ final class Source {
     const char[] text;
     /// The global index of the first character in the source file. This should
     /// never be 0.
-    uint start_offset;
+    size_t start_offset;
 
-    this(const char[] path, const char[] text, uint start_offset)
-    in(text.length <= uint.max && start_offset + text.length <= uint.max) {
+    this(const char[] path, const char[] text, size_t start_offset) {
         this.path = path;
         this.text = text;
         this.start_offset = start_offset;
@@ -100,7 +35,7 @@ final class Source {
 
     /// The span encompassing this source file.
     auto span() const {
-        return Span(start_offset, cast(uint) text.length);
+        return Span(start_offset, text.length);
     }
 
     /// Retrieve the source location of this global position.

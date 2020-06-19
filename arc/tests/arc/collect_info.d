@@ -1,7 +1,7 @@
 module tests.arc.collect_info;
 
 import arc.data.ast;
-import arc.data.source;
+import arc.data.span;
 import arc.data.symbol;
 import arc.memory;
 import arc.semantic.collect_info;

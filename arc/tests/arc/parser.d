@@ -1,7 +1,7 @@
 module tests.arc.parser;
 
 import arc.data.ast;
-import arc.data.source: Span;
+import arc.data.span: Span;
 import arc.syntax.parser;
 import arc.syntax.syntax_allocator;
 import arc.reporter;
