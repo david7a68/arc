@@ -54,7 +54,6 @@ enum Precedence {
 
 struct ParsingContext {
     TokenBuffer!4096 tokens;
-
     SyntaxAllocator nodes;
     Reporter* reporter;
 
@@ -70,7 +69,6 @@ struct ParsingContext {
     void begin(const char[] source_text) {
         tokens.begin(source_text);
         reporter.clear();
-
         indentation_level = tokens.current.type == Token.Lbrace ? 1 : 0;
     }
 
@@ -98,17 +96,17 @@ struct ParsingContext {
     }
 
     bool skip(Token.Type type) {
-        const matched = type == tokens.current.type;
-        if (matched)
-            advance();
-        return matched;
+        return skip(type == tokens.current.type);
     }
 
     bool skip_required(Token.Type type) {
-        const matched = match_required(type);
-        if (matched)
+        return skip(match_required(type));
+    }
+
+    bool skip(bool should_skip) {
+        if (should_skip)
             advance();
-        return matched;
+        return should_skip;
     }
 
     Token take_required(Token.Type type) {
@@ -141,42 +139,46 @@ struct ParsingContext {
         }
 
         auto close = take();
-        if (tokens.current.type == Token.Semicolon)
-            return take();
-        return close;
+        return tokens.current.type == Token.Semicolon ? take() : close;
     }
 
-    AstNode* make_node(AstNode.Kind kind, Span prefix, AstNode* node) {
-        if (is_valid(node))
-            return nodes.alloc_ast(kind, prefix, node);
-        scope (exit)
-            nodes.free(node);
-        return make_invalid(prefix + node.span);
-    }
+    AstNode* make_unary(AstNode.Kind kind, Span prefix, AstNode* node) {
+        auto span = prefix + node.span;
 
-    AstNode* make_node(AstNode.Kind kind, AstNode*[] seq, Span extra = Span()) {
-        if (is_valid(seq))
-            return nodes.alloc_ast(kind, seq, extra);
+        if (node.is_valid)
+            return nodes.alloc_ast(kind, span, node);
 
-        scope (exit)
-            nodes.free_seq(seq);
-        auto span = extra;
-        foreach (node; seq)
-            span += node.span;
+        nodes.free(node);
         return make_invalid(span);
     }
 
-    AstNode* make_node(AstNode.Kind kind, AstNode* first, AstNode* second) {
-        if (is_valid(first, second))
-            return nodes.alloc_ast(kind, first, second);
-        scope (exit)
-            nodes.free(first, second);
-        return make_invalid(first.span + second.span);
+    AstNode* make_n_ary_prefix(AstNode.Kind kind, Span prefix, AstNode*[] seq...)
+    in(seq.length > 1) {
+        return make_seq(kind, prefix + merge_spans(seq), nodes.make_seq(seq));
+    }
+
+    AstNode* make_n_ary(AstNode.Kind kind, AstNode*[] seq...)
+    in(seq.length > 1) {
+        return make_seq(kind, merge_spans(seq), nodes.make_seq(seq));
+    }
+
+    AstNode* make_seq(AstNode.Kind kind, Span span, AstNode*[] seq) {
+        if (seq.is_valid)
+            return nodes.alloc_ast(kind, span, seq);
+        
+        nodes.free(seq);
+        return make_invalid(span);
     }
 
     AstNode* make_invalid(Span span) {
         return nodes.alloc_ast(AstNode.Kind.Invalid, span);
     }
+}
+
+Span merge_spans(AstNode*[] nodes...) {
+    import std.algorithm: map, fold;
+
+    return nodes.map!(n => n.span).fold!((a, b) => (a + b));
 }
 
 auto parse_optional_type(ParsingContext* p) {
@@ -201,25 +203,18 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
         return p.make_invalid(start);
 
     auto seq = p.nodes.get_ast_appender();
-    while (!p.current.type.matches_one(Token.Done, info.close)) {
+    while (!p.current.type.matches_one(Token.Done, info.close)) with (info) {
         auto node = parse_member(p);
 
-        if (!node.is_valid) {
+        const bad_delim = delim && !p.current.type.matches_one(Token.Done, close) && !p.skip_required(delim);
+        if (!node.is_valid || bad_delim) {
             scope (exit)
                 seq.abort();
             return p.make_invalid(start + node.span);
         }
 
-        if (info.delim) {
-            if (!p.current.type.matches_one(info.close, Token.Done)
-                    && !p.skip_required(info.delim)) {
-                scope (exit)
-                    seq.abort();
-                return p.make_invalid(start + node.span);
-            }
-            while (p.current.type == info.delim)
-                p.advance();
-        }
+        while (p.current.type == delim)
+            p.advance();
 
         seq ~= node;
     }
@@ -245,7 +240,7 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
 AstNode* parse_assign(ParsingContext* p, AstNode* lhs) {
     p.skip_required(Token.Equals);
     auto rhs = parse_expression(p);
-    return p.make_node(AstNode.Kind.Assign, lhs, rhs);
+    return p.make_n_ary(AstNode.Kind.Assign, lhs, rhs);
 }
 
 immutable block_sequence = SequenceNodeInfo(AstNode.Kind.Block, Token.Lbrace, Token.Rbrace);
@@ -255,13 +250,13 @@ AstNode* parse_if(ParsingContext* p) {
     auto cond = parse_expression(p);
     auto body = parse_seq!parse_statement(p, block_sequence);
     auto base = p.skip(Token.Else) ? parse_statement(p) : AstNode.none;
-    return p.make_node(AstNode.Kind.If, p.make_seq(cond, body, base), start);
+    return p.make_n_ary_prefix(AstNode.Kind.If, start, cond, body, base);
 }
 
 AstNode* parse_loop(ParsingContext* p) {
     auto start = p.take_required(Token.Loop).span;
     auto body = parse_seq!parse_statement(p, block_sequence);
-    return p.make_node(AstNode.Kind.Loop, start, body);
+    return p.make_unary(AstNode.Kind.Loop, start, body);
 }
 
 AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
@@ -271,7 +266,7 @@ AstNode* parse_escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
 AstNode* parse_return(ParsingContext* p) {
     auto start = p.take_required(Token.Return).span;
     auto value = p.current.type != Token.Semicolon ? parse_expression(p) : AstNode.none;
-    return p.make_node(AstNode.Kind.Return, start, value);
+    return p.make_unary(AstNode.Kind.Return, start, value);
 }
 
 AstNode* parse_define(ParsingContext* p) {
@@ -294,8 +289,7 @@ AstNode* parse_variable(ParsingContext* p, AstNode* name) {
 AstNode* parse_declaration(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
     auto type = parse_optional_type(p);
     auto expr = parse_optional_expr(p);
-
-    return p.make_node(kind, p.make_seq(name, type, expr));
+    return p.make_n_ary(kind, name, type, expr);
 }
 
 AstNode* parse_statement(ParsingContext* p) {
@@ -312,9 +306,6 @@ AstNode* parse_statement(ParsingContext* p) {
         // dfmt on
         default:
             auto prefix = parse_prefix(p);
-
-            if (!prefix.is_valid)
-                return prefix;
 
             if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Colon)
                 return parse_variable(p, prefix);
@@ -360,7 +351,7 @@ AstNode* parse_symbol(ParsingContext* p, in AstNode.Kind kind) {
 }
 
 AstNode* parse_unary(ParsingContext* p, in AstNode.Kind kind) {
-    return p.make_node(kind, p.take().span, parse_expression(p, Precedence.Call));
+    return p.make_unary(kind, p.take().span, parse_expression(p, Precedence.Call));
 }
 
 AstNode* parse_list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type close) {
@@ -369,9 +360,10 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type
         if (p.skip(Token.Colon))
             return parse_declaration(p, AstNode.Kind.ListMember, first);
 
-        auto parts = is_type ? p.make_seq(AstNode.none, first,
-                AstNode.inferred) : p.make_seq(AstNode.none, AstNode.inferred, first);
-        return p.make_node(AstNode.Kind.ListMember, parts);
+        static if (is_type)
+            return p.make_n_ary(AstNode.Kind.ListMember, AstNode.none, first, AstNode.inferred);
+        else
+            return p.make_n_ary(AstNode.Kind.ListMember, AstNode.none, AstNode.inferred, first);
     }
 
     auto list = parse_seq!(parse_member!is_type)(p,
@@ -386,23 +378,19 @@ AstNode* parse_list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type
 }
 
 AstNode* parse_binary(alias parse_fn)(ParsingContext* p, AstNode* lhs, in Infix op) {
-    if (op.skip_token)
-        p.advance();
-
+    p.skip(op.skip_token);
     auto rhs = parse_fn(p, cast(Precedence)(op.prec + op.is_left_associative));
-    return p.make_node(op.kind, lhs, rhs);
+    return p.make_n_ary(op.kind, lhs, rhs);
 }
 
 AstNode* parse_function(ParsingContext* p, AstNode* list) {
     p.advance();
-    // () -> expr | () -> {} | () -> expr {}
     auto first = p.current.type == Token.Lbrace ? AstNode.inferred : parse_expression(p);
     // dfmt off
-    auto parts = p.current.type == Token.Lbrace
-               ? p.make_seq(list, first, parse_seq!parse_statement(p, block_sequence))
-               : p.make_seq(list, AstNode.inferred, first);
+    return p.current.type == Token.Lbrace
+           ? p.make_n_ary(AstNode.Kind.Function, list, first, parse_seq!parse_statement(p, block_sequence))
+           : p.make_n_ary(AstNode.Kind.Function, list, AstNode.inferred, first);
     // dfmt on
-    return p.make_node(AstNode.Kind.Function, parts);
 }
 
 AstNode* parse_expression(ParsingContext* p, in Precedence prec = Precedence.Assign) {
@@ -468,10 +456,12 @@ AstNode* parse_infix(ParsingContext* p, AstNode* expr, in Precedence prec = Prec
     ];
     //dfmt on
 
-    for (Infix i = infixes[p.current.type]; expr.is_valid && prec <= i.prec; i = infixes[p
-            .current.type])
-        expr = parse_binary!parse_expression(p, expr, i);
+    return parse_infix!parse_expression(p, expr, prec, infixes[]);
+}
 
+AstNode* parse_infix(alias fn)(ParsingContext* p, AstNode* expr, Precedence prec, in Infix[] ops) {
+    for (Infix i = ops[p.current.type]; expr.is_valid && prec <= i.prec; i = ops[p.current.type])
+        expr = parse_binary!fn(p, expr, i);
     return expr;
 }
 
@@ -494,7 +484,7 @@ struct Infix {
 
 AstNode* parse_function_type(ParsingContext* p, AstNode* list) {
     p.skip_required(Token.Rarrow);
-    return p.make_node(AstNode.Kind.FunctionType, list, parse_type(p));
+    return p.make_n_ary(AstNode.Kind.FunctionType, list, parse_type(p));
 }
 
 AstNode* parse_type(ParsingContext* p, Precedence prec = Precedence.Assign) {
@@ -503,21 +493,18 @@ AstNode* parse_type(ParsingContext* p, Precedence prec = Precedence.Assign) {
 
 AstNode* parse_type_prefix(ParsingContext* p) {
     switch (p.current.type) with (Token.Type) {
-    case Star:
-        return p.make_node(AstNode.Kind.PointerType, p.take().span, parse_type(p));
-    case Name:
-        return parse_symbol(p, AstNode.Kind.Name);
-    case Lparen:
-        return parse_list!true(p, Lparen, Rparen);
-    case Lbracket:
-        return parse_list!true(p, Lbracket, Rbracket);
+    // dfmt off
+    case Star:      return p.make_unary(AstNode.Kind.PointerType, p.take().span, parse_type(p));
+    case Name:      return parse_symbol(p, AstNode.Kind.Name);
+    case Lparen:    return parse_list!true(p, Lparen, Rparen);
+    case Lbracket:  return parse_list!true(p, Lbracket, Rbracket);
     default:
+    // dfmt on
     }
 
     p.reporter.error(ArcError.TokenExpectMismatch, p.current.span,
             "A type expression may be an access, symbol, list, function type, or call, not a %s",
             p.current.type);
-
     return p.make_invalid(p.take().span);
 }
 
@@ -530,8 +517,5 @@ AstNode* parse_type_infix(ParsingContext* p, AstNode* expr, Precedence prec) {
     ];
     // dfmt on
 
-    for (Infix i = ops[p.current.type]; expr.is_valid && prec <= i.prec; i = ops[p.current.type])
-        expr = parse_binary!parse_type(p, expr, i);
-
-    return expr;
+    return parse_infix!parse_type(p, expr, prec, ops);
 }

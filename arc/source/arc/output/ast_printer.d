@@ -104,10 +104,10 @@ struct AstPrinter {
             break;
         case Definition:
         case Variable:
-            str.put(" (");
-            str.put(n.children[0].symbol
-                    ? n.children[0].symbol.kind.to!string : "Unresolved");
-            str.put(")");
+            // str.put(" (");
+            // str.put(n.children[0].symbol
+            //         ? n.children[0].symbol.kind.to!string : "Unresolved");
+            // str.put(")");
             write_named_children(n, "Name: ", "Type: ", "Expr: ");
             break;
         case If:

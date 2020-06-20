@@ -2,7 +2,7 @@ module arc.data.ast;
 
 import arc.data.span;
 import arc.data.hash : Key;
-import arc.data.symbol : Symbol, ScopedSymbolTable;
+import arc.data.symbol : Symbol;
 import arc.util : case_of;
 
 struct AstNode {
@@ -53,20 +53,15 @@ struct AstNode {
     uint num_children;
     Span span;
 
+    uint type_id;
+    uint scope_id;
+
     union {
-        struct {
-            union {
-                Symbol* symbol;
-                ScopedSymbolTable* symbol_table;
-            }
-            union {
-                ulong value;
-                Key text;
-                private AstNode* _child;
-                private AstNode** _children;
-            }
-        }
-        private AstNode*[2] _children_2;
+        ulong value;
+        Key text;
+        Symbol* symbol;
+        private AstNode* _child;
+        private AstNode** _children;
     }
 
     this(Kind kind, Span span) {
@@ -86,19 +81,8 @@ struct AstNode {
         num_children = 1;
     }
 
-    this(Kind kind, AstNode* left, AstNode* right, Span prefix = Span()) {
-        this(kind, merge_all(prefix, left.span, right.span));
-        _children_2 = [left, right];
-    }
-
     this(Kind kind, Span outer, AstNode*[] parts) {
         this(kind, outer);
-        _children = parts.ptr;
-        num_children = cast(uint) parts.length;
-    }
-
-    this(Kind kind, AstNode*[] parts, Span extra = Span()) {
-        this(kind, merge_all(extra, parts[0].span, parts[$ - 1].span));
         _children = parts.ptr;
         num_children = cast(uint) parts.length;
     }
@@ -136,8 +120,6 @@ struct AstNode {
             return [];
         mixin(case_of(Negate, Not, PointerType, Return, Loop, Import));
             return (&_child)[0 .. 1]; // JANK
-        case Assign: .. case StaticAccess:
-            return _children_2;
         default:
             return _children[0 .. num_children];
         }
