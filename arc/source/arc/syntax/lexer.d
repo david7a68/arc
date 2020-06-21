@@ -27,8 +27,6 @@ struct Token {
         // dfmt on
     }
 
-    alias Type this;
-
     ///
     Type type;
     ///
@@ -69,7 +67,7 @@ public:
         _buffer_span_offset = span_offset;
         fill_buffer();
         current = tokens[0];
-        done = current.type == Token.Done;
+        done = current.type == Token.Type.Done;
     }
 
     void begin(const(char)[] text, size_t span_offset = 0) {
@@ -82,7 +80,7 @@ public:
             fill_buffer();
 
         current = tokens[_current_token_index];
-        done = current.type == Token.Done;
+        done = current.type == Token.Type.Done;
     }
 
     void fill_buffer() {
@@ -94,7 +92,7 @@ public:
 
         // get first token, might be Done
         tokens[0] = scan_token(base, current, end, _buffer_span_offset);
-        for (size_t i = 1; tokens[i - 1].type != Token.Done && i < tokens.length;
+        for (size_t i = 1; tokens[i - 1].type != Token.Type.Done && i < tokens.length;
                 i++)
             tokens[i] = scan_token(base, current, end, _buffer_span_offset);
 
@@ -110,17 +108,17 @@ private:
 immutable Token.Type[Key] keywords;
 
 shared static this() {
-    keywords[digest("and")] = Token.And;
-    keywords[digest("or")] = Token.Or;
-    keywords[digest("not")] = Token.Not;
-    keywords[digest("if")] = Token.If;
-    keywords[digest("else")] = Token.Else;
-    keywords[digest("loop")] = Token.Loop;
-    keywords[digest("break")] = Token.Break;
-    keywords[digest("return")] = Token.Return;
-    keywords[digest("continue")] = Token.Continue;
-    keywords[digest("def")] = Token.Def;
-    keywords[digest("import")] = Token.Import;
+    keywords[digest("and")] = Token.Type.And;
+    keywords[digest("or")] = Token.Type.Or;
+    keywords[digest("not")] = Token.Type.Not;
+    keywords[digest("if")] = Token.Type.If;
+    keywords[digest("else")] = Token.Type.Else;
+    keywords[digest("loop")] = Token.Type.Loop;
+    keywords[digest("break")] = Token.Type.Break;
+    keywords[digest("return")] = Token.Type.Return;
+    keywords[digest("continue")] = Token.Type.Continue;
+    keywords[digest("def")] = Token.Type.Def;
+    keywords[digest("import")] = Token.Type.Import;
 }
 
 /**
@@ -228,7 +226,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         }
     }
 
-    return Token(Token.Done, Span(cast(uint)(end - base), 0));
+    return Token(Token.Type.Done, Span(cast(uint)(end - base), 0));
 }
 
 ulong string_to_int(const char[] text) {
