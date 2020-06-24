@@ -184,6 +184,14 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     assert(check_types("continue;".parse!"stmt"(), Continue));
 }
 
+@("Parse Return") unittest {
+    with (AstNode.Kind)
+    assert(check_types("return;".parse!"stmt"(), Return, None));
+
+    with (AstNode.Kind)
+    assert(check_types("return a;".parse!"stmt"(), Return, SymbolRef));
+}
+
 @("Parse If") unittest {
     with (AstNode.Kind)
     assert(check_types("if a {} else if b {} else c;".parse!"stmt"(),

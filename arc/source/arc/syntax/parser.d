@@ -82,7 +82,7 @@ struct Parser {
                 return block();
 
             case Token.Type.Return:
-                return alloc!Return(take().span, is_end_of_expr ? expr() : none);
+                return alloc!Return(take().span, is_end_of_expr ? none : expr());
 
             case Token.Type.Break:
                 return alloc!Break(take().span);
