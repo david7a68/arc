@@ -37,6 +37,8 @@ struct Token {
         ///
         ulong value;
     }
+
+    bool opCast(T: bool)() { return type != Type.None; }
 }
 
 /// Returns `true` if `type` matches one of the types in `types`.

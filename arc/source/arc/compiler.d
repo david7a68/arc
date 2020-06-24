@@ -6,21 +6,26 @@ struct CompileOptions {
 }
 
 import arc.data.ast;
+import arc.data.symbol;
 import arc.data.source : Source;
 import arc.data.source_map : SourceMap;
 import arc.reporter : Reporter;
-import arc.syntax.syntax_allocator;
 import arc.memory;
 
 final class Compiler {
     VirtualMemory ast_memory;
-    SyntaxAllocator syntax_allocator;
+    ArrayPool!(AstNode*) ast_arrays;
+
+    SymbolTable symbol_table;
+
     SourceMap source_map;
     Reporter reporter;
 
     this() {
         ast_memory = VirtualMemory(128.gib);
-        syntax_allocator = new SyntaxAllocator(&ast_memory);
+        ast_arrays = ArrayPool!(AstNode*)(&ast_memory);
+        symbol_table = SymbolTable(&ast_memory);
+
         source_map = new SourceMap();
     }
 
@@ -34,17 +39,17 @@ final class Compiler {
     }
 
     AstNode*[] parse(string name, string source) {
-        import arc.syntax.parser : ParsingContext, stmt;
+        import arc.syntax.parser : Parser, ParseUnit;
 
         source_map.put(name, source);
 
-        auto statements = syntax_allocator.get_ast_appender();
-        auto parser = ParsingContext(&reporter, syntax_allocator);
-        parser.begin(source);
+        auto statements = ast_arrays.get_appender();
+        Parser parser;
+        parser.begin(ParseUnit(&ast_memory, &ast_arrays, &reporter, &symbol_table, source));
 
         size_t num_errors;
         while (!parser.is_done) {
-            auto statement = stmt(&parser);
+            auto statement = parser.stmt();
 
             statements ~= statement;
             if (!statement.is_valid)

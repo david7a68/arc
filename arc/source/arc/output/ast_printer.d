@@ -108,7 +108,7 @@ struct AstPrinter {
             // str.put(n.children[0].symbol
             //         ? n.children[0].symbol.kind.to!string : "Unresolved");
             // str.put(")");
-            write_named_children(n, "Name: ", "Type: ", "Expr: ");
+            write_named_children(n, "Type: ", "Expr: ");
             break;
         case If:
             write_named_children(n, "Condition: ", "Body: ", "Else: ");
@@ -173,7 +173,7 @@ struct AstPrinter {
 
 const(char)[] repr(SourceMap sources, AstNode* node) {
     switch (node.kind) with (AstNode.Kind) {
-    case Name:
+    case SymbolRef:
     case Integer:
     case Char:
         return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";

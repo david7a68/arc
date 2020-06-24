@@ -14,5 +14,4 @@ int do_cli(string[] args) {
 
 int main(string[] args) {
 	return do_cli(args);
-	// return 0;
 }
