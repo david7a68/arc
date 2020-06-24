@@ -53,6 +53,21 @@ struct Parser {
     bool is_done() { return token.type == Token.Type.Done; }
     // dfmt on
 
+    AstNode*[] parse(ParseUnit unit) {
+        begin(unit);
+        auto statements = arrays.get_appender();
+        size_t num_errors;
+        while (!is_done && num_errors < 5) {
+            auto statement = stmt();
+            statements ~= statement;
+
+            if (!statement.is_valid)
+                num_errors++;
+        }
+        end();
+        return statements.get();
+    }
+
     AstNode* stmt() {
         auto stmt = () {
             switch (token.type) {
@@ -133,6 +148,32 @@ struct Parser {
 
     alias infix_expr = infix!(expr, binops);
 
+    // dfmt off
+    private immutable Infix[256] binops = [
+        Token.Type.Less        : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Less),
+        Token.Type.LessEqual   : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.LessEqual),
+        Token.Type.Greater     : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Greater),
+        Token.Type.GreaterEqual: Infix(Precedence.Compare,  true,  true,  AstNode.Kind.GreaterEqual),
+        Token.Type.EqualEqual  : Infix(Precedence.Equality, true,  true,  AstNode.Kind.Equal),
+        Token.Type.BangEqual   : Infix(Precedence.Equality, true,  true,  AstNode.Kind.NotEqual),
+        Token.Type.And         : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
+        Token.Type.Or          : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
+        Token.Type.Plus        : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Add),
+        Token.Type.Minus       : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Subtract),
+        Token.Type.Star        : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Multiply),
+        Token.Type.Slash       : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Divide),
+        Token.Type.Caret       : Infix(Precedence.Power,    false, true,  AstNode.Kind.Power),
+        Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
+        Token.Type.ColonColon  : Infix(Precedence.Call,     true,  true,  AstNode.Kind.StaticAccess),
+        Token.Type.Name        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.Integer     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.Char        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.String      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+    ];
+    // dfmt on
+
     AstNode* infix(alias fn, Infix[] ops)(Precedence p, AstNode* lhs) {
         for (Infix op = ops[token.type]; lhs.is_valid && p <= op.prec; op = ops[token.type]) {
             skip(op.skip_token);
@@ -144,7 +185,8 @@ struct Parser {
     AstNode* prefix() {
         // dfmt off
         switch (token.type) {
-        case Token.Type.Bang: case Token.Type.Not:    return alloc!UnOp(AstNode.Kind.Not, take().span, expr(Precedence.Call));
+        case Token.Type.Bang:
+        case Token.Type.Not:               return alloc!UnOp(AstNode.Kind.Not, take().span, expr(Precedence.Call));
         case Token.Type.Minus:             return alloc!UnOp(AstNode.Kind.Negate, take().span, expr(Precedence.Call));
         case Token.Type.Import:            return alloc!Import(take().span, expr(Precedence.Call));
         case Token.Type.Name:              return alloc!SymbolRef(token.span, take().key);
@@ -168,11 +210,11 @@ struct Parser {
     }
 
     AstNode* list(Token.Type open, Token.Type close)() {
-        auto node = seq!(List, list_member, open, close, Token.Type.Comma)();
+        auto node = seq!(List, list_member!false, open, close, Token.Type.Comma)();
         return token.type == Token.Type.Rarrow ? function_(node) : node;
     }
 
-    AstNode* list_member() {
+    AstNode* list_member(bool is_type)() {
         auto first = prefix();
         if (first.kind == AstNode.Kind.SymbolRef && token.type == Token.Type.Colon) {
             const s = first.span;
@@ -181,7 +223,10 @@ struct Parser {
             return decl(AstNode.Kind.ListMember, s, k);
         }
 
-        return alloc!Declaration(AstNode.Kind.ListMember, Span(), null, inferred, infix_expr(Precedence.Assign, first));
+        static if (is_type)
+            return alloc!Declaration(AstNode.Kind.ListMember, infix_type(Precedence.Assign, first), inferred);
+        else
+            return alloc!Declaration(AstNode.Kind.ListMember, inferred, infix_expr(Precedence.Assign, first));
     }
 
     AstNode* function_(AstNode* node) {
@@ -198,38 +243,32 @@ struct Parser {
 
     alias infix_type = infix!(type, type_ops);
 
+    // dfmt off
+    private immutable Infix[256] type_ops = [
+        Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
+        Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+    ];
+    // dfmt on
+
     AstNode* type_prefix() {
+        // dfmt off
         switch (token.type) with (Token.Type) {
-        case Star:
-            return alloc!UnOp(AstNode.Kind.PointerType, take().span, type());
-        case Name:
-            return alloc!SymbolRef(token.span, take.key);
-        case Lparen:
-            return type_list!(Lparen, Rparen)();
-        case Lbracket:
-            return type_list!(Lbracket, Rbracket)();
+        case Lparen:    return type_list!(Lparen, Rparen)();
+        case Lbracket:  return type_list!(Lbracket, Rbracket)();
+        case Name:      return alloc!SymbolRef(token.span, take.key);
+        case Star:      return alloc!UnOp(AstNode.Kind.PointerType, take().span, type());
         default:
         }
+        // dfmt on
 
         reporter.error(ArcError.TokenExpectMismatch, token.span, "A type expression cannot start with %ss", token.type);
         return alloc!Invalid(take().span);
     }
 
     AstNode* type_list(Token.Type open, Token.Type close)() {
-        auto node = seq!(List, typelist_member, open, close, Token.Type.Comma)();
+        auto node = seq!(List, list_member!true, open, close, Token.Type.Comma)();
         return token.type == Token.Type.Rarrow ? function_type(node) : node;
-    }
-
-    AstNode* typelist_member() {
-        auto first = prefix();
-        if (first.kind == AstNode.Kind.SymbolRef && token.type == Token.Type.Colon) {
-            const s = first.span;
-            const k = (cast(SymbolRef*) first).text;
-            vm.free_to_ptr(first);
-            return decl(AstNode.Kind.ListMember, s, k);
-        }
-
-        return alloc!Declaration(AstNode.Kind.ListMember, Span(), null, infix_type(Precedence.Assign, first), inferred);
     }
 
     AstNode* function_type(AstNode* params) {
@@ -240,21 +279,18 @@ struct Parser {
 private:
     AstNode* alloc(T, Args...)(Args args) {
         auto t = T(args);
-        if (verify(t.header)) {
-            auto n = vm.alloc!T;
-            *n = t;
-            n.enclosing_scope = global_symbol_table.current_scope;
-            return n.header;
-        }
-
-        return alloc!Invalid(t.span);
+        return verify(t.header) ? raw_alloc!T(t) : alloc!Invalid(t.span);
     }
 
     AstNode* alloc(T : Invalid)(Span span) {
-        auto i = vm.alloc!Invalid();
-        *i = Invalid(span);
-        i.enclosing_scope = global_symbol_table.current_scope;
-        return i.header;
+        return raw_alloc(Invalid(span));
+    }
+
+    AstNode* raw_alloc(T)(T t) {
+        auto n = vm.alloc!T;
+        *n = t;
+        n.enclosing_scope = global_symbol_table.current_scope;
+        return n.header;
     }
 
     void advance() {
@@ -328,41 +364,8 @@ private:
 }
 
 private:
-
 struct Infix {
     Precedence prec;
     bool is_left_associative, skip_token;
     AstNode.Kind kind;
 }
-
-// dfmt off
-immutable Infix[256] binops = [
-    Token.Type.Less        : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Less),
-    Token.Type.LessEqual   : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.LessEqual),
-    Token.Type.Greater     : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Greater),
-    Token.Type.GreaterEqual: Infix(Precedence.Compare,  true,  true,  AstNode.Kind.GreaterEqual),
-    Token.Type.EqualEqual  : Infix(Precedence.Equality, true,  true,  AstNode.Kind.Equal),
-    Token.Type.BangEqual   : Infix(Precedence.Equality, true,  true,  AstNode.Kind.NotEqual),
-    Token.Type.And         : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
-    Token.Type.Or          : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
-    Token.Type.Plus        : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Add),
-    Token.Type.Minus       : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Subtract),
-    Token.Type.Star        : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Multiply),
-    Token.Type.Slash       : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Divide),
-    Token.Type.Caret       : Infix(Precedence.Power,    false, true,  AstNode.Kind.Power),
-    Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
-    Token.Type.ColonColon  : Infix(Precedence.Call,     true,  true,  AstNode.Kind.StaticAccess),
-    Token.Type.Name        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.Integer     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.Char        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.String      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-];
-
-immutable Infix[256] type_ops = [
-    Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
-    Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-];
-// dfmt on

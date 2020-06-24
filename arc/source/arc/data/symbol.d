@@ -1,6 +1,7 @@
 module arc.data.symbol;
 
 import arc.data.hash : Key;
+import arc.data.type : ArcType;
 
 struct Symbol {
     import arc.util : case_of;
@@ -20,6 +21,7 @@ struct Symbol {
         Import,
         Variable,
         Constant,
+        Builtin
     }
 
 public:
@@ -27,15 +29,18 @@ public:
     private ubyte[7] padding;
 
     Key name;
-    void* type;
+    ArcType* type;
+    ScopedSymbolTable* declaring_scope;
 
-    this(Kind kind, Key name) {
+    this(Kind kind, Key name, ScopedSymbolTable* declaring_scope, ArcType* type = null) {
         this.kind = kind;
         this.name = name;
+        this.declaring_scope = declaring_scope;
+        this.type = type;
     }
 
     static unresolved() {
-        static immutable _unresolved = Symbol(Kind.Unresolved, 0);
+        static immutable _unresolved = Symbol(Kind.Unresolved, 0, null);
         return cast(Symbol*)&_unresolved;
     }
 
@@ -65,14 +70,18 @@ public:
         return _num_symbols;
     }
 
+    ScopedSymbolTable* current_scope() {
+        return _current;
+    }
+
     ScopedSymbolTable* push_scope() {
         _current = _tables.alloc(_current, &_table_entries);
         _num_scopes++;
         return _current;
     }
 
-    Symbol* make_symbol(Args...)(Args args) {
-        auto symbol = _symbols.alloc(args);
+    Symbol* make_symbol(Symbol.Kind kind, Key text) {
+        auto symbol = _symbols.alloc(kind, text, _current);
         _current.put(symbol.name, symbol);
         _num_symbols++;
         return symbol;
@@ -136,6 +145,16 @@ public:
                 ap ~= entry.value;
 
         return ap[];
+    }
+
+    Symbol* lookup(Key key) {
+        auto candidate = _entries[find_slot_for(key, _entries)];
+        if (candidate.key == key)
+            return candidate.value;
+
+        if (_parent)
+            return _parent.lookup(key);
+        return null;
     }
 
 private:

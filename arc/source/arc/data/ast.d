@@ -253,6 +253,12 @@ struct Declaration {
         this.symbol = symbol;
         parts = [type, value];
     }
+
+    this(AstNode.Kind kind, AstNode* type, AstNode* value) in (kind == AstNode.Kind.ListMember) {
+        this.kind = kind;
+        this.span = type.span + value.span;
+        parts = [type, value];
+    }
 }
 
 struct If {
