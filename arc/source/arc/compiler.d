@@ -12,21 +12,47 @@ import arc.data.source_map : SourceMap;
 import arc.reporter : Reporter;
 import arc.memory;
 
-final class Compiler {
+struct Executor {
+    import arc.syntax.parser: Parser, ParseUnit;
+
+public:
+    Parser parser;
     VirtualMemory ast_memory;
     ArrayPool!(AstNode*) ast_arrays;
 
+    Reporter* global_error_reporter;
+    SymbolTable* global_symbol_table;
+    SourceMap global_source_map;
+
+    this(size_t ast_memory_size, Reporter* reporter, SymbolTable* symtab, SourceMap sources) {
+        ast_memory = VirtualMemory(ast_memory_size);
+        ast_arrays = typeof(ast_arrays)(&ast_memory);
+
+        global_error_reporter = reporter;
+        global_symbol_table = symtab;
+        global_source_map = sources;
+    }
+
+    AstNode*[] parse(Source source) {
+        auto unit = ParseUnit(&ast_memory, &ast_arrays, global_error_reporter, global_symbol_table, source.text);
+        return parser.parse(unit);
+    }
+}
+
+final class Compiler {
+    Executor executor;
+
+    Reporter reporter;
+    SourceMap source_map;
+
+    VirtualMemory global_vm;
     SymbolTable symbol_table;
 
-    SourceMap source_map;
-    Reporter reporter;
-
     this() {
-        ast_memory = VirtualMemory(128.gib);
-        ast_arrays = ArrayPool!(AstNode*)(&ast_memory);
-        symbol_table = SymbolTable(&ast_memory);
-
         source_map = new SourceMap();
+        global_vm = VirtualMemory(128.gib);
+        symbol_table = SymbolTable(&global_vm);
+        executor = Executor(128.gib, &reporter, &symbol_table, source_map);
     }
 
     void compile(string[] source_paths, CompileOptions options) {
@@ -38,28 +64,9 @@ final class Compiler {
         }
     }
 
-    AstNode*[] parse(string name, string source) {
-        import arc.syntax.parser : Parser, ParseUnit;
-
-        source_map.put(name, source);
-
-        auto statements = ast_arrays.get_appender();
-        Parser parser;
-        parser.begin(ParseUnit(&ast_memory, &ast_arrays, &reporter, &symbol_table, source));
-
-        size_t num_errors;
-        while (!parser.is_done) {
-            auto statement = parser.stmt();
-
-            statements ~= statement;
-            if (!statement.is_valid)
-                num_errors++;
-
-            if (num_errors == 5)
-                break;
-        }
-
-        return statements.get(); // TODO: Implement parsing import expressions
+    AstNode*[] parse(string name, string source_text) {
+        auto source = source_map.put(name, source_text);
+        return executor.parse(source);
     }
 
     void print_ast(AstNode*[] nodes) {
