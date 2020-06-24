@@ -1,0 +1,23 @@
+[*]
+insert_final_newline = true
+indent_style = space
+indent_siz = 4
+tab_width = 4
+trim_trailing_whitespace = true
+max_line_length = 140
+
+[*.d]
+dfmt_brace_style = stroustrup
+dfmt_soft_max_line_length = 120
+dfmt_align_switch_statements = true
+dfmt_outdent_attributes = true
+dfmt_split_operator_at_line_end = false
+dfmt_space_after_cast = true
+dfmt_space_after_keywords = true
+dfmt_space_before_function_parameters = false
+dfmt_selective_import_space = true
+dfmt_compact_labeled_statements = false
+dfmt_template_constraint_style = conditional_newline_indent
+dmft_single_template_constraint_indent = false
+dfmt_space_before_aa_colon = false
+dfmt_keep_line_breaks = true
