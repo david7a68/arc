@@ -28,7 +28,7 @@ struct ParseResult {
 auto parse(string op)(string text) {
     parser.begin(text);
     reporter.clear();
-    mixin("return ParseResult(parse_" ~ op ~ "(&parser), text);");
+    mixin("return ParseResult(" ~ op ~ "(&parser), text);");
 }
 
 bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
@@ -95,24 +95,24 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Assign") unittest {
     with (AstNode.Kind) {
-        assert(check_types("a = b;".parse!"statement"(), Assign, Name, Name));
-        assert(check_types("() = 1;".parse!"statement"(), Assign, List, Integer));
-        assert(check_types("a.b = 3;".parse!"statement"(), Assign, Access, Name, Name, Integer));
+        assert(check_types("a = b;".parse!"stmt"(), Assign, Name, Name));
+        assert(check_types("() = 1;".parse!"stmt"(), Assign, List, Integer));
+        assert(check_types("a.b = 3;".parse!"stmt"(), Assign, Access, Name, Name, Integer));
     }
 }
 
 @("Parse Block") unittest {
     with (AstNode.Kind) {
-        assert("{ ".parse!"statement"().is_valid == false);
-        assert("{ a }".parse!"statement"().is_valid == false);
-        assert("{ ( } )".parse!"statement"().is_valid == false);
-        assert("( a, { ) }".parse!"statement"().is_valid == false);
+        assert("{ ".parse!"stmt"().is_valid == false);
+        assert("{ a }".parse!"stmt"().is_valid == false);
+        assert("{ ( } )".parse!"stmt"().is_valid == false);
+        assert("( a, { ) }".parse!"stmt"().is_valid == false);
     }
 }
 
 @("Parse Definition") unittest {
     with (AstNode.Kind) {
-        auto type = "def T : T2;".parse!"statement"();
+        auto type = "def T : T2;".parse!"stmt"();
         assert(type.span == Span(0, 11));
         assert(check_types(type,
             Definition,
@@ -123,7 +123,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        auto type = "def T : (u32, k: u32);".parse!"statement"();
+        auto type = "def T : (u32, k: u32);".parse!"stmt"();
         assert(type.span == Span(0, 22));
         assert(check_types(type,
             Definition,
@@ -142,13 +142,13 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        auto error = "def T : (!);".parse!"statement"();
+        auto error = "def T : (!);".parse!"stmt"();
         assert(error.span == Span(0, 11));
         assert(check_error(error, ArcError.TokenExpectMismatch, 1));
     }
 
     with (AstNode.Kind) {
-        auto decl = "def T := 1;".parse!"statement"();
+        auto decl = "def T := 1;".parse!"stmt"();
         assert(check_types(decl,
             Definition,
                 Name,
@@ -158,7 +158,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        auto decl = "def T : a = b;".parse!"statement"();
+        auto decl = "def T : a = b;".parse!"stmt"();
         assert(check_types(decl,
             Definition,
                 Name,
@@ -168,7 +168,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        assert(check_types("def F := () -> {};".parse!"statement"(),
+        assert(check_types("def F := () -> {};".parse!"stmt"(),
             Definition,
                 Name,
                 Inferred,
@@ -180,7 +180,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        auto error = "def T := +;".parse!"statement"();
+        auto error = "def T := +;".parse!"stmt"();
         assert(error.span == Span(0, 10)); // We don't get to the semicolon
         assert(type_equivalent(error, Invalid));
     }
@@ -188,15 +188,15 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Escape") unittest {
     with (AstNode.Kind)
-    assert(check_types("break;".parse!"statement"(), Break));
+    assert(check_types("break;".parse!"stmt"(), Break));
 
     with (AstNode.Kind)
-    assert(check_types("continue;".parse!"statement"(), Continue));
+    assert(check_types("continue;".parse!"stmt"(), Continue));
 }
 
 @("Parse If") unittest {
     with (AstNode.Kind)
-    assert(check_types("if a {} else if b {} else c;".parse!"statement"(),
+    assert(check_types("if a {} else if b {} else c;".parse!"stmt"(),
         If,
             Name,
             Block,
@@ -209,13 +209,13 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Loop") unittest {
     with (AstNode.Kind)
-    assert(check_types("loop { break;}".parse!"statement"(), Loop, Block, Break));
+    assert(check_types("loop { break;}".parse!"stmt"(), Loop, Block, Break));
 }
 
 @("Parse Variable") unittest {
     with (AstNode.Kind) {
         {
-            auto var = "a : T = 3;".parse!"statement"();
+            auto var = "a : T = 3;".parse!"stmt"();
             assert(var.span == Span(0, 10));
             assert(check_types(var,
                 Variable,
@@ -226,7 +226,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         }
 
         {
-            auto var = "a := 3;".parse!"statement"();
+            auto var = "a := 3;".parse!"stmt"();
             assert(var.span == Span(0, 7));
             assert(check_types(var,
                 Variable,
@@ -237,7 +237,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         }
 
         {
-            auto var = "a : T;".parse!"statement"();
+            auto var = "a : T;".parse!"stmt"();
             assert(var.span == Span(0, 6));
             assert(check_types(var,
                 Variable,
@@ -248,10 +248,10 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         }
 
         // ! cannot start type
-        assert(check_error("a : (!);".parse!"statement"(), ArcError.TokenExpectMismatch));
+        assert(check_error("a : (!);".parse!"stmt"(), ArcError.TokenExpectMismatch));
 
         // ! cannot start type, unexpected EOF
-        assert(check_error("a : !".parse!"statement"(), ArcError.TokenExpectMismatch));
+        assert(check_error("a : !".parse!"stmt"(), ArcError.TokenExpectMismatch));
     }
 }
 
@@ -267,47 +267,47 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 // ----------------------------------------------------------------------
 
 @("Parse Name") unittest {
-    assert(check_types("a_name".parse!"expression", AstNode.Kind.Name));
+    assert(check_types("a_name".parse!"expr", AstNode.Kind.Name));
 }
 
 @("Parse Int") unittest {
-    assert(check_types("20".parse!"expression", AstNode.Kind.Integer));
+    assert(check_types("20".parse!"expr", AstNode.Kind.Integer));
 }
 
 @("Parse Char") unittest {
-    assert(check_types("'a'".parse!"expression", AstNode.Kind.Char));
+    assert(check_types("'a'".parse!"expr", AstNode.Kind.Char));
 }
 
 @("Parse String") unittest {
-    assert(check_types(`"Ha"`.parse!"expression", AstNode.Kind.String));
+    assert(check_types(`"Ha"`.parse!"expr", AstNode.Kind.String));
 }
 
 @("Parse Unary") unittest {
     with (AstNode.Kind) {
-        assert(check_types("-var".parse!"expression", Negate, Name));
+        assert(check_types("-var".parse!"expr", Negate, Name));
     }
 }
 
 @("Parse Binary") unittest {
     with (AstNode.Kind) {
-        assert(check_types("1 + 1".parse!"expression", Add, Integer, Integer));
-        assert(check_types("a ^ 2".parse!"expression", Power, Name, Integer));
+        assert(check_types("1 + 1".parse!"expr", Add, Integer, Integer));
+        assert(check_types("a ^ 2".parse!"expr", Power, Name, Integer));
 
-        assert(check_types("-a * b".parse!"expression",
+        assert(check_types("-a * b".parse!"expr",
             Multiply,
                 Negate,
                     Name,
                 Name
         ));
 
-        assert(check_types("a - -3".parse!"expression",
+        assert(check_types("a - -3".parse!"expr",
             Subtract,
                 Name,
                 Negate,
                     Integer
         ));
 
-        assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expression",
+        assert(check_types("b - c + d * e ^ f ^ g / h".parse!"expr",
             Add,
                 Subtract,
                     Name,                   // b
@@ -323,7 +323,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                     Name                    // h
         ));
 
-        assert(check_types("a.b()::c::d".parse!"expression",
+        assert(check_types("a.b()::c::d".parse!"expr",
             StaticAccess,
                 StaticAccess,
                     Call,
@@ -339,7 +339,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Empty List") unittest {
     with (AstNode.Kind) {
-        auto list = "()".parse!"expression"();
+        auto list = "()".parse!"expr"();
         assert(list.span == Span(0, 2));
         assert(check_types(list, List));
     }
@@ -347,7 +347,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse List Members") unittest {
     with (AstNode.Kind) {
-        auto list = "[a:= 2, 3, c:T=blah.b]".parse!"expression"();
+        auto list = "[a:= 2, 3, c:T=blah.b]".parse!"expr"();
         assert(list.span == Span(0, 22));
         assert(check_types(list,
             List,
@@ -369,7 +369,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     }
 
     with (AstNode.Kind) {
-        assert(check_types("(a: T[])".parse!"expression"(),
+        assert(check_types("(a: T[])".parse!"expr"(),
             List,
                 ListMember,
                     Name,
@@ -382,16 +382,16 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 }
 
 @("Parse List Error") unittest { // List variable must have type
-    assert(check_error("(a = b)".parse!"expression"(), ArcError.TokenExpectMismatch));
-    assert(check_error("(a, !)".parse!"expression"(), ArcError.TokenExpectMismatch));
+    assert(check_error("(a = b)".parse!"expr"(), ArcError.TokenExpectMismatch));
+    assert(check_error("(a, !)".parse!"expr"(), ArcError.TokenExpectMismatch));
 }
 
 @("Parse Import") unittest {
     with (AstNode.Kind) {
-        assert(check_types("import a".parse!"expression"(), Import, Name));
-        assert(check_types("import a::b".parse!"expression"(), Import, StaticAccess, Name, Name));
-        assert(check_types("import a()".parse!"expression"(), Import, Call, Name, List));
-        assert(check_types("(import b)::c()".parse!"expression"(),
+        assert(check_types("import a".parse!"expr"(), Import, Name));
+        assert(check_types("import a::b".parse!"expr"(), Import, StaticAccess, Name, Name));
+        assert(check_types("import a()".parse!"expr"(), Import, Call, Name, List));
+        assert(check_types("(import b)::c()".parse!"expr"(),
             Call,
                 StaticAccess,
                     List,
@@ -408,12 +408,12 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse Call") unittest {
     with (AstNode.Kind) {
         // a 4 -> a(4)
-        assert(check_types("a a".parse!"expression"(), Call, Name, Name));
-        assert(check_types("a 4".parse!"expression"(), Call, Name, Integer));
-        assert(check_types("a 'a'".parse!"expression"(), Call, Name, Char));
-        assert(check_types("a \"\"".parse!"expression"(), Call, Name, String));
+        assert(check_types("a a".parse!"expr"(), Call, Name, Name));
+        assert(check_types("a 4".parse!"expr"(), Call, Name, Integer));
+        assert(check_types("a 'a'".parse!"expr"(), Call, Name, Char));
+        assert(check_types("a \"\"".parse!"expr"(), Call, Name, String));
 
-        assert(check_types("a * b()".parse!"expression"(),
+        assert(check_types("a * b()".parse!"expr"(),
             Multiply,
                 Name,
                 Call,
@@ -422,13 +422,13 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
         ));
 
         // a b c -> (a b) c
-        assert(check_types("a b c".parse!"expression"(), Call, Call, Name, Name, Name));
+        assert(check_types("a b c".parse!"expr"(), Call, Call, Name, Name, Name));
     }
 }
 
 @("Parse Function (Simple)") unittest {
     with (AstNode.Kind) {
-        assert(check_types("(a) -> b".parse!"expression"(),
+        assert(check_types("(a) -> b".parse!"expr"(),
             Function,
                 List,
                     ListMember,
@@ -439,7 +439,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
                 Name
         ));
 
-        assert(check_types("() -> a * b".parse!"expression"(),
+        assert(check_types("() -> a * b".parse!"expr"(),
             Function,
                 List,
                 Inferred,
@@ -453,7 +453,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse Function (Complex Return)") unittest {
     with (AstNode.Kind) {
         // (a) -> ((b) -> c)
-        assert(check_types("(a) -> (b) -> c".parse!"expression"(),
+        assert(check_types("(a) -> (b) -> c".parse!"expr"(),
             Function,
                 List,
                     ListMember,
@@ -474,7 +474,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 }
 
 @("Parse Function (With Block)") unittest {
-    with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expression"(),
+    with (AstNode.Kind) assert(check_types("(a) -> {}".parse!"expr"(),
         Function,
             List,
                 ListMember,
@@ -487,7 +487,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 }
 
 @("Parse Function Error") unittest {
-    auto err = "() ->;".parse!"expression"();
+    auto err = "() ->;".parse!"expr"();
     //  We don't care what error occurs, as long as one does
     assert(check_types(err, AstNode.Kind.Invalid));
 }
@@ -541,7 +541,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parser Resynchronization")
 unittest {
     with (AstNode.Kind) {
-        const stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"statement";
+        const stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"stmt";
         assert(stmt.span == Span(0, 17));
         assert(!parser.is_done);
     }

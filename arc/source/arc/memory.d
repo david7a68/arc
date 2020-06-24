@@ -80,6 +80,21 @@ public:
         return mem;
     }
 
+    T* alloc(T)()
+    in (alloc_size(T.sizeof, standard_alignment) <= capacity) {
+        return cast(T*) alloc(T.sizeof).ptr;
+    }
+
+    /**
+     Frees all memory allocaated after this pointer a la a bump allocator.
+     */
+    void free_to_ptr(void* m) {
+        assert(_region_start <= m && m < _next_alloc_start);
+        assert((m - _region_start) % standard_alignment == 0);
+
+        _next_alloc_start = m;
+    }
+
     size_t capacity() {
         return _num_bytes_reserved - (_next_alloc_start - _region_start);
     }

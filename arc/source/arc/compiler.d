@@ -34,7 +34,7 @@ final class Compiler {
     }
 
     AstNode*[] parse(string name, string source) {
-        import arc.syntax.parser : ParsingContext, parse_statement;
+        import arc.syntax.parser : ParsingContext, stmt;
 
         source_map.put(name, source);
 
@@ -44,7 +44,7 @@ final class Compiler {
 
         size_t num_errors;
         while (!parser.is_done) {
-            auto statement = parse_statement(&parser);
+            auto statement = stmt(&parser);
 
             statements ~= statement;
             if (!statement.is_valid)

@@ -4,7 +4,7 @@ struct ArcError {
     enum Code {
         NoError,
         DebugError,
-        UnexpectedEndOfFile,
+        UnexpectedEOF,
         TokenExpectMismatch,
         TokenNotAnExpression,
         UnboundElse,

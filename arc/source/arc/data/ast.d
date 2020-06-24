@@ -1,8 +1,8 @@
 module arc.data.ast;
 
-import arc.data.span;
 import arc.data.hash : Key;
-import arc.data.symbol : Symbol;
+import arc.data.span;
+import arc.data.symbol : ScopedSymbolTable, Symbol;
 import arc.util : case_of;
 
 struct AstNode {
@@ -53,8 +53,14 @@ struct AstNode {
     uint num_children;
     Span span;
 
-    uint type_id;
-    uint scope_id;
+    union {
+        struct {
+            uint type_id;
+            uint scope_id;
+        }
+
+        ScopedSymbolTable* seq_table;
+    }
 
     union {
         ulong value;
