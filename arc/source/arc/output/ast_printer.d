@@ -1,7 +1,7 @@
 module arc.output.ast_printer;
 
 import arc.data.ast;
-import arc.data.source_map;
+import arc.source_map;
 import std.conv : to;
 
 const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {

@@ -1,4 +1,4 @@
-module arc.data.source;
+module arc.source;
 
 import arc.data.span;
 

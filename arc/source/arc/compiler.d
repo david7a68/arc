@@ -7,8 +7,8 @@ struct CompileOptions {
 
 import arc.data.ast;
 import arc.data.symbol;
-import arc.data.source : Source;
-import arc.data.source_map : SourceMap;
+import arc.source : Source;
+import arc.source_map : SourceMap;
 import arc.reporter : Reporter;
 import arc.memory;
 

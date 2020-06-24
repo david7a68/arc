@@ -1,7 +1,7 @@
-module arc.data.source_map;
+module arc.source_map;
 
 final class SourceMap {
-    import arc.data.source : Source;
+    import arc.source : Source;
     import arc.data.span : Span;
 
     // The first source is a reserved dummy source to allow source_of to return
