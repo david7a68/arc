@@ -76,7 +76,7 @@ struct ParsingContext {
         return tokens.current.type == Token.Type.Done;
     }
 
-    Token current() {
+    Token token() {
         return tokens.current;
     }
 
@@ -181,14 +181,6 @@ Span merge_spans(AstNode*[] nodes...) {
     return nodes.map!(n => n.span).fold!((a, b) => (a + b));
 }
 
-auto opt_type(ParsingContext* p) {
-    return p.current.type != Token.Type.Equals ? type(p) : AstNode.inferred;
-}
-
-auto opt_expr(ParsingContext* p) {
-    return p.skip(Token.Type.Equals) ? expr(p, Precedence.Logic) : AstNode.inferred;
-}
-
 struct SequenceNodeInfo {
     AstNode.Kind kind;
     Token.Type open;
@@ -203,23 +195,23 @@ AstNode* parse_seq(alias parse_member)(ParsingContext* p, SequenceNodeInfo info)
         return p.make_invalid(start);
 
     auto seq = p.nodes.get_ast_appender();
-    while (!p.current.type.matches_one(Token.Type.Done, info.close)) with (info) {
+    while (!p.token.type.matches_one(Token.Type.Done, info.close)) with (info) {
         auto node = parse_member(p);
 
-        const bad_delim = delim && !p.current.type.matches_one(Token.Type.Done, close) && !p.skip_required(delim);
+        const bad_delim = delim && !p.token.type.matches_one(Token.Type.Done, close) && !p.skip_required(delim);
         if (!node.is_valid || bad_delim) {
             scope (exit)
                 seq.abort();
             return p.make_invalid(start + node.span);
         }
 
-        while (p.current.type == delim)
+        while (p.token.type == delim)
             p.advance();
 
         seq ~= node;
     }
 
-    auto span = p.current.span + start;
+    auto span = p.token.span + start;
     if (p.skip_required(info.close))
         return p.alloc_ast(info.kind, span, seq.get());
 
@@ -265,13 +257,13 @@ AstNode* escape(ParsingContext* p, Token.Type token, AstNode.Kind kind) {
 
 AstNode* return_(ParsingContext* p) {
     auto start = p.take_required(Token.Type.Return).span;
-    auto value = p.current.type != Token.Type.Semicolon ? expr(p) : AstNode.none;
+    auto value = p.token.type != Token.Type.Semicolon ? expr(p) : AstNode.none;
     return p.make_unary(AstNode.Kind.Return, start, value);
 }
 
 AstNode* define(ParsingContext* p) {
     const start = p.take().span;
-    auto name = symbolic(p, AstNode.Kind.Name);
+    auto name = p.alloc_ast(AstNode.Kind.Name, p.token.span, p.take.key);
 
     if (!p.skip_required(Token.Type.Colon))
         return name.as_invalid(start + name.span);
@@ -287,14 +279,14 @@ AstNode* variable(ParsingContext* p, AstNode* name) {
 }
 
 AstNode* decl(ParsingContext* p, AstNode.Kind kind, AstNode* name) {
-    auto type = opt_type(p);
-    auto expr = opt_expr(p);
+    auto type = p.token.type != Token.Type.Equals ? type(p) : AstNode.inferred;
+    auto expr = p.skip(Token.Type.Equals) ? expr(p, Precedence.Logic) : AstNode.inferred;
     return p.make_n_ary(kind, name, type, expr);
 }
 
 AstNode* stmt(ParsingContext* p) {
     auto stmt = () {
-        switch (p.current.type) with (Token.Type) {
+        switch (p.token.type) with (Token.Type) {
             // dfmt off
         case If:        return if_(p);
         case Loop:      return loop(p);
@@ -307,11 +299,11 @@ AstNode* stmt(ParsingContext* p) {
         default:
             auto prefix = prefix_expr(p);
 
-            if (prefix.kind == AstNode.Kind.Name && p.current.type == Token.Type.Colon)
+            if (prefix.kind == AstNode.Kind.Name && p.token.type == Token.Type.Colon)
                 return variable(p, prefix);
 
             auto infix = infix(p, prefix);
-            return p.current.type == Token.Type.Equals ? parse_assign(p, infix) : infix;
+            return p.token.type == Token.Type.Equals ? parse_assign(p, infix) : infix;
         }
     }();
 
@@ -345,15 +337,6 @@ AstNode* stmt(ParsingContext* p) {
 //                |_|                                               
 // ----------------------------------------------------------------------
 
-AstNode* symbolic(ParsingContext* p, in AstNode.Kind kind) {
-    auto t = p.take();
-    return p.alloc_ast(kind, t.span, t.key);
-}
-
-AstNode* unary(ParsingContext* p, in AstNode.Kind kind) {
-    return p.make_unary(kind, p.take().span, expr(p, Precedence.Call));
-}
-
 AstNode* list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type close) {
     static parse_member(bool is_type)(ParsingContext* p) {
         auto first = expr(p, Precedence.Logic);
@@ -369,7 +352,7 @@ AstNode* list(bool is_type)(ParsingContext* p, Token.Type open, Token.Type close
     auto list = parse_seq!(parse_member!is_type)(p,
             SequenceNodeInfo(AstNode.Kind.List, open, close, Token.Type.Comma));
 
-    if (p.current.type != Token.Type.Rarrow)
+    if (p.token.type != Token.Type.Rarrow)
         return list;
     else if (is_type)
         return function_type(p, list);
@@ -385,9 +368,9 @@ AstNode* binary(alias parse_fn)(ParsingContext* p, AstNode* lhs, in Infix op) {
 
 AstNode* function_(ParsingContext* p, AstNode* list) {
     p.advance();
-    auto first = p.current.type == Token.Type.Lbrace ? AstNode.inferred : expr(p);
+    auto first = p.token.type == Token.Type.Lbrace ? AstNode.inferred : expr(p);
     // dfmt off
-    return p.current.type == Token.Type.Lbrace
+    return p.token.type == Token.Type.Lbrace
            ? p.make_n_ary(AstNode.Kind.Function, list, first, parse_seq!stmt(p, block_sequence))
            : p.make_n_ary(AstNode.Kind.Function, list, AstNode.inferred, first);
     // dfmt on
@@ -398,16 +381,16 @@ AstNode* expr(ParsingContext* p, in Precedence prec = Precedence.Assign) {
 }
 
 AstNode* prefix_expr(ParsingContext* p) {
-    const token = p.current;
+    const token = p.token;
     // dfmt off
     switch (token.type) with (Token.Type) {
-    case Bang: case Not:    return unary(p, AstNode.Kind.Not);
-    case Minus:             return unary(p, AstNode.Kind.Negate);
-    case Import:            return unary(p, AstNode.Kind.Import);
-    case Name:              return symbolic(p, AstNode.Kind.Name);
-    case Integer:           return symbolic(p, AstNode.Kind.Integer);
-    case Char:              return symbolic(p, AstNode.Kind.Char);
-    case String:            return symbolic(p, AstNode.Kind.String);
+    case Bang: case Not:    return p.make_unary(AstNode.Kind.Not, p.take().span, expr(p, Precedence.Call));
+    case Minus:             return p.make_unary(AstNode.Kind.Negate, p.take().span, expr(p, Precedence.Call));
+    case Import:            return p.make_unary(AstNode.Kind.Import, p.take().span, expr(p, Precedence.Call));
+    case Name:              return p.alloc_ast(AstNode.Kind.Name, p.token.span, p.take.key);
+    case Integer:           return p.alloc_ast(AstNode.Kind.Integer, p.token.span, p.take.key);
+    case Char:              return p.alloc_ast(AstNode.Kind.Char, p.token.span, p.take.key);
+    case String:            return p.alloc_ast(AstNode.Kind.String, p.token.span, p.take.key);
     case Lparen:            return list!false(p, Lparen, Rparen);
     case Lbracket:          return list!false(p, Lbracket, Rbracket);
     default:
@@ -462,7 +445,7 @@ AstNode* infix(ParsingContext* p, AstNode* lhs, in Precedence prec = Precedence.
 }
 
 AstNode* infix(alias fn)(ParsingContext* p, AstNode* lhs, Precedence prec, in Infix[] ops) {
-    for (Infix i = ops[p.current.type]; lhs.is_valid && prec <= i.prec; i = ops[p.current.type])
+    for (Infix i = ops[p.token.type]; lhs.is_valid && prec <= i.prec; i = ops[p.token.type])
         lhs = binary!fn(p, lhs, i);
     return lhs;
 }
@@ -494,19 +477,19 @@ AstNode* type(ParsingContext* p, Precedence prec = Precedence.Assign) {
 }
 
 AstNode* type_prefix(ParsingContext* p) {
-    switch (p.current.type) with (Token.Type) {
+    switch (p.token.type) with (Token.Type) {
     // dfmt off
     case Star:      return p.make_unary(AstNode.Kind.PointerType, p.take().span, type(p));
-    case Name:      return symbolic(p, AstNode.Kind.Name);
+    case Name:      return p.alloc_ast(AstNode.Kind.Name, p.token.span, p.take.key);
     case Lparen:    return list!true(p, Lparen, Rparen);
     case Lbracket:  return list!true(p, Lbracket, Rbracket);
     default:
     // dfmt on
     }
 
-    p.reporter.error(ArcError.TokenExpectMismatch, p.current.span,
+    p.reporter.error(ArcError.TokenExpectMismatch, p.token.span,
             "A type expression may be an access, symbol, list, function type, or call, not a %s",
-            p.current.type);
+            p.token.type);
     return p.make_invalid(p.take().span);
 }
 
