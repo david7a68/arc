@@ -57,8 +57,8 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
         Token.Type.Dot,
         Token.Type.Semicolon,
         Token.Type.Rarrow,
-        Token.Type.Integer,
-        Token.Type.Name,
+        Token.Type.TokInteger,
+        Token.Type.TokName,
     ));
 }
 
@@ -82,32 +82,32 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("Lex Keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
-        Token(Token.Type.And,        Span(10, 3), 17648556366517412293UL),
-        Token(Token.Type.Or,         Span(14, 2), 4116612837551264357UL),
-        Token(Token.Type.If,         Span(17, 2), 10245967140023949179UL),
-        Token(Token.Type.Else,       Span(20, 4), 15206279584842378246UL),
-        Token(Token.Type.Loop,       Span(25, 4), 14974296207267515915UL),
-        Token(Token.Type.Break,      Span(30, 5), 587566040553785743UL),
-        Token(Token.Type.Return,     Span(36, 6), 17660342674565394361UL),
-        Token(Token.Type.Continue,   Span(43, 8), 16371828708454923059UL),
-        Token(Token.Type.Def,        Span(52, 3), 9791288970560527259UL)
+        Token(Token.Type.TokAnd,        Span(10, 3), 17648556366517412293UL),
+        Token(Token.Type.TokOr,         Span(14, 2), 4116612837551264357UL),
+        Token(Token.Type.TokIf,         Span(17, 2), 10245967140023949179UL),
+        Token(Token.Type.TokElse,       Span(20, 4), 15206279584842378246UL),
+        Token(Token.Type.TokLoop,       Span(25, 4), 14974296207267515915UL),
+        Token(Token.Type.TokBreak,      Span(30, 5), 587566040553785743UL),
+        Token(Token.Type.TokReturn,     Span(36, 6), 17660342674565394361UL),
+        Token(Token.Type.TokContinue,   Span(43, 8), 16371828708454923059UL),
+        Token(Token.Type.TokDef,        Span(52, 3), 9791288970560527259UL)
     ));
 }
 
 @("Lex Char") unittest {
-    assert("'a'".scan_tokens.equivalent(Token.Type.Char));
+    assert("'a'".scan_tokens.equivalent(Token.Type.TokChar));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Type.Char, Span(10, 4), digest("\\a"))
+        Token(Token.Type.TokChar, Span(10, 4), digest("\\a"))
     ));
 }
 
 @("Lex String") unittest {
-    assert(`"hello world"`.scan_tokens.equivalent(Token.Type.String));
-    assert(`"\""`.scan_tokens.equivalent(Token.Type.String));
+    assert(`"hello world"`.scan_tokens.equivalent(Token.Type.TokString));
+    assert(`"\""`.scan_tokens.equivalent(Token.Type.TokString));
 }
 
 @("Lex Integers") unittest {
     assert("20".scan_tokens()[0].value == 20);
     assert("1_____23__4___".scan_tokens()[0].value == 1234);
-    assert("3b".scan_tokens.equivalent(Token.Type.Integer, Token.Type.Name));
+    assert("3b".scan_tokens.equivalent(Token.Type.TokInteger, Token.Type.TokName));
 }

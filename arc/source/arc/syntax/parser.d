@@ -70,41 +70,31 @@ struct Parser {
 
     AstNode* stmt() {
         auto stmt = () {
-            switch (token.type) {
-            case Token.Type.If:
-                return alloc!If(take().span, expr(), block(), skip(token.type == Token.Type.Else) ? stmt() : none);
+            switch (token.type) with (Token.Type) {
+            case TokIf:
+                return alloc!If(take().span, expr(), block(), skip(token.type == TokElse) ? stmt() : none);
 
-            case Token.Type.Loop:
-                skip(required(Token.Type.Loop));
-                return seq!(Loop, stmt, Token.Type.Lbrace, Token.Type.Rbrace);
-
-            case Token.Type.Lbrace:
-                return block();
-
-            case Token.Type.Return:
-                return alloc!Return(take().span, is_end_of_expr ? none : expr());
-
-            case Token.Type.Break:
-                return alloc!Break(take().span);
-
-            case Token.Type.Continue:
-                return alloc!Continue(take().span);
-
-            case Token.Type.Def:
-                return decl(AstNode.Kind.Definition, take.span, take.key);
+            // dfmt off
+            case Lbrace:        return block();
+            case TokBreak:      return alloc!Break(take().span);
+            case TokContinue:   return alloc!Continue(take().span);
+            case TokDef:        return decl(AstNode.Kind.Definition, take.span, take.key);
+            case TokReturn:     return alloc!Return(take().span, is_end_of_expr ? none : expr());
+            case TokLoop:       return seq!(Loop, stmt, Lbrace, Rbrace)(take(required(TokLoop)).span);
+            // dfmt on
 
             default:
                 AstNode* e;
-                if (token.type == Token.Type.Name) {
+                if (token.type == TokName) {
                     auto first = take();
-                    if (token.type == Token.Type.Colon)
+                    if (token.type == Colon)
                         return decl(AstNode.Kind.Variable, first.span, first.key);
                     e = infix_expr(Precedence.Assign, alloc!SymbolRef(first.span, first.key));
                 }
                 else
                     e = expr();
 
-                if (token.type == Token.Type.Equals) {
+                if (token.type == Equals) {
                     advance();
                     return alloc!BinOp(AstNode.Kind.Assign, e, expr());
                 }
@@ -156,8 +146,8 @@ struct Parser {
         Token.Type.GreaterEqual: Infix(Precedence.Compare,  true,  true,  AstNode.Kind.GreaterEqual),
         Token.Type.EqualEqual  : Infix(Precedence.Equality, true,  true,  AstNode.Kind.Equal),
         Token.Type.BangEqual   : Infix(Precedence.Equality, true,  true,  AstNode.Kind.NotEqual),
-        Token.Type.And         : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
-        Token.Type.Or          : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
+        Token.Type.TokAnd      : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
+        Token.Type.TokOr       : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
         Token.Type.Plus        : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Add),
         Token.Type.Minus       : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Subtract),
         Token.Type.Star        : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Multiply),
@@ -165,10 +155,10 @@ struct Parser {
         Token.Type.Caret       : Infix(Precedence.Power,    false, true,  AstNode.Kind.Power),
         Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
         Token.Type.ColonColon  : Infix(Precedence.Call,     true,  true,  AstNode.Kind.StaticAccess),
-        Token.Type.Name        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.Integer     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.Char        : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.String      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.TokName     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.TokInteger  : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.TokChar     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+        Token.Type.TokString   : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
         Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
         Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
     ];
@@ -184,17 +174,17 @@ struct Parser {
 
     AstNode* prefix() {
         // dfmt off
-        switch (token.type) {
-        case Token.Type.Bang:
-        case Token.Type.Not:               return alloc!UnOp(AstNode.Kind.Not, take().span, expr(Precedence.Call));
-        case Token.Type.Minus:             return alloc!UnOp(AstNode.Kind.Negate, take().span, expr(Precedence.Call));
-        case Token.Type.Import:            return alloc!Import(take().span, expr(Precedence.Call));
-        case Token.Type.Name:              return alloc!SymbolRef(token.span, take().key);
-        case Token.Type.Integer:           return alloc!IntLiteral(token.span, take().value);
-        case Token.Type.String:            return alloc!StrLiteral(token.span, take().key);
-        case Token.Type.Char:              return alloc!CharLiteral(take.span, '\0');
-        case Token.Type.Lparen:            return list!(Token.Type.Lparen, Token.Type.Rparen)();
-        case Token.Type.Lbracket:          return list!(Token.Type.Lbracket, Token.Type.Rbracket)();
+        switch (token.type) with (Token.Type) {
+        case Bang:
+        case TokNot:        return alloc!UnOp(AstNode.Kind.Not, take().span, expr(Precedence.Call));
+        case Minus:         return alloc!UnOp(AstNode.Kind.Negate, take().span, expr(Precedence.Call));
+        case TokImport:     return alloc!Import(take().span, expr(Precedence.Call));
+        case TokName:       return alloc!SymbolRef(token.span, take().key);
+        case TokInteger:    return alloc!IntLiteral(token.span, take().value);
+        case TokString:     return alloc!StrLiteral(token.span, take().key);
+        case TokChar:       return alloc!CharLiteral(take.span, '\0');
+        case Lparen:        return list!(Lparen, Rparen)();
+        case Lbracket:      return list!(Lbracket, Rbracket)();
         default:
         }
 
@@ -256,7 +246,7 @@ struct Parser {
         switch (token.type) with (Token.Type) {
         case Lparen:    return type_list!(Lparen, Rparen)();
         case Lbracket:  return type_list!(Lbracket, Rbracket)();
-        case Name:      return alloc!SymbolRef(token.span, take.key);
+        case TokName:   return alloc!SymbolRef(token.span, take.key);
         case Star:      return alloc!UnOp(AstNode.Kind.PointerType, take().span, type());
         default:
         }
@@ -332,7 +322,7 @@ private:
             return is_done || token.type.matches_one(Semicolon, Comma, Rparen, Rbracket);
     }
 
-    AstNode* seq(T, alias member, Token.Type open, Token.Type close, Token.Type delim = Token.Type.None)() {
+    AstNode* seq(T, alias member, Token.Type open, Token.Type close, Token.Type delim = Token.Type.None)(Span prefix = Span()) {
         auto start = take(required(open)).span;
         auto seq = arrays.get_appender();
         auto scope_ = global_symbol_table.push_scope();
@@ -354,7 +344,7 @@ private:
             seq ~= node;
         }
 
-        auto span = token.span + start;
+        auto span = prefix + token.span + start;
         if (skip(required(close)))
             return alloc!T(span, scope_, seq.get());
 

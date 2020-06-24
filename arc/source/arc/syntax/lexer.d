@@ -19,11 +19,11 @@ struct Token {
         LessEqual = 128, GreaterEqual, EqualEqual, BangEqual,
         Rarrow, ColonColon,
         
-        Name, Integer, Char, String,
+        TokName, TokInteger, TokChar, TokString,
 
-        And, Or, Not,
-        If, Else, Loop, Break, Return, Continue,
-        Def, Import,
+        TokAnd, TokOr, TokNot,
+        TokIf, TokElse, TokLoop, TokBreak, TokReturn, TokContinue,
+        TokDef, TokImport,
         // dfmt on
     }
 
@@ -110,17 +110,17 @@ private:
 immutable Token.Type[Key] keywords;
 
 shared static this() {
-    keywords[digest("and")] = Token.Type.And;
-    keywords[digest("or")] = Token.Type.Or;
-    keywords[digest("not")] = Token.Type.Not;
-    keywords[digest("if")] = Token.Type.If;
-    keywords[digest("else")] = Token.Type.Else;
-    keywords[digest("loop")] = Token.Type.Loop;
-    keywords[digest("break")] = Token.Type.Break;
-    keywords[digest("return")] = Token.Type.Return;
-    keywords[digest("continue")] = Token.Type.Continue;
-    keywords[digest("def")] = Token.Type.Def;
-    keywords[digest("import")] = Token.Type.Import;
+    keywords[digest("and")] = Token.Type.TokAnd;
+    keywords[digest("or")] = Token.Type.TokOr;
+    keywords[digest("not")] = Token.Type.TokNot;
+    keywords[digest("if")] = Token.Type.TokIf;
+    keywords[digest("else")] = Token.Type.TokElse;
+    keywords[digest("loop")] = Token.Type.TokLoop;
+    keywords[digest("break")] = Token.Type.TokBreak;
+    keywords[digest("return")] = Token.Type.TokReturn;
+    keywords[digest("continue")] = Token.Type.TokContinue;
+    keywords[digest("def")] = Token.Type.TokDef;
+    keywords[digest("import")] = Token.Type.TokImport;
 }
 
 /**
@@ -182,7 +182,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             const key = digest(current[0 .. length]);
 
             if (current < end && *(current + length) == '\'')
-                return make_token(Char, length + 1, key);
+                return make_token(TokChar, length + 1, key);
             return make_token(Invalid, current - start);
 
         case '"':
@@ -198,7 +198,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             const length = current - start;
             if (current == end)
                 make_token(Invalid, length);
-            return make_token(String, 1, digest(start[0 .. length]));
+            return make_token(TokString, 1, digest(start[0 .. length]));
 
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
@@ -214,14 +214,14 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             }
 
             const key = digest(start[0 .. current - start]);
-            const type = keywords.get(key, Name);
+            const type = keywords.get(key, TokName);
             return make_token(type, 0, key);
 
         case '0': .. case '9':
             while (current < end && (('0' <= *current
                     && *current <= '9') || *current == '_'))
                 current++;
-            return make_token(Integer, 0, string_to_int(start[0 .. current - start]));
+            return make_token(TokInteger, 0, string_to_int(start[0 .. current - start]));
 
         default:
             return make_token(Invalid, 1);
