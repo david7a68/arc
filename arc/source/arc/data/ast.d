@@ -320,10 +320,8 @@ bool verify(AstNode* node) {
 
     if (node && node.is_valid)
         return node.match(
-            // CLEANUP: Maybe move this into declaration?
             (Declaration* n) => n.type_expr != n.init_expr && n.parts.are_valid(),
-            (AstNode* n) => node.children.length == 0 || node.children.are_valid()
-        );
+            (AstNode* n) => node.children.length == 0 || node.children.are_valid());
 
     return false;
 }
@@ -331,7 +329,10 @@ bool verify(AstNode* node) {
 bool are_valid(AstNode*[] nodes) {
     import std.algorithm: map, fold;
 
-    return nodes.map!(n => n.is_valid).fold!((a, b) => a && b);
+    debug
+        return nodes.map!(n => verify(n)).fold!((a, b) => a && b);
+    else
+        return nodes.map!(n => n.is_valid).fold!((a, b) => a && b);
 }
 
 AstNode*[] children(AstNode* node) {
