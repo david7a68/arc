@@ -1,4 +1,4 @@
-module arc.syntax.lexer;
+module arc.analysis.lexer;
 
 import arc.data.hash : digest, Key;
 import arc.data.span;

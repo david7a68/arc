@@ -3,6 +3,7 @@ module arc.data.ast;
 import arc.data.hash : Key;
 import arc.data.span;
 import arc.data.symbol : ScopedSymbolTable, Symbol;
+import arc.data.type : ArcType;
 
 struct AstNode {
     enum Kind : ubyte {
@@ -70,7 +71,7 @@ mixin template ast_header() {
     AstNode.Kind kind;
     Span span;
 
-    void* semantic_info;
+    ArcType* type;
     ScopedSymbolTable* enclosing_scope;
 
     AstNode* header() inout return  {
@@ -254,7 +255,8 @@ struct Declaration {
         parts = [type, value];
     }
 
-    this(AstNode.Kind kind, AstNode* type, AstNode* value) in (kind == AstNode.Kind.ListMember) {
+    this(AstNode.Kind kind, AstNode* type, AstNode* value)
+    in (kind == AstNode.Kind.ListMember) {
         this.kind = kind;
         this.span = type.span + value.span;
         parts = [type, value];
@@ -316,23 +318,21 @@ AstNode* none() {
 private const _none = None(AstNode.Kind.None);
 
 bool verify(AstNode* node) {
-    import std.algorithm: map, fold;
-
     if (node && node.is_valid)
-        return node.match(
-            (Declaration* n) => n.type_expr != n.init_expr && n.parts.are_valid(),
-            (AstNode* n) => node.children.length == 0 || node.children.are_valid());
+        return node.match!bool(
+                (Declaration* n) => n.type_expr != n.init_expr && n.parts.are_valid(),
+                (AstNode* n) => node.children.length == 0 || node.children.are_valid());
 
     return false;
 }
 
 bool are_valid(AstNode*[] nodes) {
-    import std.algorithm: map, fold;
+    import std.algorithm : map, fold;
 
-    debug
-        return nodes.map!(n => verify(n)).fold!((a, b) => a && b);
-    else
-        return nodes.map!(n => n.is_valid).fold!((a, b) => a && b);
+    // dfmt off
+    debug return nodes.map!(n => verify(n)).fold!((a, b) => a && b);
+    else return nodes.map!(n => n.is_valid).fold!((a, b) => a && b);
+    // dfmt on
 }
 
 AstNode*[] children(AstNode* node) {
@@ -340,7 +340,7 @@ AstNode*[] children(AstNode* node) {
         return [];
 
     // dmft off
-    return node.match(
+    return node.match!(AstNode*[])(
             (Import* n) => n.parts[],
             (UnOp* n) => n.parts[],
             (BinOp* n) => n.parts[],
@@ -356,7 +356,7 @@ AstNode*[] children(AstNode* node) {
     // dfmt on
 }
 
-auto match(Ops...)(AstNode* node, Ops ops) if (Ops.length > 0) {
+auto match(RetType, Ops...)(AstNode* node, Ops ops) if (Ops.length > 0) {
     import std.traits : Parameters, ReturnType;
     import std.meta : staticIndexOf, staticMap, AliasSeq;
 
@@ -366,13 +366,15 @@ auto match(Ops...)(AstNode* node, Ops ops) if (Ops.length > 0) {
             return ops[i](cast(T*) n);
         else static if (is(Parameters!(ops[$ - 1]) == AliasSeq!(AstNode*)))
             return ops[$ - 1](n);
+        else static if (ops.length > 0 && !is(RetType == void))
+            return RetType.init;
         else
-            return ReturnType!(Ops[0]).init;
+            return;
     }
 
     if (node is null) {
-        static if (ops.length > 0)
-            return ReturnType!(Ops[0]).init;
+        static if (ops.length > 0 && !is(RetType == void))
+            return RetType.init;
         else
             return;
     }

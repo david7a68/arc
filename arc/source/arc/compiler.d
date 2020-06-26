@@ -7,13 +7,13 @@ struct CompileOptions {
 
 import arc.data.ast;
 import arc.data.symbol;
+import arc.memory;
+import arc.reporter : Reporter;
 import arc.source : Source;
 import arc.source_map : SourceMap;
-import arc.reporter : Reporter;
-import arc.memory;
 
 struct Executor {
-    import arc.syntax.parser: Parser, ParseUnit;
+    import arc.analysis.parser : Parser, ParseUnit;
 
 public:
     Parser parser;

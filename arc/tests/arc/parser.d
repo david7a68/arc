@@ -6,7 +6,7 @@ import arc.data.span;
 import arc.data.symbol;
 import arc.memory : mib, VirtualMemory, ArrayPool;
 import arc.reporter;
-import arc.syntax.parser;
+import arc.analysis.parser;
 import std.stdio : writefln;
 
 VirtualMemory vm;

@@ -2,7 +2,7 @@ module tests.arc.lexer;
 
 import arc.data.span: Span;
 import arc.data.hash: digest;
-import arc.syntax.lexer: Token, TokenBuffer;
+import arc.analysis.lexer: Token, TokenBuffer;
 
 /// Thread-local global token buffer so we don't have to allocate a whole bunch
 /// of these. Also makes the interface of `scan_tokens(text)` simpler.

@@ -1,4 +1,4 @@
-module arc.syntax.parser;
+module arc.analysis.parser;
 
 import arc.data.ast;
 import arc.data.hash;
@@ -6,7 +6,7 @@ import arc.data.span;
 import arc.data.symbol;
 import arc.memory : ArrayPool, VirtualMemory;
 import arc.reporter;
-import arc.syntax.lexer;
+import arc.analysis.lexer;
 
 enum token_buffer_size = 4096;
 
@@ -223,8 +223,7 @@ struct Parser {
         advance();
         auto e = token.type == Token.Type.Lbrace ? inferred : expr();
         return token.type == Token.Type.Lbrace
-            ? alloc!Function(node, e, block())
-            : alloc!Function(node, inferred, e);
+            ? alloc!Function(node, e, block()) : alloc!Function(node, inferred, e);
     }
 
     AstNode* type(Precedence p = Precedence.Assign) {
