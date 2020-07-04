@@ -60,6 +60,9 @@ public:
             static assert(false, "Platform not supported for IndexedRegion.");
     }
 
+    size_t actual_capacity() { return _num_bytes_reserved; }
+    size_t bytes_allocated() { return _next_alloc_start - _region_start; }
+
     /**
      Allocates n bytes of memory.
 
@@ -122,8 +125,8 @@ public:
 private:
     void* _region_start, _region_end, _next_alloc_start;
 
-    const size_t _num_bytes_reserved;
-    const size_t _extra_bytes_per_alloc;
+    size_t _num_bytes_reserved;
+    size_t _extra_bytes_per_alloc;
 
     // The number of additional pages allocated whenever more pages are needed.
     enum extra_pages_per_alloc = 1000;
@@ -341,14 +344,4 @@ private:
     T[] _array;
     size_t _count;
     ArrayPool!T* _memory;
-}
-
-struct TreeAllocator(T) {
-    ArrayPool!(T*) arrays;
-    ObjectPool!T objects;
-
-    this(VirtualMemory* memory, in size_t[] size_classes = ArrayPool!(T*).default_size_classes) {
-        arrays = ArrayPool!(T*)(memory, size_classes);
-        objects = ObjectPool!T(memory);
-    }
 }
