@@ -1,6 +1,6 @@
 module arc.data.ast;
 
-import arc.data.hash : Key;
+import arc.data.hash : Hash;
 import arc.data.span;
 import arc.data.symbol : ScopedSymbolTable, Symbol;
 import arc.data.type : ArcType;
@@ -111,7 +111,7 @@ struct Invalid {
 }
 
 alias IntLiteral = Value!(AstNode.Kind.Integer, ulong);
-alias StrLiteral = Value!(AstNode.Kind.String, Key);
+alias StrLiteral = Value!(AstNode.Kind.String, Hash);
 alias CharLiteral = Value!(AstNode.Kind.Char, dchar);
 
 struct Value(AstNode.Kind node_kind, T) {
@@ -129,10 +129,10 @@ struct Value(AstNode.Kind node_kind, T) {
 struct SymbolRef {
     mixin ast_header!();
 
-    Key text;
+    Hash text;
     Symbol* declaration;
 
-    this(Span location, Key key) {
+    this(Span location, Hash key) {
         kind = AstNode.Kind.SymbolRef;
         span = location;
         text = key;

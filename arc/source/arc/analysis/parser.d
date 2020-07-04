@@ -121,7 +121,7 @@ struct Parser {
 
     alias block = seq!(Block, stmt, Token.Type.Lbrace, Token.Type.Rbrace);
 
-    AstNode* decl(AstNode.Kind kind, Span prefix, Key name) {
+    AstNode* decl(AstNode.Kind kind, Span prefix, Hash name) {
         skip(required(Token.Type.Colon));
         const sym_kind = kind == AstNode.Kind.Definition ? Symbol.Kind.Constant : Symbol.Kind.Variable;
         // dfmt off

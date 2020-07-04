@@ -1,6 +1,6 @@
 module arc.data.type;
 
-import arc.data.hash : Key;
+import arc.data.hash : Hash;
 import arc.data.symbol : Symbol;
 
 struct ArcType {
@@ -33,7 +33,7 @@ public:
 }
 
 struct ListMemberType {
-    Key name;
+    Hash name;
     ArcType* type;
     size_t position;
 }

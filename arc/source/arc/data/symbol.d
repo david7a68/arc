@@ -1,6 +1,6 @@
 module arc.data.symbol;
 
-import arc.data.hash : Key;
+import arc.data.hash : Hash;
 import arc.data.type : ArcType;
 
 struct Symbol {
@@ -28,11 +28,11 @@ public:
     Kind kind;
     private ubyte[7] padding;
 
-    Key name;
+    Hash name;
     ArcType* type;
     ScopedSymbolTable* declaring_scope;
 
-    this(Kind kind, Key name, ScopedSymbolTable* declaring_scope, ArcType* type = null) {
+    this(Kind kind, Hash name, ScopedSymbolTable* declaring_scope, ArcType* type = null) {
         this.kind = kind;
         this.name = name;
         this.declaring_scope = declaring_scope;
@@ -80,7 +80,7 @@ public:
         return _current;
     }
 
-    Symbol* make_symbol(Symbol.Kind kind, Key text) {
+    Symbol* make_symbol(Symbol.Kind kind, Hash text) {
         auto symbol = _symbols.alloc(kind, text, _current);
         _current.put(symbol.name, symbol);
         _num_symbols++;
@@ -118,7 +118,7 @@ public:
         return _parent;
     }
 
-    void put(Key key, Symbol* value) {
+    void put(Hash key, Symbol* value) {
         if (_count >= 0.6 * _entries.length)
             resize();
 
@@ -126,12 +126,12 @@ public:
         _count++;
     }
 
-    Symbol* get(Key key)
+    Symbol* get(Hash key)
     in(contains(key)) {
         return _entries[find_slot_for(key, _entries)].value;
     }
 
-    bool contains(Key key) {
+    bool contains(Hash key) {
         return _entries[find_slot_for(key, _entries)].key == key;
     }
 
@@ -147,7 +147,7 @@ public:
         return ap[];
     }
 
-    Symbol* lookup(Key key) {
+    Symbol* lookup(Hash key) {
         auto candidate = _entries[find_slot_for(key, _entries)];
         if (candidate.key == key)
             return candidate.value;
@@ -160,12 +160,12 @@ public:
 private:
     struct Entry {
         // Duplicated from value so we don't need to look up value
-        Key key;
+        Hash key;
         Symbol* value;
     }
 
     /// linear probing
-    static size_t find_slot_for(Key key, Entry[] map) {
+    static size_t find_slot_for(Hash key, Entry[] map) {
         auto index = key % map.length;
 
         while (map[index].key != key && map[index] != Entry()) {

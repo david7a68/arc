@@ -1,6 +1,6 @@
 module arc.analysis.lexer;
 
-import arc.data.hash : digest, Key;
+import arc.data.hash : digest, Hash;
 import arc.data.span;
 import arc.util : case_of;
 
@@ -33,7 +33,7 @@ struct Token {
     Span span;
     union {
         ///
-        Key key;
+        Hash key;
         ///
         ulong value;
     }
@@ -107,7 +107,7 @@ public:
 private:
 
 /// Hashmap of reserved keywords and their corresponding token types
-immutable Token.Type[Key] keywords;
+immutable Token.Type[Hash] keywords;
 
 shared static this() {
     keywords[digest("and")] = Token.Type.TokAnd;
@@ -138,7 +138,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         return Span(start - base + span_offset, current - start);
     }
 
-    auto make_token(Token.Type t, size_t advance_n, Key key = 0) {
+    auto make_token(Token.Type t, size_t advance_n, Hash key = 0) {
         current += advance_n;
         return Token(t, final_span(), key);
     }
