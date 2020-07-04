@@ -7,11 +7,11 @@ size_t kib(size_t n) {
 }
 
 size_t mib(size_t n) {
-    return n * (1024 * 2);
+    return n * (1024 ^^ 2);
 }
 
 size_t gib(size_t n) {
-    return n * (1024 ^ 3);
+    return n * (1024 ^^ 3);
 }
 
 size_t round_to_page(size_t n) {
@@ -80,13 +80,17 @@ public:
         return mem;
     }
 
+    /**
+     Allocates an instance of type T without initializing it. Any initialization
+     must be done after this function.
+     */
     T* alloc(T)()
     in (alloc_size(T.sizeof, standard_alignment) <= capacity) {
         return cast(T*) alloc(T.sizeof).ptr;
     }
 
     /**
-     Frees all memory allocaated after this pointer a la a bump allocator.
+     Frees all memory allocated after this pointer a la a bump allocator.
      */
     void free_to_ptr(void* m) {
         assert(_region_start <= m && m < _next_alloc_start);
