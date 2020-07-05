@@ -4,6 +4,7 @@ module tests.arc.parser;
 import arc.data.ast;
 import arc.data.span;
 import arc.data.symbol;
+import arc.data.stringtable: StringTable;
 import arc.memory : mib, VirtualMemory, ArrayPool;
 import arc.reporter;
 import arc.analysis.parser;
@@ -15,11 +16,13 @@ ArrayPool!(AstNode*) arrays;
 Parser parser;
 Reporter reporter;
 SymbolTable symbol_table;
+StringTable strings;
 
 static this() {
     // TODO: Find out if we can reduce memory usage
     vm = VirtualMemory(2.mib);
     arrays = ArrayPool!(AstNode*)(&vm);
+    strings = StringTable(64);
 
     parser = Parser();
     reporter = Reporter();
@@ -33,7 +36,7 @@ struct ParseResult {
 }
 
 auto parse(string op)(string text) {
-    parser.begin(ParseUnit(&vm, &arrays, &reporter, &symbol_table, text));
+    parser.begin(ParseUnit(&vm, &arrays, &reporter, &symbol_table, &strings, text));
 
     reporter.clear();
     mixin("return ParseResult(parser." ~ op ~ "(), text);");

@@ -2,6 +2,7 @@ module arc.analysis.lexer;
 
 import arc.data.hash : hash_of, Hash;
 import arc.data.span;
+import arc.data.stringtable: StringTable;
 import arc.util : case_of;
 
 /// A `Token` is the smallest discrete unit of the source text that the compiler
@@ -57,6 +58,7 @@ private:
     size_t _current_token_index;
     size_t _buffer_span_offset;
     size_t _next_buffer_index;
+    StringTable* _stringtable;
 
 public:
     Token[buffer_size] tokens;
@@ -64,16 +66,17 @@ public:
     Token current;
     bool done;
 
-    this(const(char)[] text, size_t span_offset = 0) {
+    this(const(char)[] text, StringTable* stringtable,  size_t span_offset = 0) {
         source_text = text;
         _buffer_span_offset = span_offset;
+        _stringtable = stringtable;
         fill_buffer();
         current = tokens[0];
         done = current.type == Token.Type.Done;
     }
 
-    void begin(const(char)[] text, size_t span_offset = 0) {
-        this = typeof(this)(text, span_offset);
+    void begin(const(char)[] text, StringTable* stringtable,  size_t span_offset = 0) {
+        this = typeof(this)(text, stringtable, span_offset);
     }
 
     void advance() {
@@ -93,10 +96,10 @@ public:
         debug tokens[] = Token.init;
 
         // get first token, might be Done
-        tokens[0] = scan_token(base, current, end, _buffer_span_offset);
+        tokens[0] = scan_token(base, current, end, _buffer_span_offset, _stringtable);
         for (size_t i = 1; tokens[i - 1].type != Token.Type.Done && i < tokens.length;
                 i++)
-            tokens[i] = scan_token(base, current, end, _buffer_span_offset);
+            tokens[i] = scan_token(base, current, end, _buffer_span_offset, _stringtable);
 
         const read = current - (source_text.ptr + _next_buffer_index);
         _next_buffer_index += read;
@@ -110,17 +113,6 @@ private:
 immutable Token.Type[Hash] keywords;
 
 shared static this() {
-    keywords[digest("and")] = Token.Type.TokAnd;
-    keywords[digest("or")] = Token.Type.TokOr;
-    keywords[digest("not")] = Token.Type.TokNot;
-    keywords[digest("if")] = Token.Type.TokIf;
-    keywords[digest("else")] = Token.Type.TokElse;
-    keywords[digest("loop")] = Token.Type.TokLoop;
-    keywords[digest("break")] = Token.Type.TokBreak;
-    keywords[digest("return")] = Token.Type.TokReturn;
-    keywords[digest("continue")] = Token.Type.TokContinue;
-    keywords[digest("def")] = Token.Type.TokDef;
-    keywords[digest("import")] = Token.Type.TokImport;
     keywords[hash_of("and")] = Token.Type.TokAnd;
     keywords[hash_of("or")] = Token.Type.TokOr;
     keywords[hash_of("not")] = Token.Type.TokNot;
@@ -142,7 +134,7 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, size_t span_offset) {
+Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, size_t span_offset, StringTable* stringtable) {
     auto start = current;
 
     auto final_span() {
@@ -190,7 +182,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         case '\'':
             current++;
             const length = *current == '\\' ? 2 : 1;
-            const key = hash_of(current[0 .. length]);
+            const key = stringtable.intern(current[0 .. length]);
 
             if (current < end && *(current + length) == '\'')
                 return make_token(TokChar, length + 1, key);
@@ -209,7 +201,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             const length = current - start;
             if (current == end)
                 make_token(Invalid, length);
-            return make_token(TokString, 1, hash_of(start[0 .. length]));
+            return make_token(TokString, 1, stringtable.intern(start[0 .. length]));
 
         case 'a': .. case 'z':
         case 'A': .. case 'Z':

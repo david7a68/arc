@@ -1,7 +1,8 @@
 module tests.arc.lexer;
 
 import arc.data.span: Span;
-import arc.data.hash: digest;
+import arc.data.hash: hash_of;
+import arc.data.stringtable: StringTable;
 import arc.analysis.lexer: Token, TokenBuffer;
 
 /// Thread-local global token buffer so we don't have to allocate a whole bunch
@@ -10,7 +11,9 @@ TokenBuffer!64 token_buffer;
 
 /// Read all tokens from text, up to `token_buffer.length`.
 Token[] scan_tokens(const(char)[] text) {
-    token_buffer.begin(text, 10);
+    // IMPORTANT: strings is a throwaway value used only to facilitate lexing
+    auto strings = StringTable(64);
+    token_buffer.begin(text, &strings, 10);
     return token_buffer.tokens[];
 }
 
@@ -97,7 +100,7 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 @("Lex Char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Type.TokChar));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Type.TokChar, Span(10, 4), digest("\\a"))
+        Token(Token.Type.TokChar, Span(10, 4), hash_of("\\a"))
     ));
 }
 

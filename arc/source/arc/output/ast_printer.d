@@ -1,11 +1,11 @@
 module arc.output.ast_printer;
 
 import arc.data.ast;
-import arc.source_map;
+import arc.data.stringtable;
 import std.conv : to;
 
-const(char[]) print_ast(SourceMap sources, AstNode*[] nodes...) {
-    auto printer = AstPrinter(sources);
+const(char[]) print_ast(StringTable* strings, AstNode*[] nodes...) {
+    auto printer = AstPrinter(strings);
 
     foreach (node; nodes)
         printer.print(node);
@@ -58,11 +58,11 @@ struct AstPrinter {
 
     Array!IndentType stack;
     Appender!(char[]) str;
-    SourceMap sources;
+    StringTable* strings;
 
-    this(SourceMap sources) {
+    this(StringTable* strings) {
         str = appender!(char[]);
-        this.sources = sources;
+        this.strings = strings;
     }
 
     const(char)[] data() const {
@@ -81,12 +81,9 @@ struct AstPrinter {
         }
 
         str.put(prefix);
-        str.put(repr(sources, n));
+        str.put(repr(strings, n));
         switch (n.kind) with (AstNode.Kind) {
         case Invalid:
-            str.put(" \"");
-            str.put(sources.get_spanned_text(n.span));
-            str.put("\"\n");
             break;
         case List:
             put_length();
@@ -104,11 +101,18 @@ struct AstPrinter {
             break;
         case Definition:
         case Variable:
-            // str.put(" (");
-            // str.put(n.children[0].symbol
-            //         ? n.children[0].symbol.kind.to!string : "Unresolved");
-            // str.put(")");
+            str.put(" ");
+            str.put(strings.string_of((cast(Declaration*) n).symbol.name));
             write_named_children(n, "Type: ", "Expr: ");
+            break;
+        case ListMember:
+            str.put(" ");
+            auto decl = cast(Declaration*) n;
+            if (decl.symbol)
+                str.put(strings.string_of(decl.symbol.name));
+            else
+                str.put("Unnamed");
+            write_named_children(n, "Type: ", "Value: ");
             break;
         case If:
             write_named_children(n, "Condition: ", "Body: ", "Else: ");
@@ -171,15 +175,12 @@ struct AstPrinter {
     }
 }
 
-const(char)[] repr(SourceMap sources, AstNode* node) {
-    switch (node.kind) with (AstNode.Kind) {
-    case SymbolRef:
-    case Integer:
-    case Char:
-        return node.kind.to!string ~ "(\"" ~ sources.get_spanned_text(node.span) ~ "\")";
-    case String:
-        return node.kind.to!string ~ "(" ~ sources.get_spanned_text(node.span) ~ ")";
-    default:
-        return node.kind.to!string;
-    }
+const(char)[] repr(StringTable* strings, AstNode* node) {
+    return node.match!(const(char)[])(
+        (IntLiteral* n) => n.kind.to!string ~ "(" ~ n.value.to!string ~ ")",
+        (CharLiteral* n) => n.kind.to!string ~ "(\"" ~  strings.string_of(n.value) ~ "\")",
+        (StrLiteral* n) => n.kind.to!string ~ "(" ~ strings.string_of(n.value) ~ ")",
+        (SymbolRef* n) => n.kind.to!string ~ "(\"" ~ strings.string_of(n.text) ~ "\")",
+        (AstNode* n) => n.kind.to!string
+    );
 }

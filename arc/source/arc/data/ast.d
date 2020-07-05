@@ -112,7 +112,7 @@ struct Invalid {
 
 alias IntLiteral = Value!(AstNode.Kind.Integer, ulong);
 alias StrLiteral = Value!(AstNode.Kind.String, Hash);
-alias CharLiteral = Value!(AstNode.Kind.Char, dchar);
+alias CharLiteral = Value!(AstNode.Kind.Char, Hash);
 
 struct Value(AstNode.Kind node_kind, T) {
     mixin ast_header!();

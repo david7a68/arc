@@ -24,7 +24,7 @@ public:
     Reporter* global_error_reporter;
     SymbolTable* global_symbol_table;
     SourceMap global_source_map;
-    StringTable stringtable;
+    StringTable strings;
 
     this(size_t ast_memory_size, Reporter* reporter, SymbolTable* symtab, SourceMap sources) {
         ast_memory = VirtualMemory(ast_memory_size);
@@ -34,11 +34,11 @@ public:
         global_symbol_table = symtab;
         global_source_map = sources;
 
-        stringtable = StringTable(128);
+        strings = StringTable(128);
     }
 
     AstNode*[] parse(Source source) {
-        auto unit = ParseUnit(&ast_memory, &ast_arrays, global_error_reporter, global_symbol_table, &stringtable, source.text);
+        auto unit = ParseUnit(&ast_memory, &ast_arrays, global_error_reporter, global_symbol_table, &strings, source.text);
         return parser.parse(unit);
     }
 }
@@ -77,7 +77,7 @@ final class Compiler {
         import arc.output.ast_printer : print_ast;
         import std.stdio : writeln;
 
-        writeln(print_ast(source_map, nodes));
+        writeln(print_ast(&executor.strings, nodes));
         report_errors(&reporter, source_map);
     }
 }

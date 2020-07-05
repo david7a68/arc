@@ -21,6 +21,10 @@ public:
         return key;
     }
 
+    string string_of(Hash hash) {
+        return _table.get(hash, "");
+    }
+
 private:
     VirtualMemory _storage;
     KeyMap!(string) _table;
