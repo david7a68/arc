@@ -56,7 +56,6 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
 struct TokenBuffer(size_t buffer_size) {
 private:
     size_t _current_token_index;
-    size_t _buffer_span_offset;
     size_t _next_buffer_index;
     StringTable* _stringtable;
 
@@ -66,17 +65,16 @@ public:
     Token current;
     bool done;
 
-    this(const(char)[] text, StringTable* stringtable,  size_t span_offset = 0) {
+    this(const(char)[] text, StringTable* stringtable) {
         source_text = text;
-        _buffer_span_offset = span_offset;
         _stringtable = stringtable;
         fill_buffer();
         current = tokens[0];
         done = current.type == Token.Type.Done;
     }
 
-    void begin(const(char)[] text, StringTable* stringtable,  size_t span_offset = 0) {
-        this = typeof(this)(text, stringtable, span_offset);
+    void begin(const(char)[] text, StringTable* stringtable) {
+        this = typeof(this)(text, stringtable);
     }
 
     void advance() {
@@ -96,10 +94,10 @@ public:
         debug tokens[] = Token.init;
 
         // get first token, might be Done
-        tokens[0] = scan_token(base, current, end, _buffer_span_offset, _stringtable);
+        tokens[0] = scan_token(base, current, end, _stringtable);
         for (size_t i = 1; tokens[i - 1].type != Token.Type.Done && i < tokens.length;
                 i++)
-            tokens[i] = scan_token(base, current, end, _buffer_span_offset, _stringtable);
+            tokens[i] = scan_token(base, current, end, _stringtable);
 
         const read = current - (source_text.ptr + _next_buffer_index);
         _next_buffer_index += read;
@@ -134,11 +132,11 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, size_t span_offset, StringTable* stringtable) {
+Token scan_token(const char* base, ref const(char)* current, ref const(char*) end, StringTable* stringtable) {
     auto start = current;
 
     auto final_span() {
-        return Span(cast(uint) (start - base + span_offset), cast(uint) (current - start));
+        return Span(cast(uint) (start - base), cast(uint) (current - start));
     }
 
     auto make_token(Token.Type t, size_t advance_n, Hash key = Hash(0)) {

@@ -13,7 +13,7 @@ TokenBuffer!64 token_buffer;
 Token[] scan_tokens(const(char)[] text) {
     // IMPORTANT: strings is a throwaway value used only to facilitate lexing
     auto strings = StringTable(64);
-    token_buffer.begin(text, &strings, 10);
+    token_buffer.begin(text, &strings);
     return token_buffer.tokens[];
 }
 
@@ -85,22 +85,22 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("Lex Keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
-        Token(Token.Type.TokAnd,        Span(10, 3), hash_of("and")),
-        Token(Token.Type.TokOr,         Span(14, 2), hash_of("or")),
-        Token(Token.Type.TokIf,         Span(17, 2), hash_of("if")),
-        Token(Token.Type.TokElse,       Span(20, 4), hash_of("else")),
-        Token(Token.Type.TokLoop,       Span(25, 4), hash_of("loop")),
-        Token(Token.Type.TokBreak,      Span(30, 5), hash_of("break")),
-        Token(Token.Type.TokReturn,     Span(36, 6), hash_of("return")),
-        Token(Token.Type.TokContinue,   Span(43, 8), hash_of("continue")),
-        Token(Token.Type.TokDef,        Span(52, 3), hash_of("def"))
+        Token(Token.Type.TokAnd,        Span(0, 3), hash_of("and")),
+        Token(Token.Type.TokOr,         Span(4, 2), hash_of("or")),
+        Token(Token.Type.TokIf,         Span(7, 2), hash_of("if")),
+        Token(Token.Type.TokElse,       Span(10, 4), hash_of("else")),
+        Token(Token.Type.TokLoop,       Span(15, 4), hash_of("loop")),
+        Token(Token.Type.TokBreak,      Span(20, 5), hash_of("break")),
+        Token(Token.Type.TokReturn,     Span(26, 6), hash_of("return")),
+        Token(Token.Type.TokContinue,   Span(33, 8), hash_of("continue")),
+        Token(Token.Type.TokDef,        Span(42, 3), hash_of("def"))
     ));
 }
 
 @("Lex Char") unittest {
     assert("'a'".scan_tokens.equivalent(Token.Type.TokChar));
     assert("'\\a'".scan_tokens.equivalent!false(
-        Token(Token.Type.TokChar, Span(10, 4), hash_of("\\a"))
+        Token(Token.Type.TokChar, Span(0, 4), hash_of("\\a"))
     ));
 }
 
