@@ -1,27 +1,12 @@
 module arc.analysis.parser;
 
+import arc.analysis.lexer : matches_one, Token, TokenBuffer;
 import arc.data.ast;
-import arc.data.hash;
-import arc.data.span;
-import arc.data.symbol;
+import arc.data.hash : Hash;
+import arc.data.span : Span;
+import arc.data.symbol : Symbol, SymbolTable;
 import arc.memory : ArrayPool, VirtualMemory;
-import arc.reporter;
-import arc.analysis.lexer;
-
-enum token_buffer_size = 4096;
-
-enum Precedence {
-    None,
-    Assign,
-    Logic,
-    Equality,
-    Compare,
-    Sum,
-    Product,
-    Power,
-    Call,
-    Prefix
-}
+import arc.reporter : ArcError, Reporter, tprint;
 
 struct ParseUnit {
     VirtualMemory* vm;
@@ -32,6 +17,9 @@ struct ParseUnit {
 }
 
 struct Parser {
+    enum token_buffer_size = 4096;
+
+public:
     TokenBuffer!token_buffer_size tokens;
 
     ParseUnit unit;
@@ -119,6 +107,15 @@ struct Parser {
         }
     }
 
+    AstNode* expr(Precedence p = Precedence.Assign) {
+        return infix_expr(p, prefix());
+    }
+
+    AstNode* type(Precedence p = Precedence.Assign) {
+        return infix_type(p, type_prefix());
+    }
+
+private:
     alias block = seq!(Block, stmt, Token.Type.Lbrace, Token.Type.Rbrace);
 
     AstNode* decl(AstNode.Kind kind, Span prefix, Hash name) {
@@ -132,14 +129,10 @@ struct Parser {
         // dfmt on
     }
 
-    AstNode* expr(Precedence p = Precedence.Assign) {
-        return infix_expr(p, prefix());
-    }
-
     alias infix_expr = infix!(expr, binops);
 
     // dfmt off
-    private immutable Infix[256] binops = [
+    immutable Infix[256] binops = [
         Token.Type.Less        : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Less),
         Token.Type.LessEqual   : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.LessEqual),
         Token.Type.Greater     : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Greater),
@@ -226,14 +219,10 @@ struct Parser {
             ? alloc!Function(node, e, block()) : alloc!Function(node, inferred, e);
     }
 
-    AstNode* type(Precedence p = Precedence.Assign) {
-        return infix_type(p, type_prefix());
-    }
-
     alias infix_type = infix!(type, type_ops);
 
     // dfmt off
-    private immutable Infix[256] type_ops = [
+    immutable Infix[256] type_ops = [
         Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
         Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
         Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
@@ -265,7 +254,6 @@ struct Parser {
         return alloc!FunctionSignature(params, type());
     }
 
-private:
     AstNode* alloc(T, Args...)(Args args) {
         auto t = T(args);
         return verify(t.header) ? raw_alloc!T(t) : alloc!Invalid(t.span);
@@ -312,7 +300,7 @@ private:
         else
             reporter.error(ArcError.TokenExpectMismatch, span,
                     "An unexpected token was encountered: Expected (%s), Encountered (%s)",
-                    type, tokens.source_text[span.start .. span.start + span.length]);
+                    type, source[span.start .. span.start + span.length]);
         return false;
     }
 
@@ -353,6 +341,19 @@ private:
 }
 
 private:
+enum Precedence: ubyte {
+    None,
+    Assign,
+    Logic,
+    Equality,
+    Compare,
+    Sum,
+    Product,
+    Power,
+    Call,
+    Prefix
+}
+
 struct Infix {
     Precedence prec;
     bool is_left_associative, skip_token;
