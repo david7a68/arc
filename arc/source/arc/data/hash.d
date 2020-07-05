@@ -1,6 +1,8 @@
 module arc.data.hash;
 
-alias Hash = ulong;
+struct Hash {
+    ulong value;
+}
 
 /**
  * Hashes text and returns (key: ubyte[8], text: const(char)[])
@@ -10,7 +12,7 @@ Hash hash_of(T: const(char)[])(T text) pure {
 
     auto key = hash!(MurmurHash3!(128))(text);
 
-    return (cast(ulong*) key.ptr)[0];
+    return (cast(Hash*) key.ptr)[0];
 }
 
 Hash hash_of(T)(auto ref T t) {
@@ -20,5 +22,5 @@ Hash hash_of(T)(auto ref T t) {
         return t.toHash();
     
     auto key = hash!(MurmurHash3!128)((&t)[0 .. 1]);
-    return (cast(ulong*) key.ptr)[0];
+    return (cast(Hash*) key.ptr)[0];
 }

@@ -40,7 +40,7 @@ public:
     }
 
     static unresolved() {
-        static immutable _unresolved = Symbol(Kind.Unresolved, 0, null);
+        static immutable _unresolved = Symbol(Kind.Unresolved, Hash(0), null);
         return cast(Symbol*)&_unresolved;
     }
 

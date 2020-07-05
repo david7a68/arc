@@ -138,10 +138,10 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
     auto start = current;
 
     auto final_span() {
-        return Span(start - base + span_offset, current - start);
+        return Span(cast(uint) (start - base + span_offset), cast(uint) (current - start));
     }
 
-    auto make_token(Token.Type t, size_t advance_n, Hash key = 0) {
+    auto make_token(Token.Type t, size_t advance_n, Hash key = Hash(0)) {
         current += advance_n;
         return Token(t, final_span(), key);
     }
@@ -224,7 +224,9 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             while (current < end && (('0' <= *current
                     && *current <= '9') || *current == '_'))
                 current++;
-            return make_token(TokInteger, 0, string_to_int(start[0 .. current - start]));
+            auto token = make_token(TokInteger, 0);
+            token.value = string_to_int(start[0 .. current - start]);
+            return token;
 
         default:
             return make_token(Invalid, 1);

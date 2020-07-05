@@ -25,9 +25,9 @@ final class Source {
     const char[] text;
     /// The global index of the first character in the source file. This should
     /// never be 0.
-    size_t start_offset;
+    uint start_offset;
 
-    this(const char[] path, const char[] text, size_t start_offset) {
+    this(const char[] path, const char[] text, uint start_offset) {
         this.path = path;
         this.text = text;
         this.start_offset = start_offset;
@@ -35,7 +35,7 @@ final class Source {
 
     /// The span encompassing this source file.
     auto span() const {
-        return Span(start_offset, text.length);
+        return Span(start_offset, cast(uint) text.length);
     }
 
     /// Retrieve the source location of this global position.

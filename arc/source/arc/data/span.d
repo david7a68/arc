@@ -11,37 +11,31 @@ module arc.data.span;
  by `start`. 128 billion large spans should be enough, right?
  */
 struct Span {
-    import std.bitmanip : bitfields;
+    uint file_id;
+    uint start;
+    uint length;
 
-    // 128 gib
-    enum size_t num_start_bits = 37;
-    enum size_t max_start = (2 ^^ num_start_bits) - 1;
-    // 128 mib
-    enum size_t num_length_bits = 27;
-    enum size_t max_length = (2 ^^ num_length_bits) - 1;
-
-public:
-    mixin(bitfields!(size_t, "start", num_start_bits, size_t, "length", num_length_bits));
-
-    this(size_t start, size_t length)
-    in(start < max_start && length < max_length) {
+    this(uint file_id, uint start, uint length) {
+        this.file_id = file_id;
         this.start = start;
         this.length = length;
     }
 
-    size_t end() const {
+    this(uint start, uint length) {
+        this.start = start;
+        this.length = length;
+    }
+
+    uint end() const {
         return start + length;
     }
 
     int opCmp(Span rhs) const {
-        if (start < rhs.start)
-            return -1;
-        if (start > rhs.start)
-            return 1;
-        return 0;
+        return start < rhs.start ? -1 : (start > rhs.start ? 1 : 0);
     }
 
-    Span opBinary(string op = "+")(Span rhs) const {
+    Span opBinary(string op = "+")(Span rhs) const
+    in (rhs.file_id == file_id) {
         import std.algorithm : max, min;
 
         if (this == Span())
@@ -51,14 +45,15 @@ public:
         return Span(lo, max(end, rhs.end) - lo);
     }
 
-    void opOpAssign(string op = "+")(Span other) {
+    void opOpAssign(string op = "+")(Span rhs)
+    in (rhs.file_id == file_id) {
         if (this == Span()) {
-            if (other == Span())
+            if (rhs == Span())
                 return;
-            this = other;
+            this = rhs;
         }
         else {
-            this = this + other;
+            this = this + rhs;
         }
     }
 }
@@ -67,7 +62,7 @@ public:
  * Merges all non-0 spans together or returns the 0 span if all spans are 0.
  */
 auto merge_all(Span[] spans...) {
-    Span result;
+    auto result = Span(spans[0].file_id, 0, 0);
     foreach (span; spans)
         result += span;
     return result;

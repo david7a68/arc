@@ -85,15 +85,15 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 
 @("Lex Keywords") unittest {
     assert("and or if else loop break return continue def".scan_tokens.equivalent!false(
-        Token(Token.Type.TokAnd,        Span(10, 3), 17648556366517412293UL),
-        Token(Token.Type.TokOr,         Span(14, 2), 4116612837551264357UL),
-        Token(Token.Type.TokIf,         Span(17, 2), 10245967140023949179UL),
-        Token(Token.Type.TokElse,       Span(20, 4), 15206279584842378246UL),
-        Token(Token.Type.TokLoop,       Span(25, 4), 14974296207267515915UL),
-        Token(Token.Type.TokBreak,      Span(30, 5), 587566040553785743UL),
-        Token(Token.Type.TokReturn,     Span(36, 6), 17660342674565394361UL),
-        Token(Token.Type.TokContinue,   Span(43, 8), 16371828708454923059UL),
-        Token(Token.Type.TokDef,        Span(52, 3), 9791288970560527259UL)
+        Token(Token.Type.TokAnd,        Span(10, 3), hash_of("and")),
+        Token(Token.Type.TokOr,         Span(14, 2), hash_of("or")),
+        Token(Token.Type.TokIf,         Span(17, 2), hash_of("if")),
+        Token(Token.Type.TokElse,       Span(20, 4), hash_of("else")),
+        Token(Token.Type.TokLoop,       Span(25, 4), hash_of("loop")),
+        Token(Token.Type.TokBreak,      Span(30, 5), hash_of("break")),
+        Token(Token.Type.TokReturn,     Span(36, 6), hash_of("return")),
+        Token(Token.Type.TokContinue,   Span(43, 8), hash_of("continue")),
+        Token(Token.Type.TokDef,        Span(52, 3), hash_of("def"))
     ));
 }
 

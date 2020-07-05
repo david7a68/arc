@@ -135,7 +135,7 @@ private:
     VirtualMemory _bucket_vm, _node_vm;
     ObjectPool!(Bucket.Node) _entries;
 
-    Bucket* bucket_for(Hash hash) { return &_buckets[hash % _buckets.length]; }
+    Bucket* bucket_for(Hash hash) { return &_buckets[hash.value % _buckets.length]; }
 
     void resize() {
         const old_length = _buckets.length;

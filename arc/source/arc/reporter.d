@@ -15,7 +15,7 @@ struct ArcError {
 
     Code code;
     // Source parsed_file;
-    size_t location;
+    uint location;
     string message;
 }
 

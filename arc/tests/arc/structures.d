@@ -1,6 +1,7 @@
 module tests.arc.structures;
 
 import arc.memory;
+import arc.data.hash: Hash;
 import arc.data.structures;
 import std.random: uniform;
 
@@ -33,13 +34,13 @@ import std.random: uniform;
 
 @("KeyMap") unittest {
     struct Pair {
-        ulong key;
+        Hash key;
         long value;
     }
 
     Pair[10_000] pairs;
     foreach (i; 0 .. 10_000)
-        pairs[i] = Pair(uniform(0, ulong.max), i);
+        pairs[i] = Pair(Hash(uniform(0, ulong.max)), i);
 
     auto km = KeyMap!long(15);
     foreach (p; pairs)    

@@ -174,7 +174,7 @@ private:
         case TokName:       return alloc!SymbolRef(token.span, take().key);
         case TokInteger:    return alloc!IntLiteral(token.span, take().value);
         case TokString:     return alloc!StrLiteral(token.span, take().key);
-        case TokChar:       return alloc!CharLiteral(take.span, '\0');
+        case TokChar:       return alloc!CharLiteral(token.span, take().key);
         case Lparen:        return list!(Lparen, Rparen)();
         case Lbracket:      return list!(Lbracket, Rbracket)();
         default:
