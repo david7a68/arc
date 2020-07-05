@@ -11,6 +11,7 @@ import arc.memory;
 import arc.reporter : Reporter;
 import arc.source : Source;
 import arc.source_map : SourceMap;
+import arc.data.stringtable: StringTable;
 
 struct Executor {
     import arc.analysis.parser : Parser, ParseUnit;
@@ -23,6 +24,7 @@ public:
     Reporter* global_error_reporter;
     SymbolTable* global_symbol_table;
     SourceMap global_source_map;
+    StringTable stringtable;
 
     this(size_t ast_memory_size, Reporter* reporter, SymbolTable* symtab, SourceMap sources) {
         ast_memory = VirtualMemory(ast_memory_size);
@@ -31,10 +33,12 @@ public:
         global_error_reporter = reporter;
         global_symbol_table = symtab;
         global_source_map = sources;
+
+        stringtable = StringTable(128);
     }
 
     AstNode*[] parse(Source source) {
-        auto unit = ParseUnit(&ast_memory, &ast_arrays, global_error_reporter, global_symbol_table, source.text);
+        auto unit = ParseUnit(&ast_memory, &ast_arrays, global_error_reporter, global_symbol_table, &stringtable, source.text);
         return parser.parse(unit);
     }
 }

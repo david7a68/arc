@@ -5,6 +5,7 @@ import arc.data.ast;
 import arc.data.hash : Hash;
 import arc.data.span : Span;
 import arc.data.symbol : Symbol, SymbolTable, SymbolTreeBuilder;
+import arc.data.stringtable: StringTable;
 import arc.memory : ArrayPool, VirtualMemory;
 import arc.reporter : ArcError, Reporter, tprint;
 
@@ -13,6 +14,7 @@ struct ParseUnit {
     ArrayPool!(AstNode*)* arrays;
     Reporter* reporter;
     SymbolTable* symbol_table;
+    StringTable* strtbl;
     const(char)[] source;
 }
 
@@ -29,8 +31,8 @@ public:
 
     void begin(ParseUnit unit) {
         this.unit = unit;
-        symtree = SymbolTreeBuilder(vm, symbol_table);
-        tokens.begin(unit.source);
+        symtree = SymbolTreeBuilder(unit.vm, symbol_table);
+        tokens.begin(unit.source, strtbl);
     }
 
     // dfmt off

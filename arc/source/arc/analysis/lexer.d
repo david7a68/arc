@@ -1,6 +1,6 @@
 module arc.analysis.lexer;
 
-import arc.data.hash : digest, Hash;
+import arc.data.hash : hash_of, Hash;
 import arc.data.span;
 import arc.util : case_of;
 
@@ -121,6 +121,17 @@ shared static this() {
     keywords[digest("continue")] = Token.Type.TokContinue;
     keywords[digest("def")] = Token.Type.TokDef;
     keywords[digest("import")] = Token.Type.TokImport;
+    keywords[hash_of("and")] = Token.Type.TokAnd;
+    keywords[hash_of("or")] = Token.Type.TokOr;
+    keywords[hash_of("not")] = Token.Type.TokNot;
+    keywords[hash_of("if")] = Token.Type.TokIf;
+    keywords[hash_of("else")] = Token.Type.TokElse;
+    keywords[hash_of("loop")] = Token.Type.TokLoop;
+    keywords[hash_of("break")] = Token.Type.TokBreak;
+    keywords[hash_of("return")] = Token.Type.TokReturn;
+    keywords[hash_of("continue")] = Token.Type.TokContinue;
+    keywords[hash_of("def")] = Token.Type.TokDef;
+    keywords[hash_of("import")] = Token.Type.TokImport;
 }
 
 /**
@@ -179,7 +190,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
         case '\'':
             current++;
             const length = *current == '\\' ? 2 : 1;
-            const key = digest(current[0 .. length]);
+            const key = hash_of(current[0 .. length]);
 
             if (current < end && *(current + length) == '\'')
                 return make_token(TokChar, length + 1, key);
@@ -198,7 +209,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             const length = current - start;
             if (current == end)
                 make_token(Invalid, length);
-            return make_token(TokString, 1, digest(start[0 .. length]));
+            return make_token(TokString, 1, hash_of(start[0 .. length]));
 
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
@@ -213,7 +224,7 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
                 break loop;
             }
 
-            const key = digest(start[0 .. current - start]);
+            const key = stringtable.intern(start[0 .. current - start]);
             const type = keywords.get(key, TokName);
             return make_token(type, 0, key);
 
