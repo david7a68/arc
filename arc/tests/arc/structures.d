@@ -27,9 +27,8 @@ import std.random: uniform;
     foreach (ref p; pairs)
         ht.contains(p.key);
     
-    T t = T(-1);
     foreach (ref p; pairs)
-        assert(ht.get(p.key, t) == p.value);
+        assert(ht.get(p.key) == p.value);
 }
 
 @("KeyMap") unittest {

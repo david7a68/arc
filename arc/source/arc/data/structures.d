@@ -25,7 +25,15 @@ public:
         return _map.contains(key.hash_of);
     }
 
-    ref Value get(Key key, ref Value key_not_found) {
+    Value get(Key key)
+    in (contains(key)) {
+        foreach (ref entry; (*_map.bucket_for(hash_of(key)))[])
+            if (entry.hash == hash_of(key))
+                return entry.value.value;
+        assert(false);
+    }
+
+    Value get(Key key, lazy Value key_not_found) {
         // dip into the implementation of KeyMap to preserve ref-ness
         foreach (ref entry; (*_map.bucket_for(key.hash_of))[])
             if (entry.hash == key.hash_of)
@@ -74,7 +82,15 @@ public:
         return false;
     }
 
-    ref Value get(Hash hash, ref Value key_not_found) {
+    Value get(Hash hash)
+    in (contains(hash)) {
+        foreach (ref entry; (*bucket_for(hash))[])
+            if (entry.hash == hash)
+                return entry.value;
+        assert(false);
+    }
+
+    Value get(Hash hash, lazy Value key_not_found) {
         foreach (ref entry; (*bucket_for(hash))[])
             if (entry.hash == hash)
                 return entry.value;
