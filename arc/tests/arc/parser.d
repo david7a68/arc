@@ -34,7 +34,6 @@ struct ParseResult {
 
 auto parse(string op)(string text) {
     parser.begin(ParseUnit(&vm, &arrays, &reporter, &symbol_table, text));
-    scope(exit) parser.end();
 
     reporter.clear();
     mixin("return ParseResult(parser." ~ op ~ "(), text);");

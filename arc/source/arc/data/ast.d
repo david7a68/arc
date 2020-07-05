@@ -2,7 +2,7 @@ module arc.data.ast;
 
 import arc.data.hash : Hash;
 import arc.data.span;
-import arc.data.symbol : ScopedSymbolTable, Symbol;
+import arc.data.symbol : SymbolTable, Symbol;
 import arc.data.type : ArcType;
 
 struct AstNode {
@@ -72,7 +72,7 @@ mixin template ast_header() {
     Span span;
 
     ArcType* type;
-    ScopedSymbolTable* enclosing_scope;
+    SymbolTable* enclosing_scope;
 
     AstNode* header() inout return  {
         return cast(AstNode*)&kind;
@@ -143,7 +143,7 @@ struct Import {
     mixin ast_header!();
 
     mixin arity!"call_path";
-    ScopedSymbolTable* imported_file;
+    SymbolTable* imported_file;
 
     this(Span span, AstNode* call_path) {
         kind = AstNode.Kind.Import;
@@ -203,10 +203,10 @@ struct FunctionSignature {
 struct List {
     mixin ast_header!();
 
-    ScopedSymbolTable* scope_;
+    SymbolTable* scope_;
     AstNode*[] members;
 
-    this(Span span, ScopedSymbolTable* scope_, AstNode*[] members) {
+    this(Span span, SymbolTable* scope_, AstNode*[] members) {
         kind = AstNode.Kind.List;
         this.span = span;
         this.scope_ = scope_;
@@ -217,10 +217,10 @@ struct List {
 struct Block {
     mixin ast_header!();
 
-    ScopedSymbolTable* scope_;
+    SymbolTable* scope_;
     AstNode*[] statements;
 
-    this(Span span, ScopedSymbolTable* scope_, AstNode*[] statements) {
+    this(Span span, SymbolTable* scope_, AstNode*[] statements) {
         kind = AstNode.Kind.Block;
         this.span = span;
         this.scope_ = scope_;
@@ -231,10 +231,10 @@ struct Block {
 struct Loop {
     mixin ast_header!();
 
-    ScopedSymbolTable* scope_;
+    SymbolTable* scope_;
     AstNode*[] statements;
 
-    this(Span span, ScopedSymbolTable* scope_, AstNode*[] statements) {
+    this(Span span, SymbolTable* scope_, AstNode*[] statements) {
         kind = AstNode.Kind.Loop;
         this.span = span;
         this.scope_ = scope_;

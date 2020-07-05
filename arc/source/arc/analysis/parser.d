@@ -4,7 +4,7 @@ import arc.analysis.lexer : matches_one, Token, TokenBuffer;
 import arc.data.ast;
 import arc.data.hash : Hash;
 import arc.data.span : Span;
-import arc.data.symbol : Symbol, SymbolTable;
+import arc.data.symbol : Symbol, SymbolTable, SymbolTreeBuilder;
 import arc.memory : ArrayPool, VirtualMemory;
 import arc.reporter : ArcError, Reporter, tprint;
 
@@ -12,7 +12,7 @@ struct ParseUnit {
     VirtualMemory* vm;
     ArrayPool!(AstNode*)* arrays;
     Reporter* reporter;
-    SymbolTable* global_symbol_table;
+    SymbolTable* symbol_table;
     const(char)[] source;
 }
 
@@ -25,14 +25,12 @@ public:
     ParseUnit unit;
     alias unit this;
 
+    SymbolTreeBuilder symtree;
+
     void begin(ParseUnit unit) {
         this.unit = unit;
+        symtree = SymbolTreeBuilder(vm, symbol_table);
         tokens.begin(unit.source);
-        global_symbol_table.push_scope();
-    }
-
-    void end() {
-        global_symbol_table.pop_scope();
     }
 
     // dfmt off
@@ -52,7 +50,6 @@ public:
             if (!statement.is_valid)
                 num_errors++;
         }
-        end();
         return statements.get();
     }
 
@@ -123,7 +120,7 @@ private:
         const sym_kind = kind == AstNode.Kind.Definition ? Symbol.Kind.Constant : Symbol.Kind.Variable;
         // dfmt off
         return alloc!Declaration(kind, prefix,
-                global_symbol_table.make_symbol(sym_kind, name),
+                symtree.make_symbol(sym_kind, name),
                 token.type != Token.Type.Equals ? type() : inferred,
                 skip(token.type == Token.Type.Equals) ? expr(Precedence.Logic) : inferred);
         // dfmt on
@@ -266,7 +263,7 @@ private:
     AstNode* raw_alloc(T)(T t) {
         auto n = vm.alloc!T;
         *n = t;
-        n.enclosing_scope = global_symbol_table.current_scope;
+        n.enclosing_scope = symtree.current_scope;
         return n.header;
     }
 
@@ -312,9 +309,9 @@ private:
     AstNode* seq(T, alias member, Token.Type open, Token.Type close, Token.Type delim = Token.Type.None)(Span prefix = Span()) {
         auto start = take(required(open)).span;
         auto seq = arrays.get_appender();
-        auto scope_ = global_symbol_table.push_scope();
+        auto scope_ = symtree.push_scope();
         scope (exit)
-            global_symbol_table.pop_scope();
+            symtree.pop_scope();
 
         while (!is_done && token.type != close) {
             auto node = member();
