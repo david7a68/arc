@@ -11,9 +11,6 @@ import std.traits: isCopyable;
  removed from the hash table.
  */
 struct HashTable(Key, Value) {
-    enum maximum_size = 64.gib;
-    enum max_chain_length = 16;
-
     static assert(isCopyable!Value, "Values must be of a copyable type.");
 
 public:
