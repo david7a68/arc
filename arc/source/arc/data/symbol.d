@@ -69,8 +69,7 @@ public:
     }
 
     Symbol* make_symbol(Symbol.Kind kind, Hash hash) {
-        auto sym = _vm.alloc!Symbol();
-        *sym = Symbol(kind, hash, &this);
+        auto sym = _vm.alloc!Symbol(kind, hash, &this);
         _symbols.insert(hash, sym);
         return sym;
     }
@@ -107,8 +106,7 @@ public:
     }
 
     SymbolTable* push_scope() {
-        _current = _vm.alloc!SymbolTable();
-        *_current = SymbolTable(_vm, _current);
+        _current = _vm.alloc!SymbolTable(_vm, _current);
         return _current;
     }
 

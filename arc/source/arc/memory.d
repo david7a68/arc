@@ -24,6 +24,7 @@ size_t round_to_page(size_t n) {
  */
 struct VirtualMemory {
     import std.algorithm : min, max;
+    import std.conv: emplace;
 
     enum standard_alignment = 8;
 
@@ -87,9 +88,9 @@ public:
      Allocates an instance of type T without initializing it. Any initialization
      must be done after this function.
      */
-    T* alloc(T)()
+    T* alloc(T, Args...)(Args args)
     in (alloc_size(T.sizeof, standard_alignment) <= capacity) {
-        return cast(T*) alloc(T.sizeof).ptr;
+        return (cast(T*) alloc(T.sizeof).ptr).emplace(args);
     }
 
     /**
