@@ -2,7 +2,7 @@ module arc.output.ast_printer;
 
 import arc.data.ast;
 import arc.data.stringtable;
-import std.conv : to;
+import std.format: format;
 
 const(char[]) print_ast(StringTable* strings, AstNode*[] nodes...) {
     auto printer = AstPrinter(strings);
@@ -30,14 +30,12 @@ const(char[]) print_ast(StringTable* strings, AstNode*[] nodes...) {
  *   ├─ Inferred
  *   └─ List
  *       ├─ ListMember
- *       │    ├─ Name: None
  *       │    ├─ Type: Inferred
  *       |    └─ Expr: -
  *       │       ├─ b
  *       │       └─ square
  *       │          └─ 19
  *       └─ ListMember
- *            ├─ None
  *            ├─ Inferred
  *            └─ Name
  *  ```
@@ -73,80 +71,53 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode* n, string prefix = "") {
-        void put_length() {
-            str.put(" (");
-            str.put(n.children.length.to!string);
-            str.put(")");
-        }
-
+    void print(AstNode* node, string prefix = "") {
         str.put(prefix);
-        str.put(repr(strings, n));
-        switch (n.kind) with (AstNode.Kind) {
-        case Invalid:
-            break;
-        case List:
-            put_length();
-            write_children(n, true);
-            break;
-        case Function:
-            write_named_children(n, "Params: ", "Return Type: ", "Body: ");
-            break;
-        case Call:
-            write_named_children(n, "Target: ", "Arguments: ");
-            break;
-        case StaticAccess:
-        case Access:
-            write_named_children(n, "Source: ", "Member: ");
-            break;
-        case Definition:
-        case Variable:
-            str.put(" ");
-            str.put(strings.string_of((cast(Declaration*) n).symbol.name));
-            write_named_children(n, "Type: ", "Expr: ");
-            break;
-        case ListMember:
-            str.put(" ");
-            auto decl = cast(Declaration*) n;
-            if (decl.symbol)
-                str.put(strings.string_of(decl.symbol.name));
-            else
-                str.put("Unnamed");
-            write_named_children(n, "Type: ", "Value: ");
-            break;
-        case If:
-            write_named_children(n, "Condition: ", "Body: ", "Else: ");
-            break;
-        case Negate:
-        case Not:
-            write_named_children(n, "Operand: ");
-            break;
-        case Add:
-        case Subtract:
-        case Multiply:
-        case Divide:
-        case Power:
-        case Less:
-        case LessEqual:
-        case Greater:
-        case GreaterEqual:
-        case Equal:
-        case NotEqual:
-        case And:
-        case Or:
-        case Assign:
-            write_named_children(n, "Left: ", "Right: ");
-            break;
-        default:
-            write_children(n);
-        }
+
+        str.put(node.match!(const(char)[])(
+            (CharLiteral* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
+            (StrLiteral* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
+            (IntLiteral* n) => format("%s (%s)", n.kind, n.value),
+            (SymbolRef* n) => format("%s (%s)", n.kind, strings.string_of(n.text)),
+            (AstNode* n) => format("%s", n.kind)
+        ));
+
+        node.match!void(
+            (Function* n) {
+                write_named_children(n.header, "Params: ", "Return Type: ", "Body: ");
+            },
+            (List* n) {
+                str.put(format(" (%s)", node.children.length));
+                write_children(n.header, true);
+            },
+            (UnOp *n) {
+                write_named_children(n.header, "Operand: ");
+            },
+            (BinOp *n) {
+                if (n.kind == AstNode.Kind.Call)
+                    write_named_children(n.header, "Target: ", "Arguments: ");
+                else if (n.kind == AstNode.Kind.Access || n.kind == AstNode.Kind.StaticAccess)
+                    write_named_children(n.header, "Source: ", "Member: ");
+                else
+                    write_named_children(n.header, "Left: ", "Right: ");
+            },
+            (If* n) {
+                write_named_children(n.header, "Condition: ", "Body: ", "Else: ");
+            },
+            (Declaration* n) {
+                str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
+                write_named_children(n.header, "Type: ", "Expr: ");
+            },
+            (AstNode* n) {
+                write_children(n);
+            }
+        );
     }
 
     void write_children(AstNode* n, bool numbered = false) {
         str.put("\n");
-        foreach (i, child; n.children) {
-            write_child(child, i + 1 == n.children.length, numbered ? ("#" ~ i.to!string ~ " ") : "");
-        }
+        foreach (i, child; n.children)
+            write_child(child, i + 1 == n.children.length, numbered ? format("#%s", i) : "");
     }
 
     void write_named_children(AstNode* n, string[] names...)
@@ -173,14 +144,4 @@ struct AstPrinter {
         print(n, prefix);
         stack.removeBack();
     }
-}
-
-const(char)[] repr(StringTable* strings, AstNode* node) {
-    return node.match!(const(char)[])(
-        (IntLiteral* n) => n.kind.to!string ~ "(" ~ n.value.to!string ~ ")",
-        (CharLiteral* n) => n.kind.to!string ~ "(\"" ~  strings.string_of(n.value) ~ "\")",
-        (StrLiteral* n) => n.kind.to!string ~ "(" ~ strings.string_of(n.value) ~ ")",
-        (SymbolRef* n) => n.kind.to!string ~ "(\"" ~ strings.string_of(n.text) ~ "\")",
-        (AstNode* n) => n.kind.to!string
-    );
 }
