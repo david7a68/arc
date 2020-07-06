@@ -13,7 +13,7 @@
 module arc.analysis;
 
 import arc.data.ast : AstNode;
-import arc.memory : VirtualMemory, gib;
+import arc.memory : VirtualMemory, ArrayPool, gib;
 
 struct SourceUnit {
     import std.algorithm: move;
@@ -25,13 +25,18 @@ public:
     string path;
     string text;
     VirtualMemory memory;
+    ArrayPool!(void*) arrays;
     AstNode*[] syntax_tree;
     SymbolTable* symbol_table;
 
-    this(string path, string text, ref VirtualMemory vm, AstNode*[] syntax_tree, SymbolTable* symbols) {
+    this(string path, string text) {
         this.path = path;
         this.text = text;
-        this.memory = move(vm);
+        this.memory = VirtualMemory(source_memory_size);
+        this.arrays = ArrayPool!(void*)(&this.memory);
+    }
+
+    void post_parse(AstNode*[] syntax_tree, SymbolTable* symbols) {
         this.syntax_tree = syntax_tree;
         this.symbol_table = symbol_table;
     }
@@ -83,7 +88,6 @@ struct SourceAnalyzer {
     import arc.data.stringtable : StringTable;
     import arc.data.structures : HashTable, KeyMap;
     import arc.data.symbol : Symbol;
-    import arc.memory : ArrayPool;
     import arc.reporter : ArcError, Reporter;
 
     enum shared_vm_size = 128.gib;
@@ -93,8 +97,6 @@ public:
         _reporter = reporter;
         _shared_memory = VirtualMemory(shared_vm_size);
 
-        _arrays = ArrayPool!(void*)(&_shared_memory);
-
         _stringtable = StringTable(64);
         _parser = Parser(_reporter, _token_buffer[], &_stringtable);
         _file_map = HashTable!(string, SourceUnit*)(64);
@@ -102,20 +104,18 @@ public:
     }
 
     ArcError[] update_file(string path, string text) {
-        auto vm = VirtualMemory(SourceUnit.source_memory_size);
-        auto allocator = TreeAllocator(&vm, cast(ArrayPool!(AstNode*)*) &_arrays);
+        auto unit = _shared_memory.alloc!SourceUnit(path, text);
+        auto allocator = TreeAllocator(&unit.memory, cast(ArrayPool!(AstNode*)*) &unit.arrays);
 
         auto result = _parser.parse(text, allocator);
         if (auto ast = result.syntax_tree) {
-
             foreach (stmt; ast)
                 stmt.match!void(
                         (Declaration* n) { _declarations.insert(n.symbol.name, n.header); },
                 );
         }
 
-        auto unit = _shared_memory.alloc!SourceUnit();
-        *unit = SourceUnit(path, text, vm, result.syntax_tree, result.symbol_table);
+        unit.post_parse(result.syntax_tree, result.symbol_table);
         _file_map.insert(path, unit);
         return _reporter.errors;
     }
