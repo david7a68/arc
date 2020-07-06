@@ -56,7 +56,7 @@ private:
 }
 
 struct KeyMap(Value) {
-    enum maximum_size = 64.gib;
+    enum maximum_size = 32.gib;
     enum max_chain_length = 16;
 
     static assert(isCopyable!Value, "Values must be of a copyable type.");
@@ -194,7 +194,7 @@ public:
 
     /// Appends an element to the end of the list.
     void append(ElementType e) {
-        auto node = _nodes.alloc(null);
+        auto node = _nodes.alloc();
         node.value = move(e);
         (_first ? _last.next : _first) = node;
         _last = node;

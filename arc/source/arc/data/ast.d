@@ -79,7 +79,10 @@ mixin template ast_header() {
     }
 
     bool is_valid() {
-        return kind != AstNode.Kind.Invalid;
+        debug
+            return kind != AstNode.Kind.Invalid && this.header.children.are_valid;
+        else
+            return kind != AstNode.Kind.Invalid;
     }
 }
 
@@ -327,12 +330,10 @@ bool verify(AstNode* node) {
 }
 
 bool are_valid(AstNode*[] nodes) {
-    import std.algorithm : map, fold;
-
-    // dfmt off
-    debug return nodes.map!(n => verify(n)).fold!((a, b) => a && b);
-    else return nodes.map!(n => n.is_valid).fold!((a, b) => a && b);
-    // dfmt on
+    foreach (node; nodes)
+        if (!node.is_valid)
+            return false;
+    return true;
 }
 
 AstNode*[] children(AstNode* node) {

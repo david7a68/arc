@@ -51,16 +51,17 @@ public:
 
 struct SymbolTable {
     import arc.data.structures: KeyMap;
-    import arc.memory: VirtualMemory;
+    import arc.memory: VirtualMemory, ArrayPool, Appender;
 
 public:
-    this(VirtualMemory* vm) {
+    this(VirtualMemory* vm, ArrayPool!(Symbol*)* arrays) {
         _vm = vm;
-        _symbols = KeyMap!(Symbol*)(64);
+        _arrays = arrays;
+        _symbols = _arrays.get_appender();
     }
 
-    this(VirtualMemory* vm, SymbolTable* parent) {
-        this(vm);
+    this(SymbolTable* parent) {
+        this(parent._vm, parent._arrays);
         _parent = parent;
     }
 
@@ -70,25 +71,14 @@ public:
 
     Symbol* make_symbol(Symbol.Kind kind, Hash hash) {
         auto sym = _vm.alloc!Symbol(kind, hash, &this);
-        _symbols.insert(hash, sym);
+        _symbols ~= sym;
         return sym;
-    }
-
-    Symbol* get(Hash hash) {
-        return _symbols.get(hash);
-    }
-
-    bool contains(Hash hash) {
-        return _symbols.contains(hash);
-    }
-
-    Symbol* lookup(Hash hash) {
-        return _symbols.get(hash, _parent ? _parent.lookup(hash) : null);
     }
 
 private:
     VirtualMemory* _vm;
-    KeyMap!(Symbol*) _symbols;
+    ArrayPool!(Symbol*)* _arrays;
+    Appender!(Symbol*) _symbols;
     SymbolTable* _parent;
 }
 
@@ -101,12 +91,16 @@ public:
         _root = _current = root;
     }
 
+    SymbolTable* root_scope() {
+        return _root;
+    }
+
     SymbolTable* current_scope() {
         return _current;
     }
 
     SymbolTable* push_scope() {
-        _current = _vm.alloc!SymbolTable(_vm, _current);
+        _current = _vm.alloc!SymbolTable(_current);
         return _current;
     }
 

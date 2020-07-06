@@ -13,23 +13,33 @@
 module arc.analysis;
 
 import arc.data.ast : AstNode;
-import arc.memory : VirtualMemory;
+import arc.memory : VirtualMemory, gib;
 
 struct SourceUnit {
+    import std.algorithm: move;
     import arc.data.symbol : SymbolTable;
+
+    enum source_memory_size = 4.gib;
 
 public:
     string path;
     string text;
     VirtualMemory memory;
     AstNode*[] syntax_tree;
-    SymbolTable symbol_table;
+    SymbolTable* symbol_table;
 
-    this(string path, string text, size_t memory_size) {
+    this(string path, string text, ref VirtualMemory vm, AstNode*[] syntax_tree, SymbolTable* symbols) {
         this.path = path;
         this.text = text;
-        this.memory = VirtualMemory(memory_size);
-        this.symbol_table = SymbolTable(&memory);
+        this.memory = move(vm);
+        this.syntax_tree = syntax_tree;
+        this.symbol_table = symbol_table;
+    }
+
+    @disable this(this);
+
+    ~this() {
+        destroy(memory);
     }
 
     auto coords_of(uint position) {
@@ -66,56 +76,47 @@ public:
  but that's not our concern at this time.
  */
 struct SourceAnalyzer {
-    import arc.analysis.parser : Parser, ParseUnit;
+    import arc.analysis.lexer: Token, TokenBuffer;
+    import arc.analysis.parser : Parser, TreeAllocator;
     import arc.data.ast : Declaration, match;
     import arc.data.hash : Hash;
     import arc.data.stringtable : StringTable;
     import arc.data.structures : HashTable, KeyMap;
     import arc.data.symbol : Symbol;
-    import arc.memory : ArrayPool, gib;
+    import arc.memory : ArrayPool;
     import arc.reporter : ArcError, Reporter;
 
     enum shared_vm_size = 128.gib;
-    enum file_vm_size = 4.gib;
 
 public:
     this(Reporter* reporter) {
         _reporter = reporter;
         _shared_memory = VirtualMemory(shared_vm_size);
 
-        _parser = Parser();
         _arrays = ArrayPool!(void*)(&_shared_memory);
 
-        _file_map = HashTable!(string, SourceUnit*)(64);
         _stringtable = StringTable(64);
+        _parser = Parser(_reporter, _token_buffer[], &_stringtable);
+        _file_map = HashTable!(string, SourceUnit*)(64);
         _declarations = KeyMap!(AstNode*)(64);
     }
 
     ArcError[] update_file(string path, string text) {
-        auto unit = _shared_memory.alloc!SourceUnit(path, text, file_vm_size);
-        _file_map.insert(path, unit);
+        auto vm = VirtualMemory(SourceUnit.source_memory_size);
+        auto allocator = TreeAllocator(&vm, cast(ArrayPool!(AstNode*)*) &_arrays);
 
-        // auto pu = ParseUnit(unit, cast(ArrayPool!(AstNode*)*)*&_arrays, _reporter, &_stringtable);
+        auto result = _parser.parse(text, allocator);
+        if (auto ast = result.syntax_tree) {
 
-        auto pu = ParseUnit(
-                &unit.memory,
-                cast(ArrayPool!(AstNode*)*)&_arrays,
-                _reporter,
-                &unit.symbol_table,
-                &_stringtable,
-                unit.text);
-
-        if (auto syntax = _parser.parse(pu)) {
-            unit.syntax_tree = syntax;
-
-            foreach (stmt; syntax)
+            foreach (stmt; ast)
                 stmt.match!void(
                         (Declaration* n) { _declarations.insert(n.symbol.name, n.header); },
                 );
-
-            return [];
         }
 
+        auto unit = _shared_memory.alloc!SourceUnit();
+        *unit = SourceUnit(path, text, vm, result.syntax_tree, result.symbol_table);
+        _file_map.insert(path, unit);
         return _reporter.errors;
     }
 
@@ -143,6 +144,7 @@ private:
     HashTable!(string, SourceUnit*) _file_map;
 
     Parser _parser;
+    Token[4096] _token_buffer;
     ArrayPool!(void*) _arrays;
     KeyMap!(AstNode*) _declarations;
 

@@ -7,14 +7,14 @@ import arc.analysis.lexer: Token, TokenBuffer;
 
 /// Thread-local global token buffer so we don't have to allocate a whole bunch
 /// of these. Also makes the interface of `scan_tokens(text)` simpler.
-TokenBuffer!64 token_buffer;
+Token[64] token_buffer;
 
 /// Read all tokens from text, up to `token_buffer.length`.
 Token[] scan_tokens(const(char)[] text) {
     // IMPORTANT: strings is a throwaway value used only to facilitate lexing
     auto strings = StringTable(64);
-    token_buffer.begin(text, &strings);
-    return token_buffer.tokens[];
+    auto stream = TokenBuffer(text, token_buffer, &strings);
+    return stream.buffer[];
 }
 
 /// Tests that the tokens provided are equivalent in type or value to `ts`.

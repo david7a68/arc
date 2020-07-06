@@ -53,36 +53,33 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
 /**
  A TokenBuffer offers a buffered 1-token window over a source text.
  */
-struct TokenBuffer(size_t buffer_size) {
+struct TokenBuffer {
 private:
     size_t _current_token_index;
     size_t _next_buffer_index;
     StringTable* _stringtable;
 
 public:
-    Token[buffer_size] tokens;
+    Token[] buffer;
     const(char)[] source_text;
     Token current;
     bool done;
 
-    this(const(char)[] text, StringTable* stringtable) {
+    this(const(char)[] text, Token[] tokens, StringTable* stringtable) {
         source_text = text;
         _stringtable = stringtable;
+        buffer = tokens;
         fill_buffer();
-        current = tokens[0];
+        current = buffer[0];
         done = current.type == Token.Type.Done;
-    }
-
-    void begin(const(char)[] text, StringTable* stringtable) {
-        this = typeof(this)(text, stringtable);
     }
 
     void advance() {
         _current_token_index++;
-        if (_current_token_index == tokens.length)
+        if (_current_token_index == buffer.length)
             fill_buffer();
 
-        current = tokens[_current_token_index];
+        current = buffer[_current_token_index];
         done = current.type == Token.Type.Done;
     }
 
@@ -91,13 +88,13 @@ public:
         auto current = source_text.ptr + _next_buffer_index; // we allow indexing past the buffer because scan_token handles it for us.
         const end = source_text.length + base;
 
-        debug tokens[] = Token.init;
+        debug buffer[] = Token.init;
 
         // get first token, might be Done
-        tokens[0] = scan_token(base, current, end, _stringtable);
-        for (size_t i = 1; tokens[i - 1].type != Token.Type.Done && i < tokens.length;
+        buffer[0] = scan_token(base, current, end, _stringtable);
+        for (size_t i = 1; buffer[i - 1].type != Token.Type.Done && i < buffer.length;
                 i++)
-            tokens[i] = scan_token(base, current, end, _stringtable);
+            buffer[i] = scan_token(base, current, end, _stringtable);
 
         const read = current - (source_text.ptr + _next_buffer_index);
         _next_buffer_index += read;

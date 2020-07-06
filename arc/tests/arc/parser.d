@@ -1,45 +1,35 @@
 module tests.arc.parser;
 
-
+import arc.analysis.parser;
+import arc.analysis.lexer: Token;
 import arc.data.ast;
 import arc.data.span;
-import arc.data.symbol;
-import arc.data.stringtable: StringTable;
-import arc.memory : mib, VirtualMemory, ArrayPool;
+import arc.data.stringtable : StringTable;
+import arc.memory : ArrayPool, mib, VirtualMemory;
 import arc.reporter;
-import arc.analysis.parser;
 import std.stdio : writefln;
 
+// Parser stuff
+Parser parser;
+Reporter reporter;
+StringTable strings;
+Token[128] token_buffer;
+
+// TreeAllocator alocators
 VirtualMemory vm;
 ArrayPool!(AstNode*) arrays;
 
-Parser parser;
-Reporter reporter;
-SymbolTable symbol_table;
-StringTable strings;
-
 static this() {
-    // TODO: Find out if we can reduce memory usage
+    strings = StringTable(64);
+    parser = Parser(&reporter, token_buffer[], &strings);
+
     vm = VirtualMemory(2.mib);
     arrays = ArrayPool!(AstNode*)(&vm);
-    strings = StringTable(64);
-
-    parser = Parser();
-    reporter = Reporter();
-    symbol_table = SymbolTable(&vm);
-}
-
-struct ParseResult {
-    AstNode* tree;
-    alias tree this;
-    string text;
 }
 
 auto parse(string op)(string text) {
-    parser.begin(ParseUnit(&vm, &arrays, &reporter, &symbol_table, &strings, text));
-
     reporter.clear();
-    mixin("return ParseResult(parser." ~ op ~ "(), text);");
+    mixin("return parser.parse_" ~ op ~ "(text, TreeAllocator(&vm, &arrays));");
 }
 
 bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
@@ -56,7 +46,7 @@ bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
             flatten(child);
     }
 
-    flatten(result.tree);
+    flatten(result.syntax_tree[0]);
     if (equal(types, tree_types))
         return true;
     
@@ -66,7 +56,7 @@ bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
         "Tree:\n" ~
         "\t%s\n" ~
         "Expected:\n" ~
-        "\t%s", result.text, tree_types, types);
+        "\t%s", result.source, tree_types, types);
     return false;
 }
 
@@ -80,14 +70,14 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
     if (!reporter.has_error(error)) {
         writefln("The parser did not encounter the expected error.");
-        writefln("Source: %s\nExpected: %s\nErrors: %s", result.text, error, reporter.errors);
+        writefln("Source: %s\nExpected: %s\nErrors: %s", result.source, error, reporter.errors);
         return false;
     }
 
     if (reporter.errors.length != count) {
         writefln("The number of errors encountered was unexpected."
                 ~ "\nSource: %s\nExpected:    %s\nEncountered: %s\nErrors:\n\t%s",
-                result.text, count, reporter.errors.length, reporter.errors);
+                result.source, count, reporter.errors.length, reporter.errors);
         return false;
     }
 
@@ -114,17 +104,17 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
 @("Parse Block") unittest {
     with (AstNode.Kind) {
-        assert("{ ".parse!"stmt"().is_valid == false);
-        assert("{ a }".parse!"stmt"().is_valid == false);
-        assert("{ ( } )".parse!"stmt"().is_valid == false);
-        assert("( a, { ) }".parse!"stmt"().is_valid == false);
+        assert("{ ".parse!"stmt"().syntax_tree[0].is_valid == false);
+        assert("{ a }".parse!"stmt"().syntax_tree[0].is_valid == false);
+        assert("{ ( } )".parse!"stmt"().syntax_tree[0].is_valid == false);
+        assert("( a, { ) }".parse!"stmt"().syntax_tree[0].is_valid == false);
     }
 }
 
 @("Parse Definition") unittest {
     with (AstNode.Kind) {
         auto type = "def T : T2;".parse!"stmt"();
-        assert(type.span == Span(0, 11));
+        assert(type.syntax_tree[0].span == Span(0, 11));
         assert(check_types(type,
             Definition,
                 SymbolRef,
@@ -134,7 +124,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
     with (AstNode.Kind) {
         auto type = "def T : (u32, k: u32);".parse!"stmt"();
-        assert(type.span == Span(0, 22));
+        assert(type.syntax_tree[0].span == Span(0, 22));
         assert(check_types(type,
             Definition,
                 List,
@@ -216,7 +206,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
     with (AstNode.Kind) {
         {
             auto var = "a : T = 3;".parse!"stmt"();
-            assert(var.span == Span(0, 10));
+            assert(var.syntax_tree[0].span == Span(0, 10));
             assert(check_types(var,
                 Variable,
                     SymbolRef,
@@ -226,7 +216,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
         {
             auto var = "a := 3;".parse!"stmt"();
-            assert(var.span == Span(0, 7));
+            assert(var.syntax_tree[0].span == Span(0, 7));
             assert(check_types(var,
                 Variable,
                     Inferred,
@@ -236,7 +226,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 
         {
             auto var = "a : T;".parse!"stmt"();
-            assert(var.span == Span(0, 6));
+            assert(var.syntax_tree[0].span == Span(0, 6));
             assert(check_types(var,
                 Variable,
                     SymbolRef,
@@ -331,7 +321,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse Empty List") unittest {
     with (AstNode.Kind) {
         auto list = "()".parse!"expr"();
-        assert(list.span == Span(0, 2));
+        assert(list.syntax_tree[0].span == Span(0, 2));
         assert(check_types(list, List));
     }
 }
@@ -339,7 +329,7 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 @("Parse List Members") unittest {
     with (AstNode.Kind) {
         auto list = "[a:= 2, 3, c:T=blah.b]".parse!"expr"();
-        assert(list.span == Span(0, 22));
+        assert(list.syntax_tree[0].span == Span(0, 22));
         assert(check_types(list,
             List,
                 ListMember,
@@ -523,7 +513,6 @@ bool check_error(ParseResult result, ArcError.Code error, size_t count = 1) {
 unittest {
     with (AstNode.Kind) {
         const stmt = "{{{{{def a := !!}}anything at all}}}\nblah();".parse!"stmt";
-        assert(stmt.span == Span(0, 17));
-        assert(!parser.is_done);
+        assert(stmt.syntax_tree[0].span == Span(0, 17));
     }
 }

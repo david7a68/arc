@@ -1,59 +1,99 @@
 module arc.analysis.parser;
 
-import arc.analysis.lexer : matches_one, Token, TokenBuffer;
+import arc.analysis.lexer;
 import arc.data.ast;
-import arc.data.hash : Hash;
-import arc.data.span : Span;
-import arc.data.symbol : Symbol, SymbolTable, SymbolTreeBuilder;
-import arc.data.stringtable: StringTable;
-import arc.memory : ArrayPool, VirtualMemory;
+import arc.data.symbol;
 import arc.reporter : ArcError, Reporter, tprint;
+import arc.memory : ArrayPool, VirtualMemory;
 
-struct ParseUnit {
-    VirtualMemory* vm;
+struct TreeAllocator {
+    VirtualMemory* nodes;
     ArrayPool!(AstNode*)* arrays;
-    Reporter* reporter;
+}
+
+struct ParseResult {
+    string source;
+    AstNode*[] syntax_tree;
     SymbolTable* symbol_table;
-    StringTable* strtbl;
-    const(char)[] source;
 }
 
 struct Parser {
-    enum token_buffer_size = 4096;
+    import arc.data.stringtable: StringTable;
 
 public:
-    TokenBuffer!token_buffer_size tokens;
+    Reporter* reporter;
+    Token[] token_buffer;
+    StringTable* string_table;
 
-    ParseUnit unit;
-    alias unit this;
-
-    SymbolTreeBuilder symtree;
-
-    void begin(ParseUnit unit) {
-        this.unit = unit;
-        symtree = SymbolTreeBuilder(unit.vm, symbol_table);
-        tokens.begin(unit.source, strtbl);
+    this(Reporter* reporter, Token[] token_buffer, StringTable* string_table) {
+        this.reporter = reporter;
+        this.token_buffer = token_buffer;
+        this.string_table = string_table;
     }
+
+    ParseResult parse(string source, TreeAllocator alloc) {
+        auto ctx = make_context(source, alloc);
+        auto statements = alloc.arrays.get_appender();
+
+        size_t num_errors;
+        while (!ctx.is_done && num_errors < 5) {
+            auto statement = ctx.stmt();
+            statements ~= statement;
+
+            if (!statement.is_valid)
+                num_errors++;
+        }
+
+        return ParseResult(source, statements.get(), ctx.symtree.root_scope);
+    }
+
+    version (unittest) {
+        ParseResult parse_stmt(string source, TreeAllocator alloc) {
+            auto ctx = make_context(source, alloc);
+            return ParseResult(source, [ctx.stmt()], ctx.symtree.root_scope);
+        }
+
+        ParseResult parse_expr(string source, TreeAllocator alloc) {
+            auto ctx = make_context(source, alloc);
+            return ParseResult(source, [ctx.expr()], ctx.symtree.root_scope);
+        }
+
+        ParseResult parse_type(string source, TreeAllocator alloc) {
+            auto ctx = make_context(source, alloc);
+            return ParseResult(source, [ctx.type()], ctx.symtree.root_scope);
+        }
+    }
+
+private:
+    ParseContext make_context(string source, TreeAllocator alloc) {
+        return ParseContext(
+            reporter,
+            source,
+            alloc,
+            TokenBuffer(source, token_buffer, string_table),
+            SymbolTreeBuilder(alloc.nodes, alloc.nodes.alloc!SymbolTable(alloc.nodes, cast(ArrayPool!(Symbol*)*) alloc.arrays)));
+    }
+}
+
+private:
+
+struct ParseContext {
+    import arc.data.hash : Hash;
+    import arc.data.span : Span;
+
+public:
+    Reporter* reporter;
+    string source;
+    TreeAllocator allocator;
+
+    TokenBuffer tokens;
+    SymbolTreeBuilder symtree;
 
     // dfmt off
     Token token() { return tokens.current; }
 
     bool is_done() { return token.type == Token.Type.Done; }
     // dfmt on
-
-    AstNode*[] parse(ParseUnit unit) {
-        begin(unit);
-        auto statements = arrays.get_appender();
-        size_t num_errors;
-        while (!is_done && num_errors < 5) {
-            auto statement = stmt();
-            statements ~= statement;
-
-            if (!statement.is_valid)
-                num_errors++;
-        }
-        return statements.get();
-    }
 
     AstNode* stmt() {
         auto stmt = () {
@@ -201,7 +241,7 @@ private:
         if (first.kind == AstNode.Kind.SymbolRef && token.type == Token.Type.Colon) {
             const s = first.span;
             const k = (cast(SymbolRef*) first).text;
-            vm.free_to_ptr(first);
+            allocator.nodes.free_to_ptr(first);
             return decl(AstNode.Kind.ListMember, s, k);
         }
 
@@ -255,7 +295,7 @@ private:
 
     AstNode* alloc(T, Args...)(Args args) {
         auto t = T(args);
-        return verify(t.header) ? raw_alloc!T(t) : alloc!Invalid(t.span);
+        return t.header.is_valid ? raw_alloc!T(t) : alloc!Invalid(t.span);
     }
 
     AstNode* alloc(T : Invalid)(Span span) {
@@ -263,7 +303,7 @@ private:
     }
 
     AstNode* raw_alloc(T)(T t) {
-        auto n = vm.alloc!T;
+        auto n = allocator.nodes.alloc!T;
         *n = t;
         n.enclosing_scope = symtree.current_scope;
         return n.header;
@@ -310,7 +350,7 @@ private:
 
     AstNode* seq(T, alias member, Token.Type open, Token.Type close, Token.Type delim = Token.Type.None)(Span prefix = Span()) {
         auto start = take(required(open)).span;
-        auto seq = arrays.get_appender();
+        auto seq = allocator.arrays.get_appender();
         auto scope_ = symtree.push_scope();
         scope (exit)
             symtree.pop_scope();
@@ -339,7 +379,6 @@ private:
     }
 }
 
-private:
 enum Precedence: ubyte {
     None,
     Assign,

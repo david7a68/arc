@@ -53,6 +53,9 @@ public:
     @disable this(this);
 
     ~this() {
+        if (!_num_bytes_reserved)
+            return;
+
         version (Windows) {
             const status = VirtualFree(_region_start, 0, MEM_RELEASE);
             assert(status, "Failed to free memory.");
@@ -250,6 +253,8 @@ public:
         foreach (size_class_index, ref pool; _chunks)
             pool = MemoryPool(memory, size_of(size_class_index));
     }
+
+    @disable this(this);
 
     T[] alloc(size_t length) {
         if (length == 0) return [];
