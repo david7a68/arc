@@ -29,7 +29,7 @@ static this() {
 
 auto parse(string op)(string text) {
     reporter.clear();
-    mixin("return parser.parse_" ~ op ~ "(text, TreeAllocator(&vm, &arrays));");
+    mixin("return parser.parse_" ~ op ~ "(text, AstAllocator(&vm, &arrays));");
 }
 
 bool type_equivalent(ParseResult result, AstNode.Kind[] types...) {
