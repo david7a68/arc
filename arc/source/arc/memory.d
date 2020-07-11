@@ -18,6 +18,20 @@ size_t round_to_page(size_t n) {
     return n + (pageSize - n % pageSize);
 }
 
+template object_size(T) {
+    static if (is(T == class))
+        enum object_size = __traits(classInstanceSize, T);
+    else
+        enum object_size = T.sizeof;
+}
+
+template PtrType(T) {
+    static if (is(T == class))
+        alias PtrType = T;
+    else
+        alias PtrType = T*;
+}
+
 /**
  This struct provides an interface for reserving a block of virtual memory, then
  allocating from it sequentially. It returns all of its memory upon destruction.
@@ -91,9 +105,9 @@ public:
      Allocates an instance of type T without initializing it. Any initialization
      must be done after this function.
      */
-    T* alloc(T, Args...)(Args args)
-    in (alloc_size(T.sizeof, standard_alignment) <= capacity) {
-        return (cast(T*) alloc(T.sizeof).ptr).emplace(args);
+    PtrType!T alloc(T, Args...)(Args args)
+    in (alloc_size(object_size!T, standard_alignment) <= capacity) {
+        return (cast(PtrType!T) alloc(object_size!T).ptr).emplace(args);
     }
 
     /**
@@ -148,6 +162,8 @@ private:
  allocation requests on to an instance of VirtualMemory.
  */
 struct MemoryPool {
+    import std.conv: emplace;
+
 public:
     this(VirtualMemory* allocator, size_t chunk_size) {
         _allocator = allocator;
@@ -169,6 +185,13 @@ public:
         _first_free_node = _first_free_node.next;
         mem[] = null;
         return mem;
+    }
+
+    PtrType!T alloc(T, Args...)(Args args)
+    in (object_size!T <= chunk_size) {
+        auto object = cast(PtrType!T) (alloc().ptr);
+        emplace(object, args);
+        return object;
     }
 
     void free(void[] object)
@@ -195,31 +218,18 @@ private:
  instead of blocks of bits.
  */
 struct ObjectPool(T) {
-    static if (is(T == class)) {
-        enum object_size = __traits(classInstanceSize, T);
-        alias PtrType = T;
-    }
-    else {
-        enum object_size = T.sizeof;
-        alias PtrType = T*;
-    }
-
     this(VirtualMemory* mem) {
-        _chunks = MemoryPool(mem, object_size);
+        _chunks = MemoryPool(mem, object_size!T);
     }
 
     @disable this(this);
 
-    PtrType alloc(Args...)(Args args) {
-        import std.conv : emplace;
-
-        auto object = cast(PtrType) _chunks.alloc().ptr;
-        emplace(object, args);
-        return object;
+    PtrType!T alloc(Args...)(Args args) {
+        return _chunks.alloc!T(args);
     }
 
-    void free(PtrType t) {
-        _chunks.free((cast(void*) t)[0 .. object_size]);
+    void free(PtrType!T t) {
+        _chunks.free((cast(void*) t)[0 .. object_size!T]);
     }
 
     private MemoryPool _chunks;
