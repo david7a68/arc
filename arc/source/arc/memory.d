@@ -2,20 +2,21 @@ module arc.memory;
 
 import core.memory : pageSize;
 
-size_t kib(size_t n) {
-    return n * 1024;
-}
-
-size_t mib(size_t n) {
-    return n * (1024 ^^ 2);
-}
-
-size_t gib(size_t n) {
-    return n * (1024 ^^ 3);
-}
+// dfmt off
+size_t kib(size_t n) { return n * 1024; }
+size_t mib(size_t n) { return n * (1024 ^^ 2); }
+size_t gib(size_t n) { return n * (1024 ^^ 3); }
+// dfmt on
 
 size_t round_to_page(size_t n) {
     return n + (pageSize - n % pageSize);
+}
+
+PtrType!T emplace_obj(T, Args...)(void[] mem, Args args)
+in (mem.length >= object_size!T) {
+    import std.conv : emplace;
+
+    return (cast(PtrType!T) mem.ptr).emplace(args);
 }
 
 template object_size(T) {
@@ -79,7 +80,15 @@ public:
     }
 
     size_t actual_capacity() { return _num_bytes_reserved; }
+    // dfmt off
+    size_t bytes_reserved() { return _num_bytes_reserved; }
     size_t bytes_allocated() { return _next_alloc_start - _region_start; }
+    // dfmt on
+
+    size_t alloc_size_for(size_t size) {
+        const remainder = size % standard_alignment;
+        return size + (remainder ? standard_alignment - remainder : remainder);
+    }
 
     /**
      Allocates n bytes of memory.
@@ -88,8 +97,8 @@ public:
      standard alignment, which is described at the top of the struct.
      */
     void[] alloc(size_t n)
-    in(alloc_size(n, standard_alignment) <= capacity) {
-        const alloc_size = alloc_size(n, standard_alignment);
+    in (alloc_size_for(n) <= capacity) {
+        const alloc_size = alloc_size_for(n);
         const alloc_diff = alloc_size - n; // This subtraction could be avoided by unpacking alloc_size
         auto next_after_alloc = _next_alloc_start + alloc_size;
 
@@ -148,11 +157,6 @@ private:
 
     // The number of additional pages allocated whenever more pages are needed.
     enum extra_pages_per_alloc = 1000;
-
-    size_t alloc_size(size_t size, size_t alignment) {
-        const remainder = size % alignment;
-        return size + (remainder ? size + alignment - remainder : remainder);
-    }
 }
 
 /**
