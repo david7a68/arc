@@ -1,9 +1,9 @@
 module tests.arc.structures;
 
-import arc.memory;
-import arc.data.hash: Hash;
+import arc.data.hash : Hash, hash_of;
 import arc.data.structures;
-import std.random: uniform;
+import arc.memory;
+import std.random : uniform;
 
 @("HashTable") unittest {
     import std.algorithm: move;
@@ -40,10 +40,10 @@ import std.random: uniform;
 
     Pair[10_000] pairs;
     foreach (i; 0 .. 10_000)
-        pairs[i] = Pair(Hash(uniform(0, ulong.max)), i);
+        pairs[i] = Pair(hash_of(uniform(0, ulong.max)), i);
 
     auto km = KeyMap!long(15);
-    foreach (p; pairs)    
+    foreach (p; pairs)
         km.insert(p.key, p.value);
 
     foreach (p; pairs)

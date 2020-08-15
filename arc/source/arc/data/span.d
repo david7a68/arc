@@ -1,14 +1,8 @@
 module arc.data.span;
 
 /**
- A compressed span, indexed from a global file map such that every character 
- during compilation has a unique index.
-
- In its compressed format, the span supports a total compilation size of 128
- gibibytes, and a per-file size of up to 128 mebibytes. This should be plenty
- of space for now. If there ever comes a time where larger spans are needed,
- it should be simple to use a large virtual array to hold expanded spans indexed
- by `start`. 128 billion large spans should be enough, right?
+ Represents a span of text from within a file. Spans are file-specific, and
+ cannot be merged or compared across files.
  */
 struct Span {
     uint file_id;
