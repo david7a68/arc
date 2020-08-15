@@ -39,7 +39,6 @@ template PtrType(T) {
  */
 struct VirtualMemory {
     import std.algorithm : min, max;
-    import std.conv: emplace;
 
     enum standard_alignment = 8;
 
@@ -79,7 +78,6 @@ public:
             static assert(false, "Platform not supported for IndexedRegion.");
     }
 
-    size_t actual_capacity() { return _num_bytes_reserved; }
     // dfmt off
     size_t bytes_reserved() { return _num_bytes_reserved; }
     size_t bytes_allocated() { return _next_alloc_start - _region_start; }
@@ -115,8 +113,8 @@ public:
      must be done after this function.
      */
     PtrType!T alloc(T, Args...)(Args args)
-    in (alloc_size(object_size!T, standard_alignment) <= capacity) {
-        return (cast(PtrType!T) alloc(object_size!T).ptr).emplace(args);
+    in (alloc_size_for(object_size!T) <= capacity) {
+        return alloc(object_size!T).emplace_obj!T(args);
     }
 
     /**
@@ -134,7 +132,7 @@ public:
     }
 
     void reserve(size_t n)
-    in(n <= capacity) {
+    in (n <= capacity) {
         n = round_to_page(n);
         const bytes_needed = min(max(_extra_bytes_per_alloc, n), capacity);
 
@@ -166,8 +164,6 @@ private:
  allocation requests on to an instance of VirtualMemory.
  */
 struct MemoryPool {
-    import std.conv: emplace;
-
 public:
     this(VirtualMemory* allocator, size_t chunk_size) {
         _allocator = allocator;
@@ -193,14 +189,12 @@ public:
 
     PtrType!T alloc(T, Args...)(Args args)
     in (object_size!T <= chunk_size) {
-        auto object = cast(PtrType!T) (alloc().ptr);
-        emplace(object, args);
-        return object;
+        return alloc().emplace_obj!T(args);
     }
 
     void free(void[] object)
-    in(object.length == chunk_size) {
-        assert(_allocator);
+    in (object.length == chunk_size) {
+        assert(_allocator && _chunks_allocated);
         auto n = cast(Node*)&object[0];
         n.next = _first_free_node;
         _first_free_node = n;
@@ -260,10 +254,11 @@ struct ArrayPool(T) {
 
 public:
     this(VirtualMemory* memory, in size_t[] size_classes = default_size_classes)
-    in(memory !is null) {
+    in (memory !is null) {
         _size_classes = size_classes;
 
         _chunks = cast(MemoryPool[]) memory.alloc(MemoryPool.sizeof * size_classes.length);
+
         foreach (size_class_index, ref pool; _chunks)
             pool = MemoryPool(memory, size_of(size_class_index));
     }
@@ -271,7 +266,8 @@ public:
     @disable this(this);
 
     T[] alloc(size_t length) {
-        if (length == 0) return [];
+        if (length == 0)
+            return [];
 
         auto size_class = 0;
         for (; _size_classes[size_class] < length; size_class++) {
@@ -281,16 +277,9 @@ public:
     }
 
     T[] alloc_size_class(int class_index) {
-        import std.conv : emplace;
-
         assert(_chunks);
-        auto memory = cast(Header*) _chunks[class_index].alloc().ptr;
-        auto list = memory.emplace!Header(class_index);
-        return list.objects.ptr[0 .. _size_classes[class_index]];
-    }
-
-    T[] alloc_one_size_larger(T[] reference) {
-        return alloc_size_class(header_of(reference).class_index + 1);
+        auto header = _chunks[class_index].alloc!Header(class_index);
+        return header.objects.ptr[0 .. _size_classes[class_index]];
     }
 
     Appender!T get_appender() {
@@ -320,11 +309,13 @@ private:
         T[0] objects;
     }
 
-    size_t size_of(size_t class_index) {
+    size_t size_of(size_t class_index)
+    in (_size_classes) {
         return Header.sizeof + T.sizeof * _size_classes[class_index];
     }
 
-    Header* header_of(T[] array) {
+    Header* header_of(T[] array)
+    in (array) {
         return (cast(Header*) array.ptr) - 1;
     }
 
@@ -335,7 +326,7 @@ private:
 
 struct Appender(T) {
     this(ArrayPool!T* allocator)
-    in(allocator !is null) {
+    in (allocator !is null) {
         _memory = allocator;
         _array = allocator.alloc_size_class(0);
     }
