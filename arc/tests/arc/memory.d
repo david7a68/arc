@@ -30,56 +30,78 @@ import arc.memory;
 }
 
 @("Object Pool") unittest {
-    auto vm = VirtualMemory(1.kib);
-
     struct T {
+        static int dtored;
+
         bool a;
         size_t b;
+
+        ~this() {
+            dtored++;
+        }
     }
 
+    auto vm = VirtualMemory(1.kib);
     auto ts = ObjectPool!T(&vm);
+    assert(vm.alloc_size_for(T.sizeof) == ts.chunk_size);
+    assert(vm.bytes_allocated == 0);
+    assert(ts.bytes_reserved == 0);
+    assert(ts.objects_reserved == 0);
 
     auto t1 = ts.alloc();
-    assert(t1 !is null);
-    // assert(ts._chunks._first_free_node is null);
+    assert(t1);
+    assert(ts.objects_allocated == 1 && ts.objects_reserved == 1);
+    assert(ts.bytes_reserved == ts.chunk_size);
 
     auto t2 = ts.alloc();
-    assert(t2 !is null);
-    // assert(ts._chunks._first_free_node is null);
+    assert(t2 && t2.b == 0);
+    assert(ts.objects_allocated == 2 && ts.objects_reserved == 2);
+    assert(ts.bytes_reserved == 2 * ts.chunk_size);
 
     ts.free(t1);
-    // assert(ts._chunks._first_free_node is cast(void*) t1);
-
-    auto t3 = ts.alloc();
-    assert(t3 !is null);
-    // assert(ts._chunks._first_free_node is null);
-    assert(t3 == t1);
-
     ts.free(t2);
-    ts.free(t3);
+    assert(T.dtored == 2);
+    assert(ts.objects_allocated == 0 && ts.objects_reserved == 2);
+    assert(ts.bytes_allocated == 0 && ts.bytes_reserved == 2 * ts.chunk_size);
 
-    assert(ts.alloc() == t3);
     assert(ts.alloc() == t2);
+    assert(ts.alloc() == t1);
 }
 
 @("Object Pool 2") unittest {
     class T {
+        static int dtored;
+
         bool a;
         size_t b;
+
+        ~this() {
+            dtored++;
+        }
     }
 
     auto vm = VirtualMemory(1.kib);
     auto ts = ObjectPool!T(&vm);
+    assert(vm.alloc_size_for(__traits(classInstanceSize, T)) == ts.chunk_size);
+    assert(vm.bytes_allocated == 0);
+    assert(ts.bytes_reserved == 0);
+    assert(ts.objects_reserved == 0);
 
     auto t1 = ts.alloc();
     assert(t1);
-    t1.b = 3;
+    assert(ts.objects_allocated == 1 && ts.objects_reserved == 1);
+    assert(ts.bytes_reserved == ts.chunk_size);
 
     auto t2 = ts.alloc();
     assert(t2 && t2.b == 0);
+    assert(ts.objects_allocated == 2 && ts.objects_reserved == 2);
+    assert(ts.bytes_reserved == 2 * ts.chunk_size);
 
     ts.free(t1);
     ts.free(t2);
+    assert(T.dtored == 2);
+    assert(ts.objects_allocated == 0 && ts.objects_reserved == 2);
+    assert(ts.bytes_allocated == 0 && ts.bytes_reserved == 2 * ts.chunk_size);
 
     assert(ts.alloc() == t2);
     assert(ts.alloc() == t1);

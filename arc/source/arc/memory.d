@@ -167,23 +167,43 @@ struct MemoryPool {
 public:
     this(VirtualMemory* allocator, size_t chunk_size) {
         _allocator = allocator;
-        _chunk_size = chunk_size;
+        _chunk_size = allocator.alloc_size_for(chunk_size);
     }
 
     @disable this(this);
 
-    size_t chunk_size() {
-        return _chunk_size;
-    }
+    // dfmt off
+    /// The size of a single allocation in bytes.
+    size_t chunk_size()         { return _chunk_size; }
+
+    /// The number of bytes that have been allocated from this pool.
+    size_t bytes_allocated()    { return _chunks_allocated * _chunk_size; }
+
+    /// THe number of bytes that have been reserved from the system.
+    size_t bytes_reserved()     { return _max_chunks_allocated * _chunk_size; }
+
+    /// The number of allocation units that have been allocated from this pool.
+    size_t chunks_allocated()   { return _chunks_allocated; }
+
+    /// The number of allocation units' worth of memory that have been reserved
+    /// from the system.
+    size_t chunks_reserved()    { return _max_chunks_allocated; }
+    // dfmt on
 
     void[] alloc() {
         assert(_allocator);
+
+        _chunks_allocated++;
+        if (_chunks_allocated > _max_chunks_allocated)
+            _max_chunks_allocated = _chunks_allocated;
+
         if (_first_free_node is null)
             return _allocator.alloc(_chunk_size);
 
         auto mem = (cast(void*) _first_free_node)[0 .. _chunk_size];
         _first_free_node = _first_free_node.next;
         mem[] = null;
+
         return mem;
     }
 
@@ -198,6 +218,17 @@ public:
         auto n = cast(Node*)&object[0];
         n.next = _first_free_node;
         _first_free_node = n;
+        _chunks_allocated--;
+    }
+
+    void free(T)(PtrType!T t)
+    in (t !is null) {
+        static if (is(T == struct))
+            destroy(*t);
+        else
+            destroy(t);
+
+        free((cast(void*) t)[0 .. object_size!T]);
     }
 
 private:
@@ -207,6 +238,7 @@ private:
 
     VirtualMemory* _allocator;
     size_t _chunk_size;
+    size_t _chunks_allocated, _max_chunks_allocated;
     Node* _first_free_node;
 }
 
@@ -222,12 +254,31 @@ struct ObjectPool(T) {
 
     @disable this(this);
 
+    // dfmt off
+    /// The size of a single allocation in bytes.
+    size_t chunk_size()         { return _chunks.chunk_size; }
+
+    /// The number of bytes that have been allocated from this pool.
+    size_t bytes_allocated()    { return _chunks.bytes_allocated; }
+
+    /// THe number of bytes that have been reserved from the system.
+    size_t bytes_reserved()     { return _chunks.bytes_reserved; }
+
+    /// The number of objects that have been allocated from this pool.
+    size_t objects_allocated()  { return _chunks.chunks_allocated; }
+
+    /// The number of allocation units' worth of memory that have been reserved
+    /// from the system.
+    size_t objects_reserved()   { return _chunks.chunks_reserved; }
+    // dfmt on
+
     PtrType!T alloc(Args...)(Args args) {
         return _chunks.alloc!T(args);
     }
 
-    void free(PtrType!T t) {
-        _chunks.free((cast(void*) t)[0 .. object_size!T]);
+    void free(PtrType!T t)
+    in (t !is null) {
+        _chunks.free!T(t);
     }
 
     private MemoryPool _chunks;
@@ -298,6 +349,10 @@ public:
 
     void free(T[] array) {
         assert(_chunks);
+
+        foreach (ref element; array)
+            destroy(element);
+
         auto header = header_of(array);
         _chunks[header.class_index].free((cast(void*) header)[0 .. size_of(header.class_index)]);
     }
