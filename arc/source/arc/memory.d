@@ -167,26 +167,31 @@ struct MemoryPool {
 public:
     this(VirtualMemory* allocator, size_t chunk_size) {
         _allocator = allocator;
-        _chunk_size = allocator.alloc_size_for(chunk_size);
+        _chunk_size = chunk_size;
+        _allocation_size = allocator.alloc_size_for(chunk_size);
     }
 
     @disable this(this);
 
     // dfmt off
-    /// The size of a single allocation in bytes.
+    /// The number of usable bytes allocated per call to `alloc()`.
     size_t chunk_size()         { return _chunk_size; }
 
-    /// The number of bytes that have been allocated from this pool.
+    /// The number of bytes allocated for each chunk including any
+    /// implementation-defined data and alignment requirements.
+    size_t alloc_size()         { return _allocation_size; }
+
+    /// The number of usable bytes that have been allocated from this pool.
     size_t bytes_allocated()    { return _chunks_allocated * _chunk_size; }
 
-    /// THe number of bytes that have been reserved from the system.
-    size_t bytes_reserved()     { return _max_chunks_allocated * _chunk_size; }
+    /// The number of bytes that have been reserved from the system.
+    size_t bytes_reserved()     { return _max_chunks_allocated * _allocation_size; }
 
-    /// The number of allocation units that have been allocated from this pool.
+    /// The number of chunks that have been allocated from this pool.
     size_t chunks_allocated()   { return _chunks_allocated; }
 
-    /// The number of allocation units' worth of memory that have been reserved
-    /// from the system.
+    /// The number of chunks' worth of memory that have been reserved from the
+    /// system.
     size_t chunks_reserved()    { return _max_chunks_allocated; }
     // dfmt on
 
@@ -228,7 +233,7 @@ public:
         else
             destroy(t);
 
-        free((cast(void*) t)[0 .. object_size!T]);
+        free((cast(void*) t)[0 .. _chunk_size]);
     }
 
 private:
@@ -237,7 +242,7 @@ private:
     }
 
     VirtualMemory* _allocator;
-    size_t _chunk_size;
+    size_t _chunk_size, _allocation_size;
     size_t _chunks_allocated, _max_chunks_allocated;
     Node* _first_free_node;
 }
@@ -255,13 +260,17 @@ struct ObjectPool(T) {
     @disable this(this);
 
     // dfmt off
-    /// The size of a single allocation in bytes.
+    /// The number of usable bytes allocated per call to `alloc()`.
     size_t chunk_size()         { return _chunks.chunk_size; }
 
-    /// The number of bytes that have been allocated from this pool.
+    /// The number of bytes allocated for each chunk including any
+    /// implementation-defined data.
+    size_t alloc_size()         { return _chunks.alloc_size; }
+
+    /// The number of usable bytes that have been allocated from this pool.
     size_t bytes_allocated()    { return _chunks.bytes_allocated; }
 
-    /// THe number of bytes that have been reserved from the system.
+    /// The number of bytes that have been reserved from the system.
     size_t bytes_reserved()     { return _chunks.bytes_reserved; }
 
     /// The number of objects that have been allocated from this pool.
