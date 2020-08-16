@@ -316,6 +316,22 @@ public:
 
     @disable this(this);
 
+    size_t bytes_allocated() {
+        return MemoryPool.sizeof * _size_classes.length + array_bytes_allocated(false);
+    }
+
+    size_t bytes_reserved() {
+        return MemoryPool.sizeof * _size_classes.length + array_bytes_allocated(true);
+    }
+
+    size_t array_bytes_allocated(bool include_reserved_bytes = false) {
+        size_t allocated;
+        foreach (ref pool; _chunks)
+            allocated += pool.bytes_allocated;
+
+        return allocated;
+    }
+
     T[] alloc(size_t length) {
         if (length == 0)
             return [];
@@ -387,6 +403,15 @@ struct Appender(T) {
     }
 
     @disable this(this);
+
+    size_t length() {
+        return _count;
+    }
+
+    void length(size_t new_length)
+    in (new_length <= length) {
+        _count = new_length;
+    }
 
     T[] get() {
         return _array[0 .. _count];

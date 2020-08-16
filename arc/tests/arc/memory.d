@@ -111,11 +111,6 @@ import arc.memory;
     auto memory = VirtualMemory(1024);
     auto allocator = ArrayPool!uint(&memory, [3, 5, 8]);
 
-    // assert(allocator._chunks.length == 3);
-    // assert(allocator._chunks[0].chunk_size == allocator.Header.sizeof + 3 * uint.sizeof);
-    // assert(allocator._chunks[1].chunk_size == allocator.Header.sizeof + 5 * uint.sizeof);
-    // assert(allocator._chunks[2].chunk_size == allocator.Header.sizeof + 8 * uint.sizeof);
-
     auto v = 100u;
 
     auto c = allocator.alloc_size_class(0);
@@ -136,10 +131,8 @@ import arc.memory;
         appender ~= i;
 
     assert(appender.get().length == 6);
-    // assert(appender._array.length == 8);
 
     foreach (i; 0 .. 6)
-        // assert(appender._array[i] == i);
         assert(appender.get()[i] == i);
 }
 
@@ -156,7 +149,6 @@ import arc.memory;
     auto t1 = ts.alloc();
     auto t2 = ts.alloc();
     auto a1 = as.alloc_size_class(0);
-    // assert(as.header_of(a1).class_index == 0);
     assert(a1.length == 2);
 
     a1[0] = t1;
@@ -167,7 +159,6 @@ import arc.memory;
     assert(a1 == [t1, t2]);
 
     as.expand(a1);
-    // assert(as.header_of(a1).class_index == 1);
     assert(a1.length == 4); 
     assert(a1 == [t1, t2, null, null]);
 
