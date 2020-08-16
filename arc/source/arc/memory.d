@@ -440,6 +440,14 @@ struct Appender(T) {
         _count++;
     }
 
+    void opOpAssign(string op = "~")(T[] elements) {
+        while (_count + elements.length >= _array.length)
+            _memory.expand(_array);
+
+        _array[_count .. _count + elements.length] = elements;
+        _count += elements.length;
+    }
+
 private:
     T[] _array;
     size_t _count;
