@@ -207,8 +207,6 @@ public:
 
         auto mem = (cast(void*) _first_free_node)[0 .. _chunk_size];
         _first_free_node = _first_free_node.next;
-        mem[] = null;
-
         return mem;
     }
 
