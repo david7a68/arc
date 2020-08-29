@@ -365,11 +365,16 @@ public:
 
     void expand(ref T[] array) {
         assert(_chunks);
-        auto header = header_of(array);
-        auto new_array = alloc_size_class(header.class_index + 1);
-        new_array[0 .. array.length] = array;
-        free(array);
-        array = new_array;
+        if (array) {
+            auto header = header_of(array);
+            auto new_array = alloc_size_class(header.class_index + 1);
+            new_array[0 .. array.length] = array;
+            free(array);
+            array = new_array;
+        }
+        else {
+            array = alloc_size_class(0);
+        }
     }
 
     void free(T[] array) {
@@ -408,7 +413,6 @@ struct Appender(T) {
     this(ArrayPool!T* allocator)
     in (allocator !is null) {
         _memory = allocator;
-        _array = allocator.alloc_size_class(0);
     }
 
     @disable this(this);
@@ -427,6 +431,9 @@ struct Appender(T) {
     }
 
     void abort() {
+        if (!_array)
+            return;
+
         assert(_memory);
         _memory.free(_array);
         _array = [];
