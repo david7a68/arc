@@ -4,12 +4,9 @@ import arc.data.ast;
 import arc.data.stringtable;
 import std.format: format;
 
-const(char[]) print_ast(StringTable* strings, AstNode*[] nodes...) {
-    auto printer = AstPrinter(strings);
-
-    foreach (node; nodes)
-        printer.print(node);
-
+const(char[]) print_ast(SyntaxTree ast, StringTable* strings) {
+    auto printer = AstPrinter(ast, strings);
+    printer.print();
     return printer.data;
 }
 
@@ -56,10 +53,12 @@ struct AstPrinter {
 
     Array!IndentType stack;
     Appender!(char[]) str;
+    SyntaxTree source;
     StringTable* strings;
 
-    this(StringTable* strings) {
+    this(SyntaxTree source, StringTable* strings) {
         str = appender!(char[]);
+        this.source = source;
         this.strings = strings;
     }
 
@@ -71,64 +70,84 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print(AstNode* node, string prefix = "") {
+    void print() {
+        foreach (node_id; source.statements)
+            print(node_id);
+    }
+
+    void print(AstNodeId node, string prefix = "") {
         str.put(prefix);
 
-        str.put(node.match!(const(char)[])(
-            (CharLiteral* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
-            (StrLiteral* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
-            (IntLiteral* n) => format("%s (%s)", n.kind, n.value),
-            (SymbolRef* n) => format("%s (%s)", n.kind, strings.string_of(n.text)),
+        str.put(source.match!(const(char)[])(
+            node,
+            (Char* n) => format("%s", n.kind),
+            (String* n) => format("%s", n.kind),
+            (Integer* n) => format("%s (%s)", n.kind, n.value),
+            (SymbolRef* n) => format("%s", n.kind),
+            (AstNode* n) => format("%s", n.kind),
+            (Char* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
+            (String* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
+            (Integer* n) => format("%s (%s)", n.kind, n.value),
+            (SymbolRef* n) => format("%s (%s)", n.kind, strings.string_of(n.name_hash)),
             (AstNode* n) => format("%s", n.kind)
         ));
 
-        node.match!void(
+        source.match!void(
+            node,
             (Function* n) {
-                write_named_children(n.header, "Params: ", "Return Type: ", "Body: ");
+                write_named_children(node, "Params: ", "Return Type: ", "Body: ");
             },
             (List* n) {
-                str.put(format(" (%s)", node.children.length));
-                write_children(n.header, true);
+                str.put(format(" (%s)", source.children_of(node).length));
+                write_children(node, true);
             },
             (UnOp *n) {
-                write_named_children(n.header, "Operand: ");
+                write_named_children(node, "Operand: ");
             },
             (BinOp *n) {
                 if (n.kind == AstNode.Kind.Call)
-                    write_named_children(n.header, "Target: ", "Arguments: ");
+                    write_named_children(node, "Target: ", "Arguments: ");
                 else if (n.kind == AstNode.Kind.Access || n.kind == AstNode.Kind.StaticAccess)
-                    write_named_children(n.header, "Source: ", "Member: ");
+                    write_named_children(node, "Source: ", "Member: ");
                 else
-                    write_named_children(n.header, "Left: ", "Right: ");
+                    write_named_children(node, "Left: ", "Right: ");
             },
             (If* n) {
-                write_named_children(n.header, "Condition: ", "Body: ", "Else: ");
+                write_named_children(node, "Condition: ", "Body: ", "Else: ");
             },
-            (Declaration* n) {
-                str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
-                write_named_children(n.header, "Type: ", "Expr: ");
+            (ListMember* n) {
+                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
+                write_named_children(node, "Type: ", "Expr: ");
+            },
+            (Definition* n) {
+                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
+                write_named_children(node, "Type: ", "Expr: ");
+            },
+            (Variable* n) {
+                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
+                write_named_children(node, "Type: ", "Expr: ");
             },
             (AstNode* n) {
-                write_children(n);
+                write_children(node);
             }
         );
     }
 
-    void write_children(AstNode* n, bool numbered = false) {
+    void write_children(AstNodeId n, bool numbered = false) {
         str.put("\n");
-        foreach (i, child; n.children)
-            write_child(child, i + 1 == n.children.length, numbered ? format("#%s", i) : "");
+        foreach (i, child; source.children_of(n))
+            write_child(child, i + 1 == source.children_of(n).length, numbered ? format("#%s", i) : "");
     }
 
-    void write_named_children(AstNode* n, string[] names...)
-    in(names.length == n.children.length) {
+    void write_named_children(AstNodeId n, string[] names...)
+    in(names.length == source.children_of(n).length) {
         str.put("\n");
-        foreach (i, child; n.children) {
-            write_child(child, i + 1 == n.children.length, names[i]);
+        foreach (i, child; source.children_of(n)) {
+            write_child(child, i + 1 == source.children_of(n).length, names[i]);
         }
     }
 
-    void write_child(AstNode* n, bool is_last_child, string prefix) {
+    void write_child(AstNodeId n, bool is_last_child, string prefix) {
         foreach (type; stack[])
             str.put(indent_str[type]);
 

@@ -18,9 +18,12 @@ Hash hash_of(T: const(char)[])(T text) pure {
 Hash hash_of(T)(auto ref T t) {
     import std.digest.murmurhash : hash = digest, MurmurHash3;
 
-    static if (__traits(compiles, t.toHash()))
-        return t.toHash();
-    
-    auto key = hash!(MurmurHash3!128)((&t)[0 .. 1]);
-    return Hash(key[0 .. 8]);
+    static if (__traits(compiles, t.toHash())) {
+        auto key = t.toHash();
+        return Hash((cast(ubyte*) &key)[0 .. 8]);
+    }
+    else {
+        auto key = hash!(MurmurHash3!128)((&t)[0 .. 1]);
+        return Hash(key[0 .. 8]);
+    }
 }

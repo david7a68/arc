@@ -7,6 +7,7 @@ struct ArcError {
         UnexpectedEOF,
         TokenExpectMismatch,
         TokenNotAnExpression,
+        InvalidTypeExpression,
         UnboundElse,
         IncompleteDefine
     }

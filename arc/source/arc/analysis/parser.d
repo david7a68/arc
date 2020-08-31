@@ -2,323 +2,311 @@ module arc.analysis.parser;
 
 import arc.analysis.lexer;
 import arc.data.ast;
+import arc.data.scopes;
 import arc.data.symbol;
 import arc.reporter : ArcError, Reporter, tprint;
-import arc.memory : ArrayPool, VirtualMemory;
+import arc.source : Source;
 
-struct TreeAllocator {
-    VirtualMemory* nodes;
-    ArrayPool!(AstNode*)* arrays;
-}
+alias TT = Token.Type;
 
-struct ParseResult {
-    string source;
-    AstNode*[] syntax_tree;
-    SymbolTable* symbol_table;
-}
+struct ParseContext {
+    import arc.data.stringtable : StringTable;
 
-struct Parser {
-    import arc.data.stringtable: StringTable;
+    enum default_max_parse_errors = 5;
 
 public:
     Reporter* reporter;
     Token[] token_buffer;
     StringTable* string_table;
+    AstAllocator nodes;
+    ScopeAllocator* scopes;
+    GlobalSymbolTable* symbols;
+    uint max_parse_errors = default_max_parse_errors;
+}
 
-    this(Reporter* reporter, Token[] token_buffer, StringTable* string_table) {
-        this.reporter = reporter;
-        this.token_buffer = token_buffer;
-        this.string_table = string_table;
+SyntaxTree parse(ParseContext* ctx, Source* source) {
+    auto parser = Parser(ctx, source.text);
+    AstNodeId[] statements;
+
+    size_t encountered_errors;
+    while (encountered_errors < ctx.max_parse_errors && !parser.is_done) {
+        auto stmt = parser.stmt();
+        statements ~= stmt;
+
+        if (!ctx.nodes.ast_of(stmt).is_valid)
+            encountered_errors++;
     }
 
-    ParseResult parse(string source, TreeAllocator alloc) {
-        auto ctx = make_context(source, alloc);
-        auto statements = alloc.arrays.get_appender();
+    return SyntaxTree(ctx.nodes, source, statements);
+}
 
-        size_t num_errors;
-        while (!ctx.is_done && num_errors < 5) {
-            auto statement = ctx.stmt();
-            statements ~= statement;
-
-            if (!statement.is_valid)
-                num_errors++;
-        }
-
-        return ParseResult(source, statements.get(), ctx.symtree.root_scope);
+debug {
+    SyntaxTree parse_stmt(ParseContext* ctx, Source* source) {
+        auto parser = Parser(ctx, source.text);
+        return SyntaxTree(ctx.nodes, source, [parser.stmt()]);
     }
 
-    version (unittest) {
-        ParseResult parse_stmt(string source, TreeAllocator alloc) {
-            auto ctx = make_context(source, alloc);
-            return ParseResult(source, [ctx.stmt()], ctx.symtree.root_scope);
-        }
-
-        ParseResult parse_expr(string source, TreeAllocator alloc) {
-            auto ctx = make_context(source, alloc);
-            return ParseResult(source, [ctx.expr()], ctx.symtree.root_scope);
-        }
-
-        ParseResult parse_type(string source, TreeAllocator alloc) {
-            auto ctx = make_context(source, alloc);
-            return ParseResult(source, [ctx.type()], ctx.symtree.root_scope);
-        }
-    }
-
-private:
-    ParseContext make_context(string source, TreeAllocator alloc) {
-        return ParseContext(
-            reporter,
-            source,
-            alloc,
-            TokenBuffer(source, token_buffer, string_table),
-            SymbolTreeBuilder(alloc.nodes, alloc.nodes.alloc!SymbolTable(alloc.nodes, cast(ArrayPool!(Symbol*)*) alloc.arrays)));
+    SyntaxTree parse_expr(ParseContext* ctx, Source* source) {
+        auto parser = Parser(ctx, source.text);
+        return SyntaxTree(ctx.nodes, source, [parser.expr()]);
     }
 }
 
 private:
 
-struct ParseContext {
+struct Parser {
     import arc.data.hash : Hash;
     import arc.data.span : Span;
 
 public:
-    Reporter* reporter;
-    string source;
-    TreeAllocator allocator;
+    this(ParseContext* context, const(char)[] source) {
+        _context = context;
+        _tokens = TokenBuffer(source, context.token_buffer, context.string_table);
+        _scope_id = _context.scopes.null_scope_id;
+    }
 
-    TokenBuffer tokens;
-    SymbolTreeBuilder symtree;
+    bool is_done() {
+        return token.type == TT.Done;
+    }
 
-    // dfmt off
-    Token token() { return tokens.current; }
-
-    bool is_done() { return token.type == Token.Type.Done; }
-    // dfmt on
-
-    AstNode* stmt() {
+    AstNodeId stmt() {
         auto stmt = () {
-            switch (token.type) with (Token.Type) {
+            switch (token.type) with (TT) {
+            case Lbrace:
+                return block();
+            case TokLoop:
+                return seq!(Loop, stmt, Lbrace, Rbrace)(take(required(TokLoop)).span);
+            case TokBreak:
+                return alloc(take.span, Break(_scope_id));
+            case TokContinue:
+                return alloc(take.span, Continue(_scope_id));
+            case TokReturn:
+                return alloc(take().span, Return(_scope_id, is_at_end_of_expr ? none : expr()));
             case TokIf:
-                return alloc!If(take().span, expr(), block(), skip(token.type == TokElse) ? stmt() : none);
-
-            // dfmt off
-            case Lbrace:        return block();
-            case TokBreak:      return alloc!Break(take().span);
-            case TokContinue:   return alloc!Continue(take().span);
-            case TokDef:        return decl(AstNode.Kind.Definition, take.span, take.key);
-            case TokReturn:     return alloc!Return(take().span, is_end_of_expr ? none : expr());
-            case TokLoop:       return seq!(Loop, stmt, Lbrace, Rbrace)(take(required(TokLoop)).span);
-            // dfmt on
-
+                return alloc(take().span, If(_scope_id, expr(), block(), skip(token.type == TokElse) ? stmt() : none));
+            case TokDef:
+                return decl!Definition(take().span, make_symbol(Symbol.Kind.Constant, take(required(TT.TokName))));
             default:
-                AstNode* e;
-                if (token.type == TokName) {
-                    auto first = take();
-                    if (token.type == Colon)
-                        return decl(AstNode.Kind.Variable, first.span, first.key);
-                    e = infix_expr(Precedence.Assign, alloc!SymbolRef(first.span, first.key));
-                }
-                else
-                    e = expr();
+                if (token.type == TokName && next.type == Colon)
+                        return decl!Variable(token.span, make_symbol(Symbol.Kind.Variable, take()));
 
-                if (token.type == Equals) {
-                    advance();
-                    return alloc!BinOp(AstNode.Kind.Assign, e, expr());
+                auto lhs = expr();
+                if (skip(token.type == Equals)) {
+                    return alloc(_context.nodes.span_of(lhs), BinOp(AstNode.Kind.Assign, _scope_id, lhs, expr()));
                 }
-                return e;
+                return lhs;
             }
         }();
 
-        switch (stmt.kind) {
-        case AstNode.Kind.Block:
-        case AstNode.Kind.If:
-        case AstNode.Kind.Loop:
-        case AstNode.Kind.Invalid:
+        switch (_context.nodes.ast_of(stmt).kind) with (AstNode.Kind) {
+        case Block:
+        case If:
+        case Loop:
+        case Invalid:
             return stmt;
-
         default:
-            if (auto end = take(required(Token.Type.Semicolon))) {
-                stmt.span += end.span;
+            const end = token;
+            if (take(required(TT.Semicolon))) {
+                _context.nodes.span_of(stmt) += end.span;
                 return stmt;
             }
 
-            return alloc!Invalid(stmt.span);
+            return alloc(_context.nodes.span_of(stmt), arc.data.ast.Invalid(_scope_id));
         }
     }
 
-    AstNode* expr(Precedence p = Precedence.Assign) {
+    AstNodeId expr(Precedence p = Precedence.Assign) {
         return infix_expr(p, prefix());
     }
 
-    AstNode* type(Precedence p = Precedence.Assign) {
-        return infix_type(p, type_prefix());
+private:
+    // dfmt off
+    AstNodeId none() { return _context.nodes.none; }
+    // dfmt on
+
+    alias block = seq!(Block, stmt, TT.Lbrace, TT.Rbrace);
+
+    /**
+     <symbol> ':' (<expr> | <inferred_type>) (('=' <expr>) | <none>)
+     */
+    AstNodeId decl(Node)(Span prefix, SymbolId symbol) {
+        skip(required(TT.Colon));
+        return alloc!Node(prefix, Node(
+                _scope_id,
+                symbol,
+                token.type != TT.Equals ? expr() : inferred_type(),
+                skip(token.type == TT.Equals) ? expr(Precedence.Logic) : none));
     }
 
-private:
-    alias block = seq!(Block, stmt, Token.Type.Lbrace, Token.Type.Rbrace);
+    bool is_at_end_of_expr() {
+        with (TT)
+            return is_done || token.type.matches_one(Semicolon, Comma, Rparen, Rbracket);
+    }
 
-    AstNode* decl(AstNode.Kind kind, Span prefix, Hash name) {
-        skip(required(Token.Type.Colon));
-        const sym_kind = kind == AstNode.Kind.Definition ? Symbol.Kind.Constant : Symbol.Kind.Variable;
+    AstNodeId symbol_ref(Token token) {
+        return alloc(token.span, SymbolRef(_scope_id, token.key));
+    }
+
+    AstNodeId prefix() {
         // dfmt off
-        return alloc!Declaration(kind, prefix,
-                symtree.make_symbol(sym_kind, name),
-                token.type != Token.Type.Equals ? type() : inferred,
-                skip(token.type == Token.Type.Equals) ? expr(Precedence.Logic) : inferred);
+        switch (token.type) with (TT) {
+        case Bang:
+        case TokNot:
+            auto span = take().span;
+            auto e = expr(Precedence.Call);
+            if (_context.nodes.ast_of(e).is_valid)
+                return alloc(span, UnOp(AstNode.Kind.Not, _scope_id, e));
+            else
+                return alloc(span, arc.data.ast.Invalid(_scope_id));
+
+        case Minus:
+            auto span = take().span;
+            auto e = expr(Precedence.Call);
+            if (_context.nodes.ast_of(e).is_valid)
+                return alloc(span, UnOp(AstNode.Kind.Negate, _scope_id, e));
+            else
+                return alloc(span, arc.data.ast.Invalid(_scope_id));
+
+        case Star:
+            auto span = take().span;
+            auto e = expr(Precedence.Call);
+            if (_context.nodes.ast_of(e).is_valid)
+                return alloc(span, UnOp(AstNode.Kind.Dereference, _scope_id, e));
+            else
+                return alloc(span, arc.data.ast.Invalid(_scope_id));
+
+        case TokImport:
+            auto span = take().span;
+            auto e = expr(Precedence.Call);
+            if (_context.nodes.ast_of(e).is_valid)
+                return alloc(span, Import(_scope_id, e));
+            else
+                return alloc(span, arc.data.ast.Invalid(_scope_id));
+
+        case TokName:       return symbol_ref(take());
+        case TokInteger:    return alloc(token.span, Integer(_scope_id, take().value));
+        case TokString:     return alloc(token.span, String(_scope_id, take().key));
+        case TokChar:       return alloc(token.span, Char(_scope_id, take().key));
+        case Lparen:        return list!(Lparen, Rparen)();
+        case Lbracket:      return list!(Lbracket, Rbracket)();
+        default:
+            report_expect_mismatch(token,
+                is_at_end_of_expr
+                ? "The expression ended unexpectedly with %s."
+                : "The token \"%s\" cannot start a prefix expression",
+                token.type);
+            return alloc(token.span, arc.data.ast.Invalid(_scope_id));
+        }
         // dfmt on
     }
 
-    alias infix_expr = infix!(expr, binops);
-
-    // dfmt off
-    immutable Infix[256] binops = [
-        Token.Type.Less        : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Less),
-        Token.Type.LessEqual   : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.LessEqual),
-        Token.Type.Greater     : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Greater),
-        Token.Type.GreaterEqual: Infix(Precedence.Compare,  true,  true,  AstNode.Kind.GreaterEqual),
-        Token.Type.EqualEqual  : Infix(Precedence.Equality, true,  true,  AstNode.Kind.Equal),
-        Token.Type.BangEqual   : Infix(Precedence.Equality, true,  true,  AstNode.Kind.NotEqual),
-        Token.Type.TokAnd      : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
-        Token.Type.TokOr       : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
-        Token.Type.Plus        : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Add),
-        Token.Type.Minus       : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Subtract),
-        Token.Type.Star        : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Multiply),
-        Token.Type.Slash       : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Divide),
-        Token.Type.Caret       : Infix(Precedence.Power,    false, true,  AstNode.Kind.Power),
-        Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
-        Token.Type.ColonColon  : Infix(Precedence.Call,     true,  true,  AstNode.Kind.StaticAccess),
-        Token.Type.TokName     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.TokInteger  : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.TokChar     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.TokString   : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    ];
-    // dfmt on
-
-    AstNode* infix(alias fn, Infix[] ops)(Precedence p, AstNode* lhs) {
-        for (Infix op = ops[token.type]; lhs.is_valid && p <= op.prec; op = ops[token.type]) {
+    AstNodeId infix(alias fn, Infix[] ops)(Precedence p, AstNodeId lhs) {
+        for (Infix op = ops[token.type]; _context.nodes.ast_of(lhs).is_valid && p <= op.prec; op = ops[token.type]) {
             skip(op.skip_token);
-            lhs = alloc!BinOp(op.kind, lhs, fn(cast(Precedence)(op.prec + op.is_left_associative)));
+            auto rhs = fn(cast(Precedence)(op.prec + op.is_left_associative));
+            auto span = _context.nodes.span_of(lhs) + _context.nodes.span_of(rhs);
+            lhs = alloc(span, BinOp(op.kind, _scope_id, lhs, rhs));
         }
         return lhs;
     }
 
-    AstNode* prefix() {
-        // dfmt off
-        switch (token.type) with (Token.Type) {
-        case Bang:
-        case TokNot:        return alloc!UnOp(AstNode.Kind.Not, take().span, expr(Precedence.Call));
-        case Minus:         return alloc!UnOp(AstNode.Kind.Negate, take().span, expr(Precedence.Call));
-        case TokImport:     return alloc!Import(take().span, expr(Precedence.Call));
-        case TokName:       return alloc!SymbolRef(token.span, take().key);
-        case TokInteger:    return alloc!IntLiteral(token.span, take().value);
-        case TokString:     return alloc!StrLiteral(token.span, take().key);
-        case TokChar:       return alloc!CharLiteral(token.span, take().key);
-        case Lparen:        return list!(Lparen, Rparen)();
-        case Lbracket:      return list!(Lbracket, Rbracket)();
-        default:
+    alias infix_expr = infix!(expr, binops);
+
+    AstNodeId seq(Node, alias member, TT lhs, TT rhs, TT delim = TT.None)(Span prefix = Span()) {
+        auto start = take(required(lhs)).span;
+
+        auto outer_scope = _scope_id;
+        _scope_id = _context.scopes.make_scope(_scope_id);
+        scope (exit)
+            _scope_id = outer_scope;
+
+        AstNodeId[] array;
+        while (!is_done && token.type != rhs) {
+            auto node = member();
+
+            const is_bad = delim && !(is_done || token.type == rhs || skip(required(delim)));
+            if (!_context.nodes.ast_of(node).is_valid || is_bad) {
+                destroy(array);
+                return alloc(start, Invalid(outer_scope));
+            }
+
+            while (token.type == delim)
+                advance();
+            array ~= node;
         }
 
-        if (is_done)
-            reporter.error(ArcError.UnexpectedEOF, token.span, "Unexpected end of file while parsing expression.");
-        else
-            reporter.error(ArcError.TokenExpectMismatch, token.span,
-                is_end_of_expr
-                ? tprint("Expression ended unexpectedly by terminating %s.", token.type)
-                : tprint("The token \"%s\" cannot start a prefix expression", token.type));
-        // dfmt on
-        return alloc!Invalid(is_end_of_expr ? token.span : take.span);
+        const span = prefix + token.span + start;
+        if (skip(required(rhs)))
+            return alloc(span, Node(outer_scope, _scope_id, array));
+
+        destroy(array);
+        return alloc(span, Invalid(outer_scope));
     }
 
-    AstNode* list(Token.Type open, Token.Type close)() {
-        auto node = seq!(List, list_member!false, open, close, Token.Type.Comma)();
-        return token.type == Token.Type.Rarrow ? function_(node) : node;
-    }
-
-    AstNode* list_member(bool is_type)() {
-        auto first = prefix();
-        if (first.kind == AstNode.Kind.SymbolRef && token.type == Token.Type.Colon) {
-            const s = first.span;
-            const k = (cast(SymbolRef*) first).text;
-            allocator.nodes.free_to_ptr(first);
-            return decl(AstNode.Kind.ListMember, s, k);
+    AstNodeId list_member() {
+        AstNodeId lm(Span span, AstNodeId type, AstNodeId expr) {
+            if (_context.nodes.ast_of(type).is_valid && _context.nodes.ast_of(expr).is_valid)
+                return alloc(span, ListMember(_scope_id, _context.symbols.none, type, expr));
+            return alloc(span, Invalid(_scope_id));
         }
 
-        static if (is_type)
-            return alloc!Declaration(AstNode.Kind.ListMember, infix_type(Precedence.Assign, first), inferred);
-        else
-            return alloc!Declaration(AstNode.Kind.ListMember, inferred, infix_expr(Precedence.Assign, first));
+        // (a : T = 1)
+        if (token.type == TT.TokName && next.type == TT.Colon)
+            return decl!ListMember(token.span, make_symbol(Symbol.Kind.Variable, take()));
+
+        // (a)
+        auto e = expr();
+        if (_context.nodes.ast_of(e).is_valid)
+            return alloc(_context.nodes.span_of(e), ListMember(_scope_id, _context.symbols.none, inferred_type(), e));
+        return alloc(_context.nodes.span_of(e), Invalid(_scope_id));
     }
 
-    AstNode* function_(AstNode* node) {
-        advance();
-        auto e = token.type == Token.Type.Lbrace ? inferred : expr();
-        return token.type == Token.Type.Lbrace
-            ? alloc!Function(node, e, block()) : alloc!Function(node, inferred, e);
+    AstNodeId list(TT open, TT close)() {
+        auto node = seq!(List, list_member, open, close, TT.Comma)();
+        if (token.type == TT.RArrow)
+            return function_type(node);
+        else if (token.type == TT.RFatArrow)
+            return function_(node);
+        return node;
     }
 
-    alias infix_type = infix!(type, type_ops);
+    /*
+    Arc has three forms of function literals:
+        a =>             <expr>;
+        a => <type_expr> { ... };
+        a =>             { ... };
+    */
+    AstNodeId function_(AstNodeId params) {
+        skip(required(TT.RFatArrow));
 
-    // dfmt off
-    immutable Infix[256] type_ops = [
-        Token.Type.Dot         : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
-        Token.Type.Lparen      : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-        Token.Type.Lbracket    : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
-    ];
-    // dfmt on
+        // a => {}
+        if (token.type == TT.Lbrace)
+            return alloc(token.span, Function(_scope_id, params, inferred_type(), block()));
 
-    AstNode* type_prefix() {
-        // dfmt off
-        switch (token.type) with (Token.Type) {
-        case Lparen:    return type_list!(Lparen, Rparen)();
-        case Lbracket:  return type_list!(Lbracket, Rbracket)();
-        case TokName:   return alloc!SymbolRef(token.span, take.key);
-        case Star:      return alloc!UnOp(AstNode.Kind.PointerType, take().span, type());
-        default:
-        }
-        // dfmt on
+        auto perhaps_body = expr();
 
-        reporter.error(ArcError.TokenExpectMismatch, token.span, "A type expression cannot start with %ss", token.type);
-        return alloc!Invalid(take().span);
+        // a => t {}
+        if (token.type == TT.Lbrace)
+            return alloc(_context.nodes.span_of(params), Function(_scope_id, params, perhaps_body, block()));
+
+        // a => b
+        return alloc(_context.nodes.span_of(params), Function(_scope_id, params, inferred_type(), perhaps_body));
     }
 
-    AstNode* type_list(Token.Type open, Token.Type close)() {
-        auto node = seq!(List, list_member!true, open, close, Token.Type.Comma)();
-        return token.type == Token.Type.Rarrow ? function_type(node) : node;
+    // () -> RetType
+    AstNodeId function_type(AstNodeId params) {
+        skip(required(TT.RArrow));
+        return alloc(_context.nodes.span_of(params), FunctionSignature(_scope_id, params, expr()));
     }
 
-    AstNode* function_type(AstNode* params) {
-        advance();
-        return alloc!FunctionSignature(params, type());
-    }
+    alias _tokens this;
 
-    AstNode* alloc(T, Args...)(Args args) {
-        auto t = T(args);
-        return t.header.is_valid ? raw_alloc!T(t) : alloc!Invalid(t.span);
-    }
-
-    AstNode* alloc(T : Invalid)(Span span) {
-        return raw_alloc(Invalid(span));
-    }
-
-    AstNode* raw_alloc(T)(T t) {
-        auto n = allocator.nodes.alloc!T;
-        *n = t;
-        n.enclosing_scope = symtree.current_scope;
-        return n.header;
-    }
-
-    void advance() {
-        tokens.advance();
-    }
-
-    Token take(bool should_take = true) {
-        if (!should_take)
-            return Token();
-
+    Token take(bool should_advance = true) {
         auto t = token;
-        advance();
+
+        if (should_advance)
+            advance();
+
         return t;
     }
 
@@ -328,58 +316,50 @@ private:
         return should_skip;
     }
 
-    bool required(Token.Type type) {
+    bool required(TT type) {
         if (type == token.type)
             return true;
 
-        const span = token.span;
-        if (is_done)
-            reporter.error(ArcError.UnexpectedEOF, span,
-                    "The file ended unexpectedly. A %s was expected.", type);
-        else
-            reporter.error(ArcError.TokenExpectMismatch, span,
-                    "An unexpected token was encountered: Expected (%s), Encountered (%s)",
-                    type, source[span.start .. span.start + span.length]);
+        report_expect_mismatch(
+            token,
+            "An unexpected token was encountered. Expected a %s, but got a %s instead",
+            type, token.type);
+
         return false;
     }
 
-    bool is_end_of_expr() {
-        with (Token.Type)
-            return is_done || token.type.matches_one(Semicolon, Comma, Rparen, Rbracket);
+    AstNodeId alloc(T)(Span location, T node) {
+        if (node.is_valid)
+            return _context.nodes.save_node(location, node);
+        else
+            return _context.nodes.save_node(location, Invalid(node.outer_scope_id));
     }
 
-    AstNode* seq(T, alias member, Token.Type open, Token.Type close, Token.Type delim = Token.Type.None)(Span prefix = Span()) {
-        auto start = take(required(open)).span;
-        auto seq = allocator.arrays.get_appender();
-        auto scope_ = symtree.push_scope();
-        scope (exit)
-            symtree.pop_scope();
-
-        while (!is_done && token.type != close) {
-            auto node = member();
-
-            const is_bad = delim && !(is_done || token.type == close || skip(required(delim)));
-            if (!node.is_valid || is_bad) {
-                seq.abort();
-                return alloc!Invalid(start + node.span);
-            }
-
-            while (token.type == delim)
-                advance();
-
-            seq ~= node;
-        }
-
-        auto span = prefix + token.span + start;
-        if (skip(required(close)))
-            return alloc!T(span, scope_, seq.get());
-
-        seq.abort();
-        return alloc!Invalid(span);
+    AstNodeId alloc(T : Invalid)(Span location, T node) {
+        return _context.nodes.save_node!T(location, node);
     }
+
+    AstNodeId inferred_type() {
+        return alloc(Span(), InferredType(_scope_id));
+    }
+
+    SymbolId make_symbol(Symbol.Kind kind, Token token) {
+        return _context.symbols.make_symbol(kind, token.key);
+    }
+
+    void report_expect_mismatch(Args...)(Token got, string message, Args args) {
+        if (got.type == TT.Done)
+            _context.reporter.error(ArcError.UnexpectedEOF, got.span, "Unexpected end of file");
+        else
+            _context.reporter.error(ArcError.TokenExpectMismatch, got.span, message, args);
+    }
+
+    ParseContext* _context;
+    ScopeId _scope_id;
+    TokenBuffer _tokens;
 }
 
-enum Precedence: ubyte {
+enum Precedence : ubyte {
     None,
     Assign,
     Logic,
@@ -397,3 +377,35 @@ struct Infix {
     bool is_left_associative, skip_token;
     AstNode.Kind kind;
 }
+
+// dfmt off
+immutable Infix[256] binops = [
+    TT.TokAnd       : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.And),
+    TT.TokOr        : Infix(Precedence.Logic,    true,  true,  AstNode.Kind.Or),
+    TT.EqualEqual   : Infix(Precedence.Equality, true,  true,  AstNode.Kind.Equal),
+    TT.BangEqual    : Infix(Precedence.Equality, true,  true,  AstNode.Kind.NotEqual),
+    TT.Less         : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Less),
+    TT.LessEqual    : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.LessEqual),
+    TT.Greater      : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.Greater),
+    TT.GreaterEqual : Infix(Precedence.Compare,  true,  true,  AstNode.Kind.GreaterEqual),
+    TT.Plus         : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Add),
+    TT.Minus        : Infix(Precedence.Sum,      true,  true,  AstNode.Kind.Subtract),
+    TT.Star         : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Multiply),
+    TT.Slash        : Infix(Precedence.Product,  true,  true,  AstNode.Kind.Divide),
+    TT.Caret        : Infix(Precedence.Power,    false, true,  AstNode.Kind.Power),
+    TT.Dot          : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
+    TT.ColonColon   : Infix(Precedence.Call,     true,  true,  AstNode.Kind.StaticAccess),
+    TT.Lparen       : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+    TT.Lbracket     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+    TT.TokName      : Infix(Precedence.Call,     false,  false, AstNode.Kind.Call),
+    TT.TokInteger   : Infix(Precedence.Call,     false,  false, AstNode.Kind.Call),
+    TT.TokChar      : Infix(Precedence.Call,     false,  false, AstNode.Kind.Call),
+    TT.TokString    : Infix(Precedence.Call,     false,  false, AstNode.Kind.Call),
+];
+
+immutable Infix[256] type_ops = [
+    TT.Dot          : Infix(Precedence.Call,     true,  true,  AstNode.Kind.Access),
+    TT.Lparen       : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+    TT.Lbracket     : Infix(Precedence.Call,     true,  false, AstNode.Kind.Call),
+];
+// dfmt on

@@ -18,7 +18,7 @@ struct Token {
         Ampersand = '&', Plus = '+', Minus = '-', Slash = '/', Star = '*', Caret = '^',
         Equals = '=', Less = '<', Greater = '>', Bang = '!',
         LessEqual = 128, GreaterEqual, EqualEqual, BangEqual,
-        Rarrow, ColonColon,
+        RArrow, RFatArrow, ColonColon,
         
         TokName, TokInteger, TokChar, TokString,
 
@@ -65,22 +65,27 @@ public:
     Token current;
     bool done;
 
+    alias token = current;
+
     this(const(char)[] text, Token[] tokens, StringTable* stringtable) {
         source_text = text;
         _stringtable = stringtable;
         buffer = tokens;
         fill_buffer();
-        current = buffer[0];
-        done = current.type == Token.Type.Done;
+        advance();
     }
 
     void advance() {
-        _current_token_index++;
-        if (_current_token_index == buffer.length)
-            fill_buffer();
-
         current = buffer[_current_token_index];
         done = current.type == Token.Type.Done;
+        _current_token_index++;
+
+        if (_current_token_index == buffer.length)
+            fill_buffer();
+    }
+
+    Token next() {
+        return buffer[_current_token_index];
     }
 
     void fill_buffer() {
@@ -167,12 +172,20 @@ Token scan_token(const char* base, ref const(char)* current, ref const(char*) en
             return make_token(cast(Token.Type)*current, 1);
 
         case ':': return make_2_op(':', ColonColon,     Colon);
-        case '-': return make_2_op('>', Rarrow,         Minus);
-        case '=': return make_2_op('=', EqualEqual,     Equals);
+        case '-': return make_2_op('>', RArrow,         Minus);
         case '<': return make_2_op('=', LessEqual,      Less);
         case '>': return make_2_op('=', GreaterEqual,   Greater);
         case '!': return make_2_op('=', BangEqual,      Bang);
         // dfmt on
+
+        case '=':
+            current++;
+            if (*current == '=')
+                return make_token(EqualEqual, 1);
+            else if (*current == '>')
+                return make_token(RFatArrow, 1);
+            else
+                return make_token(Equals, 0);
 
         case '\'':
             current++;

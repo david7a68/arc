@@ -1,21 +1,22 @@
 module arc.source_map;
 
-final class SourceMap {
+struct SourceMap {
     import arc.source : Source;
     import arc.data.span : Span;
 
     // The first source is a reserved dummy source to allow source_of to return
     // an error condition without throwing an exception.
-    Source[] sources;
+    Source*[] sources;
 
-    this() {
+    this(size_t initial_size) {
         sources = [new Source("dummy", "", 0)];
+        sources.reserve(initial_size);
     }
 
     /**
      * Add a source file to the map.
      */
-    Source put(const char[] path, const char[] text) {
+    Source* put(const char[] path, const char[] text) {
         const start = sources[$ - 1].span.end;
 
         auto src = new Source(path, text, start);
@@ -28,13 +29,13 @@ final class SourceMap {
      * Retrieves the source that this span is part of. If the span is not part
      * of any source, the dummy 0-size source is returned.
      */
-    Source source_of(Span span) {
+    Source* source_of(Span span) {
         if (span == Span())
             return sources[0];
 
         auto source = () {
             foreach (src; sources[1 .. $])
-                if (span in src)
+                if (span in *src)
                     return src;
             return sources[0];
         }();

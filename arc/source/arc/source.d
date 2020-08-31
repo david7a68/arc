@@ -17,7 +17,7 @@ struct SourceLoc {
     uint column;
 }
 
-final class Source {
+struct Source {
     /// The file path to the source file. This is local to the current working
     /// directory when the compiler is run.
     const char[] path;
@@ -39,7 +39,7 @@ final class Source {
     }
 
     /// Retrieve the source location of this global position.
-    SourceLoc get_loc(uint position)
+    SourceLoc coords_of(uint position)
     in(start_offset <= position && position <= span.end) {
         uint line_num = 1;
         uint column;
@@ -61,5 +61,16 @@ final class Source {
     /// Tests if the span is enclosed completely within this source file.
     bool opBinaryRight(string op = "in")(Span span) {
         return start_offset <= span.start && span.end <= this.span.end;
+    }
+
+    size_t toHash() const @trusted nothrow {
+        import arc.data.hash: hash_of;
+
+        auto hash = hash_of(path);
+        return *(cast(ulong*) &hash.value[0]);
+    }
+
+    bool opEquals(ref const Source other) const {
+        return toHash() == other.toHash();
     }
 }

@@ -12,7 +12,7 @@ Token[64] token_buffer;
 /// Read all tokens from text, up to `token_buffer.length`.
 Token[] scan_tokens(const(char)[] text) {
     // IMPORTANT: strings is a throwaway value used only to facilitate lexing
-    auto strings = StringTable(64);
+    StringTable strings;
     auto stream = TokenBuffer(text, token_buffer, &strings);
     return stream.buffer[];
 }
@@ -49,7 +49,7 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
 }
 
 @("Lex Compact") unittest {
-    assert("()[]{},.;->1a_3".scan_tokens.equivalent(
+    assert("()[]{},.;->=>1a_3".scan_tokens.equivalent(
         Token.Type.Lparen,
         Token.Type.Rparen,
         Token.Type.Lbracket,
@@ -59,7 +59,8 @@ bool equivalent(bool compare_type = true, T)(Token[] tokens, T[] ts...) {
         Token.Type.Comma,
         Token.Type.Dot,
         Token.Type.Semicolon,
-        Token.Type.Rarrow,
+        Token.Type.RArrow,
+        Token.Type.RFatArrow,
         Token.Type.TokInteger,
         Token.Type.TokName,
     ));

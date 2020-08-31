@@ -4,7 +4,7 @@ import arc::data::source;
 
 def TokenType : ubyte;
 
-def matches_one := (type: TokenType, types: TokenType[]) -> {
+def matches_one := (type: TokenType, types: TokenType[]) => {
     i := 0; loop {
         # syntax sugar idea, if ... return/break/continue doesn't need braces
         # if i == types.length return false;
@@ -31,13 +31,13 @@ def TokenBuffer : (
     done                : bool
 );
 
-def init_tokenbuffer := (buffer: *TokenBuffer, text: char[], span_offset: uint) -> {
+def init_tokenbuffer := (buffer: *TokenBuffer, text: char[], span_offset: uint) => {
     buffer.source_text = text;
     buffer.span_offset = span_offset;
     fill_buffer(buffer);
 };
 
-def advance_token := (buffer: *TokenBuffer) -> {
+def advance_token := (buffer: *TokenBuffer) => {
     buffer.current_token_index = buffer.current_token_index + 1;
     if buffer.current_token_index == tokens.length {
         fill_buffer(buffer);
@@ -48,7 +48,7 @@ def advance_token := (buffer: *TokenBuffer) -> {
     }
 };
 
-def fill_buffer := (buffer: *TokenBuffer) -> {
+def fill_buffer := (buffer: *TokenBuffer) => {
     base    := buffer.source_text.ptr;
     current := base + buffer.next_buffer_index;
     end     := base + buffer.source_text.length;

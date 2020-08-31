@@ -5,15 +5,8 @@ module arc.data.span;
  cannot be merged or compared across files.
  */
 struct Span {
-    uint file_id;
     uint start;
     uint length;
-
-    this(uint file_id, uint start, uint length) {
-        this.file_id = file_id;
-        this.start = start;
-        this.length = length;
-    }
 
     this(uint start, uint length) {
         this.start = start;
@@ -28,8 +21,7 @@ struct Span {
         return start < rhs.start ? -1 : (start > rhs.start ? 1 : 0);
     }
 
-    Span opBinary(string op = "+")(Span rhs) const
-    in (rhs.file_id == file_id) {
+    Span opBinary(string op = "+")(Span rhs) const {
         import std.algorithm : max, min;
 
         if (this == Span())
@@ -39,8 +31,7 @@ struct Span {
         return Span(lo, max(end, rhs.end) - lo);
     }
 
-    void opOpAssign(string op = "+")(Span rhs)
-    in (rhs.file_id == file_id) {
+    void opOpAssign(string op = "+")(Span rhs) {
         if (this == Span()) {
             if (rhs == Span())
                 return;
@@ -56,7 +47,7 @@ struct Span {
  * Merges all non-0 spans together or returns the 0 span if all spans are 0.
  */
 auto merge_all(Span[] spans...) {
-    auto result = Span(spans[0].file_id, 0, 0);
+    auto result = Span(0, 0);
     foreach (span; spans)
         result += span;
     return result;

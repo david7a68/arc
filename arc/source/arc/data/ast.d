@@ -1,15 +1,61 @@
+/**
+ This module contains the types that make up the abstract syntax tree, as well
+ as the allocator used to allocate nodes and arrays of nodes.
+
+ The primary goal of the allocation strategy for syntax nodes is to obtain a
+ unique id for each node that is allocated during a compilation session. We
+ assume that the compiler operates on a single compilation per execution (ie.
+ not a continuous build server).
+
+ The memory strategy for the syntax tree is thus as follows:
+    * Assume that syntax errors will cause compilation to fail.
+    * Assume that failed compilation artifacts will not be used after
+      compilation.
+    * Reserve a contiguous array of 2 ^ 32 AstNodeStorage objects.
+    * Maintain a counter indicating last-used slot.
+    * To allocate, increment counter and return indicated slot.
+    * Deallocation of memory occurs only once, when the syntax tree is no longer
+      needed (either because of error or after IR generation).
+    * Reserve a second contiguous array of 2 ^ 32 `AstNodeId[]`s for array
+      indices.
+    * Reserve a third contiguous span of `AstNodeId.sizeof` * 2 ^ 32 managed by
+      an array pool for arrays.
+ */
 module arc.data.ast;
 
-import arc.data.hash : Hash;
 import arc.data.span;
-import arc.data.symbol : SymbolTable, Symbol;
-import arc.data.type : ArcType;
+import arc.data.symbol: SymbolId;
+import arc.data.scopes: ScopeId;
+import arc.data.hash;
 
+/**
+ Placeholder for a global identifier for a type.
+ */
+struct TypeId {
+    ushort value;
+}
+
+/**
+ Global identifier for an AST node.
+ */
+struct AstNodeId {
+    uint value;
+}
+
+/**
+ The AstNode contains the bare minimum of information necessary to make a
+ decision about a node when traversing a syntax tree (its type, and the scope it
+ belongs to).
+ */
 struct AstNode {
+    import std.bitmanip : bitfields;
+
+    static assert(typeof(this).sizeof == 8);
+
     enum Kind : ubyte {
         None,
         Invalid,
-        Inferred,
+        InferredType,
 
         SymbolRef,
         Import,
@@ -22,6 +68,7 @@ struct AstNode {
         // Unary Operators
         Not,
         Negate,
+        Dereference,
         PointerType,
 
         // Binary Operators
@@ -45,7 +92,7 @@ struct AstNode {
 
         // Functions
         Function,
-        FunctionType,
+        FunctionSignature,
 
         // Sequences
         List,
@@ -58,361 +105,403 @@ struct AstNode {
         Variable,
 
         // Control Flow
-        If,
-        Return,
         Break,
         Continue,
+        Return,
+        If,
     }
 
-    mixin ast_header!();
-}
+public:
+    Kind kind;
+    TypeId type_id;
+    ScopeId outer_scope_id;
 
-mixin template ast_header() {
-    AstNode.Kind kind;
-    Span span;
-
-    ArcType* type;
-    SymbolTable* enclosing_scope;
-
-    AstNode* header() inout return  {
-        return cast(AstNode*)&kind;
+    this(Kind kind, ScopeId scope_id) {
+        this.kind = kind;
+        this.outer_scope_id = outer_scope_id;
     }
 
+    /// Checks if the node is of `AstNode.Kind.Invalid` kind. No further
+    /// verification of node correctness is performed.
     bool is_valid() {
-        debug
-            return kind != AstNode.Kind.Invalid && this.header.children.are_valid;
-        else
-            return kind != AstNode.Kind.Invalid;
+        return kind != Kind.Invalid;
     }
 }
 
-mixin template arity(Names...) {
-    union {
-        AstNode*[Names.length] parts;
-        struct {
-            static foreach (name; Names)
-                mixin("AstNode* " ~ name ~ ";");
-        }
-    }
-}
+alias None = HeaderOnly!(AstNode.Kind.None);
+alias InferredType = HeaderOnly!(AstNode.Kind.InferredType);
+alias Invalid = HeaderOnly!(AstNode.Kind.Invalid);
 
-struct None {
-    mixin ast_header!();
-}
-
-struct Inferred {
-    mixin ast_header!();
-}
-
-struct Invalid {
-    mixin ast_header!();
-
-    this(Span span) {
-        kind = AstNode.Kind.Invalid;
-        this.span = span;
-    }
-}
-
-alias IntLiteral = Value!(AstNode.Kind.Integer, ulong);
-alias StrLiteral = Value!(AstNode.Kind.String, Hash);
-alias CharLiteral = Value!(AstNode.Kind.Char, Hash);
+alias Integer = Value!(AstNode.Kind.Integer, ulong);
+alias String = Value!(AstNode.Kind.String, Hash);
+alias Char = Value!(AstNode.Kind.Char, Hash);
 
 struct Value(AstNode.Kind node_kind, T) {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof <= 16);
 
+    mixin ast_header;
     T value;
 
-    this(Span location, T value) {
-        kind = node_kind;
-        span = location;
+    this(ScopeId outer_scope_id, T value) {
+        header = AstNode(node_kind, outer_scope_id);
         this.value = value;
     }
 }
 
 struct SymbolRef {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 20);
 
-    Hash text;
-    Symbol* declaration;
+    mixin ast_header;
+    SymbolId declaration;
+    Hash name_hash;
 
-    this(Span location, Hash key) {
-        kind = AstNode.Kind.SymbolRef;
-        span = location;
-        text = key;
+    this(ScopeId outer_scope_id, Hash name_hash) {
+        header = AstNode(AstNode.Kind.SymbolRef, outer_scope_id);
+        this.name_hash = name_hash;
     }
 }
 
 struct Import {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 16);
 
-    mixin arity!"call_path";
-    SymbolTable* imported_file;
-
-    this(Span span, AstNode* call_path) {
-        kind = AstNode.Kind.Import;
-        this.span = span;
-        this.call_path = call_path;
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.Import, "call_path");
+    ScopeId imported_file;
 }
 
 struct UnOp {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 16);
 
-    mixin arity!"operand";
-
-    this(AstNode.Kind op_kind, Span prefix, AstNode* operand) {
-        kind = op_kind;
-        span = prefix + operand.span;
-        this.operand = operand;
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.InferredType, "operand");
+    SymbolId op_symbol_id;
 }
 
 struct BinOp {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 20);
 
-    mixin arity!("lhs", "rhs");
-
-    this(AstNode.Kind op_kind, AstNode* lhs, AstNode* rhs) {
-        kind = op_kind;
-        span = lhs.span + rhs.span;
-        parts = [lhs, rhs];
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.InferredType, "lhs", "rhs");
+    SymbolId op_symbol_id;
 }
 
 struct Function {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 20);
 
-    mixin arity!("parameters", "result", "body");
-
-    this(AstNode* parameters, AstNode* result, AstNode* body) {
-        kind = AstNode.Kind.Function;
-        span = parameters.span + result.span + body.span;
-        parts = [parameters, result, body];
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.Function, "parameters", "result", "body");
 }
 
 struct FunctionSignature {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 16);
 
-    mixin arity!("parameters", "result");
-
-    this(AstNode* parameters, AstNode* result) {
-        kind = AstNode.Kind.FunctionType;
-        span = parameters.span + result.span;
-        parts = [parameters, result];
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.FunctionSignature, "parameters", "result");
 }
 
-struct List {
-    mixin ast_header!();
+alias List = Sequence!(AstNode.Kind.List);
+alias Block = Sequence!(AstNode.Kind.Block);
+alias Loop = Sequence!(AstNode.Kind.Loop);
 
-    SymbolTable* scope_;
-    AstNode*[] members;
+struct Sequence(AstNode.Kind node_kind) {
+    static assert(typeof(this).sizeof == 32);
 
-    this(Span span, SymbolTable* scope_, AstNode*[] members) {
-        kind = AstNode.Kind.List;
-        this.span = span;
-        this.scope_ = scope_;
+    mixin ast_header;
+    ScopeId seq_scope_id;
+    AstNodeId[] members;
+
+    this(ScopeId outer_scope_id, ScopeId new_scope_id, AstNodeId[] members) {
+        header = AstNode(node_kind, outer_scope_id);
+        seq_scope_id = new_scope_id;
         this.members = members;
     }
 }
 
-struct Block {
-    mixin ast_header!();
+alias ListMember = Declaration!(AstNode.Kind.ListMember);
+alias Definition = Declaration!(AstNode.Kind.Definition);
+alias Variable = Declaration!(AstNode.Kind.Variable);
 
-    SymbolTable* scope_;
-    AstNode*[] statements;
+struct Declaration(AstNode.Kind node_kind) {
+    static assert(typeof(this).sizeof == 20);
 
-    this(Span span, SymbolTable* scope_, AstNode*[] statements) {
-        kind = AstNode.Kind.Block;
-        this.span = span;
-        this.scope_ = scope_;
-        this.statements = statements;
-    }
-}
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.None, "type_expr", "init_expr");
+    SymbolId symbol;
 
-struct Loop {
-    mixin ast_header!();
-
-    SymbolTable* scope_;
-    AstNode*[] statements;
-
-    this(Span span, SymbolTable* scope_, AstNode*[] statements) {
-        kind = AstNode.Kind.Loop;
-        this.span = span;
-        this.scope_ = scope_;
-        this.statements = statements;
-    }
-}
-
-struct Declaration {
-    mixin ast_header!();
-
-    Symbol* symbol;
-    mixin arity!("type_expr", "init_expr");
-
-    this(AstNode.Kind kind, Span prefix, Symbol* symbol, AstNode* type, AstNode* value) {
-        this.kind = kind;
-        this.span = prefix + type.span + value.span;
+    this(ScopeId outer_scope_id, SymbolId symbol, AstNodeId type_expr_id, AstNodeId init_expr_id) {
+        header = AstNode(node_kind, outer_scope_id);
+        parts = [type_expr_id, init_expr_id];
         this.symbol = symbol;
-        parts = [type, value];
-    }
-
-    this(AstNode.Kind kind, AstNode* type, AstNode* value)
-    in (kind == AstNode.Kind.ListMember) {
-        this.kind = kind;
-        this.span = type.span + value.span;
-        parts = [type, value];
     }
 }
 
-struct If {
-    mixin ast_header!();
+alias Break = HeaderOnly!(AstNode.Kind.Break);
+alias Continue = HeaderOnly!(AstNode.Kind.Continue);
 
-    mixin arity!("condition", "pass_branch", "fail_branch");
+struct HeaderOnly(AstNode.Kind node_kind) {
+    static assert(typeof(this).sizeof == 8);
 
-    this(Span prefix, AstNode* condition, AstNode* pass, AstNode* fail) {
-        kind = AstNode.Kind.If;
-        span = prefix + condition.span + pass.span + fail.span;
-        parts = [condition, pass, fail];
+    mixin ast_header;
+
+    this(ScopeId outer_scope_id) {
+        header = AstNode(node_kind, outer_scope_id);
     }
 }
 
 struct Return {
-    mixin ast_header!();
+    static assert(typeof(this).sizeof == 12);
 
-    mixin arity!("value");
-
-    this(Span prefix, AstNode* value) {
-        kind = AstNode.Kind.Return;
-        span = prefix + value.span;
-        this.value = value;
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.Return, "value");
 }
 
-struct Break {
-    mixin ast_header!();
+struct If {
+    static assert(typeof(this).sizeof == 20);
 
-    this(Span location) {
-        kind = AstNode.Kind.Break;
-        span = location;
-    }
+    mixin ast_header;
+    mixin arity!(AstNode.Kind.If, "condition", "pass_branch", "fail_branch");
 }
 
-struct Continue {
-    mixin ast_header!();
+/**
+ A `SyntaxTree` object represents a single source-file's abstract syntax tree.
+ */
+struct SyntaxTree {
+    import arc.source : Source;
 
-    this(Span location) {
-        kind = AstNode.Kind.Continue;
-        span = location;
-    }
-}
-
-AstNode* inferred() {
-    return cast(AstNode*) _inferred.header;
-}
-
-private const _inferred = Inferred(AstNode.Kind.Inferred);
-
-AstNode* none() {
-    return cast(AstNode*) _none.header;
-}
-
-private const _none = None(AstNode.Kind.None);
-
-bool verify(AstNode* node) {
-    if (node && node.is_valid)
-        return node.match!bool(
-                (Declaration* n) => n.type_expr != n.init_expr && n.parts.are_valid(),
-                (AstNode* n) => node.children.length == 0 || node.children.are_valid());
-
-    return false;
-}
-
-bool are_valid(AstNode*[] nodes) {
-    foreach (node; nodes)
-        if (!node.is_valid)
-            return false;
-    return true;
-}
-
-AstNode*[] children(AstNode* node) {
-    if (!node)
-        return [];
-
-    // dmft off
-    return node.match!(AstNode*[])(
-            (Import* n) => n.parts[],
-            (UnOp* n) => n.parts[],
-            (BinOp* n) => n.parts[],
-            (Function* n) => n.parts[],
-            (FunctionSignature* n) => n.parts[],
-            (List* n) => n.members[],
-            (Block* n) => n.statements[],
-            (Loop* n) => n.statements[],
-            (Declaration* n) => n.parts[],
-            (If* n) => n.parts[],
-            (Return* n) => n.parts[],
-            (AstNode* n) => cast(AstNode*[])[]);
-    // dfmt on
-}
-
-auto match(RetType, Ops...)(AstNode* node, Ops ops) if (Ops.length > 0) {
-    import std.traits : Parameters, ReturnType;
-    import std.meta : staticIndexOf, staticMap, AliasSeq;
-
-    static dispatch(T)(AstNode* n, Ops ops) {
-        enum int i = staticIndexOf!(T*, staticMap!(Parameters, Ops));
-        static if (i >= 0)
-            return ops[i](cast(T*) n);
-        else static if (is(Parameters!(ops[$ - 1]) == AliasSeq!(AstNode*)))
-            return ops[$ - 1](n);
-        else static if (ops.length > 0 && !is(RetType == void))
-            return RetType.init;
-        else
-            return;
+public:
+    this(AstAllocator allocator, Source* source, AstNodeId[] statements) {
+        _allocator = allocator;
+        _statements = statements;
+        _source = source;
     }
 
-    if (node is null) {
-        static if (ops.length > 0 && !is(RetType == void))
-            return RetType.init;
-        else
-            return;
+    Source* source() { return _source; }
+
+    AstNodeId none() {
+        return _allocator.none;
+    }
+
+    /// Retrieves the list of statements contained within the parsed syntax
+    /// tree.
+    AstNodeId[] statements() {
+        return _statements;
+    }
+
+    AstNode* ast_of(AstNodeId id) {
+        return _allocator.ast_of(id);
+    }
+
+    AstNodeId[] children_of(AstNodeId id) {
+        return _allocator.children_of(id);
+    }
+
+    ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
+        return _allocator.match!ReturnType(id, ops);
+    }
+
+private:
+    AstAllocator _allocator;
+    AstNodeId[] _statements;
+    Source* _source;
+}
+
+/// This is a class only because I want a zero-argument constructor.
+final class AstAllocator {
+    import arc.memory : VirtualMemory, VirtualArray;
+
+    // 64 gib for both AstNode* and Span
+    enum max_nodes = (cast(size_t) AstNodeId.value.max) + 1;
+
+    /*
+    Note: The implementation currently makes use of the GC to allocate nodes.
+    Both nodes and arrays could theoretically be allocated out of an VM arena,
+    but I'm too lazy to implement that right now. I do not expect that the
+    implementation would be too complex, though some reworking of the API will
+    be necessary. Given that the only user of the API is the parser, that should
+    not e too much of a burden.
+    */
+
+public:
+    this() {
+        _id_node_map = VirtualArray!(AstNode*)(max_nodes);
+        _id_span_map = VirtualArray!Span(max_nodes);
+
+        _marker_none_id = save_node(Span(), None(ScopeId()));
+    }
+
+    ~this() {
+        destroy(_id_node_map);
+        destroy(_id_span_map);
     }
 
     // dfmt off
-    switch (node.kind) {
-        case AstNode.Kind.Invalid:      return dispatch!Invalid(node, ops);
-        case AstNode.Kind.None:         return dispatch!None(node, ops);
-        case AstNode.Kind.Inferred:     return dispatch!Inferred(node, ops);
-
-        case AstNode.Kind.SymbolRef:    return dispatch!SymbolRef(node, ops);
-        case AstNode.Kind.Import:       return dispatch!Import(node, ops);
-
-        case AstNode.Kind.Char:         return dispatch!CharLiteral(node, ops);
-        case AstNode.Kind.String:       return dispatch!StrLiteral(node, ops);
-        case AstNode.Kind.Integer:      return dispatch!IntLiteral(node, ops);
-
-        case AstNode.Kind.Not: .. case AstNode.Kind.PointerType:
-                                        return dispatch!UnOp(node, ops);
-
-        case AstNode.Kind.Assign: .. case AstNode.Kind.StaticAccess:
-                                        return dispatch!BinOp(node, ops);
-
-        case AstNode.Kind.Function:     return dispatch!Function(node, ops);
-        case AstNode.Kind.FunctionType: return dispatch!FunctionSignature(node, ops);
-        
-        case AstNode.Kind.ListMember: .. case AstNode.Kind.Variable:
-                                        return dispatch!Declaration(node, ops);
-
-        case AstNode.Kind.List:         return dispatch!List(node, ops);
-        case AstNode.Kind.Block:        return dispatch!Block(node, ops);
-        case AstNode.Kind.Loop:         return dispatch!Loop(node, ops);
-        case AstNode.Kind.If:           return dispatch!If(node, ops);
-        case AstNode.Kind.Return:       return dispatch!Return(node, ops);
-        case AstNode.Kind.Break:        return dispatch!Break(node, ops);
-        case AstNode.Kind.Continue:     return dispatch!Continue(node, ops);
-        default: assert(false);
-    }
+    /// The id of the marker `None` AST node.
+    AstNodeId none() { return _marker_none_id; }
     // dfmt on
+
+    /// Accesses the `AstNode` identified by an `AstNodeId`.
+    AstNode* ast_of(AstNodeId id) {
+        return _id_node_map[id.value];
+    }
+
+    /// Accesses the `Span` of a node identified by an `AstNodeId`.
+    ref Span span_of(AstNodeId id) {
+        return _id_span_map[id.value];
+    }
+
+    /// Convenience function to retrieve any children that a node may have as an
+    /// `AstNodeId[]`. Any node without children will return an empty array.
+    AstNodeId[] children_of(AstNodeId id) {
+        // dfmt off
+        return match!(AstNodeId[])(id,
+            (UnOp* op)              => op.parts[],
+            (BinOp* op)             => op.parts[],
+            (Import* im)            => im.parts[],
+            (Function* fn)          => fn.parts[],
+            (FunctionSignature* fs) => fs.parts[],
+            (List* ls)              => ls.members[],
+            (Block* bk)             => bk.members[],
+            (Loop* lp)              => lp.members[],
+            (ListMember* lm)        => lm.parts[],
+            (Definition* df)        => df.parts[],
+            (Variable* vr)          => vr.parts[],
+            (Return* rt)            => rt.parts[],
+            (If* i)                 => i.parts[],
+            (AstNode* n)            => cast(AstNodeId[])[]);
+        // dfmt on
+    }
+
+    /**
+     Convenience function to switch on the type of an `AstNode`.
+
+     Params:
+        id  = The id of the node to be switched upon.
+        ops = A variadic list of functions or delegates taking the a pointer to
+              the node type as a parameter. If a catch-all clause is desired,
+              the last branch may be accept an `AstNode*` as a parameter.
+     */
+    ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
+        import std.traits : Parameters;
+        import std.meta : staticIndexOf, staticMap, AliasSeq;
+
+        static dispatch(T)(AstNode* n, Ops ops) {
+            enum int i = staticIndexOf!(T*, staticMap!(Parameters, Ops));
+            static if (i >= 0)
+                return ops[i](cast(T*) n);
+            else static if (is(Parameters!(ops[$ - 1]) == AliasSeq!(AstNode*)))
+                return ops[$ - 1](n);
+            else static if (!is(ReturnType == void))
+                return ReturnType.init;
+            else
+                return;
+        }
+
+        auto node = ast_of(id);
+        // dfmt off
+        switch (node.kind) {
+            case AstNode.Kind.Invalid:            return dispatch!Invalid(node, ops);
+            case AstNode.Kind.None:               return dispatch!None(node, ops);
+            case AstNode.Kind.InferredType:       return dispatch!InferredType(node, ops);
+            case AstNode.Kind.SymbolRef:          return dispatch!SymbolRef(node, ops);
+            case AstNode.Kind.Import:             return dispatch!Import(node, ops);
+            case AstNode.Kind.Char:               return dispatch!Char(node, ops);
+            case AstNode.Kind.String:             return dispatch!String(node, ops);
+            case AstNode.Kind.Integer:            return dispatch!Integer(node, ops);
+            case AstNode.Kind.Not: .. case AstNode.Kind.PointerType:
+                                                        return dispatch!UnOp(node, ops);
+            case AstNode.Kind.Assign: .. case AstNode.Kind.StaticAccess:
+                                                        return dispatch!BinOp(node, ops);
+            case AstNode.Kind.Function:           return dispatch!Function(node, ops);
+            case AstNode.Kind.FunctionSignature:  return dispatch!FunctionSignature(node, ops);
+            case AstNode.Kind.ListMember:         return dispatch!ListMember(node, ops);
+            case AstNode.Kind.Definition:         return dispatch!Definition(node, ops);
+            case AstNode.Kind.Variable:           return dispatch!Variable(node, ops);
+            case AstNode.Kind.List:               return dispatch!List(node, ops);
+            case AstNode.Kind.Block:              return dispatch!Block(node, ops);
+            case AstNode.Kind.Loop:               return dispatch!Loop(node, ops);
+            case AstNode.Kind.Break:              return dispatch!Break(node, ops);
+            case AstNode.Kind.Continue:           return dispatch!Continue(node, ops);
+            case AstNode.Kind.Return:             return dispatch!Return(node, ops);
+            case AstNode.Kind.If:                 return dispatch!If(node, ops);
+            default: assert(false);
+        }
+        // dfmt on
+    }
+
+    /// Saves a node and its span, returning the `AstNodeId` by which they may
+    /// be retrieved.
+    AstNodeId save_node(Node)(Span location, Node node) {
+        const id = AstNodeId(cast(uint) _id_node_map.length);
+
+        // If we wanted, we could put all of these into a single VM object.
+        auto n = new Node();
+        *n = node;
+        _id_node_map ~= &n.header;
+        _id_span_map ~= location;
+
+        return id;
+    }
+
+private:
+    AstNodeId _marker_none_id;
+
+    /// (AstNodeId) -> AstNode*
+    VirtualArray!(AstNode*) _id_node_map;
+    /// (AstNodeId) -> Span
+    VirtualArray!Span _id_span_map;
+}
+
+private:
+
+mixin template ast_header() {
+    AstNode header;
+    alias header this;
+}
+
+/**
+ Mixin template for creating nodes with specific children. Each child is given a
+ name by which it is referred, though all children may be collectively referred
+ to by `parts`.
+
+ `arity` will automatically create a constructor if `node_kind` is not
+ `AstNode.Kind.None`, and will take the kind of ast node as an argument if
+ `node_kind` is `AstNode.Kind.InferredType`.
+
+ For example:  
+    ```
+    arity!(AstNode.Kind.None, ...) -> no constructor  
+
+    arity!(AstNode.Kind.InferredType, ...) -> this(AstNode.Kind, ScopeId, ...)  
+
+    arity!(_anything_else_, ...) -> this(ScopeId, ...)  
+    ```
+ */
+mixin template arity(AstNode.Kind node_kind, Names...) {
+    import std.algorithm : map;
+    import std.format : format;
+
+    union {
+        AstNodeId[Names.length] parts;
+        struct {
+            static foreach (name; Names)
+                mixin("AstNodeId " ~ name ~ ";");
+        }
+    }
+
+    static if (node_kind)
+        mixin((string[] names...) {
+            auto params = names.map!(s => "AstNodeId " ~ s ~ ", ");
+            auto array_parts = names.map!(s => s ~ ", ");
+
+            if (node_kind == AstNode.Kind.InferredType)
+                return "this(AstNode.Kind kind, ScopeId outer_scope_id, %-(%s%)) {
+                    header = AstNode(kind, outer_scope_id);
+                    parts = [%-(%s%)];
+                }".format(params, array_parts);
+            else
+                return "this(ScopeId outer_scope_id, %-(%s%)) {
+                    header = AstNode(AstNode.Kind.%s, outer_scope_id);
+                    parts = [%-(%s%)];
+                }".format(params, node_kind, array_parts);
+        }(Names));
 }
