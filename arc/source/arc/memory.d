@@ -25,9 +25,6 @@ struct VirtualMemory {
 
 public:
     this(size_t size_bytes) {
-        import std.stdio;
-        writeln(size_bytes);
-
         _extra_bytes_per_alloc = extra_pages_per_alloc * pageSize;
         _num_bytes_reserved = round_to_page(size_bytes);
 
