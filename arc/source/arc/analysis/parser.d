@@ -147,42 +147,24 @@ private:
         return alloc(token.span, SymbolRef(_scope_id, token.key));
     }
 
+    AstNodeId unary(AstNode.Kind kind) {
+        auto span = take().span;
+        auto e = expr(Precedence.Call);
+
+        if (_context.nodes.ast_of(e).is_valid)
+            return alloc(span, UnOp(kind, _scope_id, e));
+
+        return alloc(span, Invalid(_scope_id));
+    }
+
     AstNodeId prefix() {
         // dfmt off
         switch (token.type) with (TT) {
-        case Bang:
-        case TokNot:
-            auto span = take().span;
-            auto e = expr(Precedence.Call);
-            if (_context.nodes.ast_of(e).is_valid)
-                return alloc(span, UnOp(AstNode.Kind.Not, _scope_id, e));
-            else
-                return alloc(span, arc.data.ast.Invalid(_scope_id));
-
-        case Minus:
-            auto span = take().span;
-            auto e = expr(Precedence.Call);
-            if (_context.nodes.ast_of(e).is_valid)
-                return alloc(span, UnOp(AstNode.Kind.Negate, _scope_id, e));
-            else
-                return alloc(span, arc.data.ast.Invalid(_scope_id));
-
-        case Star:
-            auto span = take().span;
-            auto e = expr(Precedence.Call);
-            if (_context.nodes.ast_of(e).is_valid)
-                return alloc(span, UnOp(AstNode.Kind.Dereference, _scope_id, e));
-            else
-                return alloc(span, arc.data.ast.Invalid(_scope_id));
-
-        case TokImport:
-            auto span = take().span;
-            auto e = expr(Precedence.Call);
-            if (_context.nodes.ast_of(e).is_valid)
-                return alloc(span, Import(_scope_id, e));
-            else
-                return alloc(span, arc.data.ast.Invalid(_scope_id));
-
+        case Bang:          return unary(AstNode.Kind.Not);
+        case TokNot:        return unary(AstNode.Kind.Not);
+        case Minus:         return unary(AstNode.Kind.Negate);
+        case Star:          return unary(AstNode.Kind.Dereference);
+        case TokImport:     return unary(AstNode.Kind.Import);
         case TokName:       return symbol_ref(take());
         case TokInteger:    return alloc(token.span, Integer(_scope_id, take().value));
         case TokString:     return alloc(token.span, String(_scope_id, take().key));
