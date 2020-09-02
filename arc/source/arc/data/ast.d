@@ -112,7 +112,7 @@ public:
 
     this(Kind kind, ScopeId scope_id) {
         this.kind = kind;
-        this.outer_scope_id = outer_scope_id;
+        this.outer_scope_id = scope_id;
     }
 
     /// Checks if the node is of `AstNode.Kind.Invalid` kind. No further

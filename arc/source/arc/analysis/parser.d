@@ -62,7 +62,7 @@ public:
     this(ParseContext* context, const(char)[] source) {
         _context = context;
         _tokens = TokenBuffer(source, context.token_buffer, context.string_table);
-        _scope_id = _context.scopes.null_scope_id;
+        _scope_id = _context.scopes.make_scope(_context.scopes.null_scope_id);
     }
 
     bool is_done() {
@@ -85,10 +85,10 @@ public:
             case TokIf:
                 return alloc(take().span, If(_scope_id, expr(), block(), skip(token.type == TokElse) ? stmt() : none));
             case TokDef:
-                return decl!Definition(take().span, make_symbol(Symbol.Kind.Constant, take(required(TT.TokName))));
+                return decl!Definition(take().span, Symbol.Kind.Constant, take(required(TT.TokName)));
             default:
                 if (token.type == TokName && next.type == Colon)
-                        return decl!Variable(token.span, make_symbol(Symbol.Kind.Variable, take()));
+                        return decl!Variable(token.span, Symbol.Kind.Variable, take());
 
                 auto lhs = expr();
                 if (skip(token.type == Equals)) {
@@ -129,8 +129,14 @@ private:
     /**
      <symbol> ':' (<expr> | <inferred_type>) (('=' <expr>) | <none>)
      */
-    AstNodeId decl(Node)(Span prefix, SymbolId symbol) {
+    AstNodeId decl(Node)(Span prefix, Symbol.Kind kind, Token name) {
+        assert(name.type == TT.TokName);
+
         skip(required(TT.Colon));
+
+        auto symbol = _context.symbols.make_symbol(kind, name.key);
+        _context.scopes.scope_of(_scope_id).add(symbol);
+
         return alloc!Node(prefix, Node(
                 _scope_id,
                 symbol,
@@ -141,10 +147,6 @@ private:
     bool is_at_end_of_expr() {
         with (TT)
             return is_done || token.type.matches_one(Semicolon, Comma, Rparen, Rbracket);
-    }
-
-    AstNodeId symbol_ref(Token token) {
-        return alloc(token.span, SymbolRef(_scope_id, token.key));
     }
 
     AstNodeId unary(AstNode.Kind kind) {
@@ -165,7 +167,7 @@ private:
         case Minus:         return unary(AstNode.Kind.Negate);
         case Star:          return unary(AstNode.Kind.Dereference);
         case TokImport:     return unary(AstNode.Kind.Import);
-        case TokName:       return symbol_ref(take());
+        case TokName:       return alloc(token.span, SymbolRef(_scope_id, take().key));
         case TokInteger:    return alloc(token.span, Integer(_scope_id, take().value));
         case TokString:     return alloc(token.span, String(_scope_id, take().key));
         case TokChar:       return alloc(token.span, Char(_scope_id, take().key));
@@ -234,7 +236,7 @@ private:
 
         // (a : T = 1)
         if (token.type == TT.TokName && next.type == TT.Colon)
-            return decl!ListMember(token.span, make_symbol(Symbol.Kind.Variable, take()));
+            return decl!ListMember(token.span, Symbol.Kind.Variable, take());
 
         // (a)
         auto e = expr();
@@ -323,10 +325,6 @@ private:
 
     AstNodeId inferred_type() {
         return alloc(Span(), InferredType(_scope_id));
-    }
-
-    SymbolId make_symbol(Symbol.Kind kind, Token token) {
-        return _context.symbols.make_symbol(kind, token.key);
     }
 
     void report_expect_mismatch(Args...)(Token got, string message, Args args) {
