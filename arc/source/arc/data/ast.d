@@ -27,13 +27,7 @@ import arc.data.span;
 import arc.data.symbol: SymbolId;
 import arc.data.scopes: ScopeId;
 import arc.data.hash;
-
-/**
- Placeholder for a global identifier for a type.
- */
-struct TypeId {
-    ushort value;
-}
+import arc.data.type;
 
 /**
  Global identifier for an AST node.

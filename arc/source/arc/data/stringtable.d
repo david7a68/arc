@@ -10,7 +10,7 @@ public:
         return key;
     }
 
-    string string_of(Hash hash) {
+    string opIndex(Hash hash) {
         return _table.get(hash, "");
     }
 

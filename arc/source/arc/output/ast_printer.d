@@ -1,12 +1,13 @@
 module arc.output.ast_printer;
 
+import arc.analysis.source_analyzer;
 import arc.data.ast;
 import arc.data.stringtable;
-import std.format: format;
+import std.format : format;
 
-const(char[]) print_ast(SyntaxTree ast, StringTable* strings) {
-    auto printer = AstPrinter(ast, strings);
-    printer.print();
+const(char[]) print_ast(SourceAnalyzer* analyzer, SyntaxTree ast) {
+    auto printer = AstPrinter(analyzer);
+    printer.print(ast);
     return printer.data;
 }
 
@@ -53,13 +54,11 @@ struct AstPrinter {
 
     Array!IndentType stack;
     Appender!(char[]) str;
-    SyntaxTree source;
-    StringTable* strings;
+    SourceAnalyzer* analyzer;
 
-    this(SyntaxTree source, StringTable* strings) {
+    this(SourceAnalyzer* analyzer) {
         str = appender!(char[]);
-        this.source = source;
-        this.strings = strings;
+        this.analyzer = analyzer;
     }
 
     const(char)[] data() const {
@@ -70,35 +69,35 @@ struct AstPrinter {
         str.clear();
     }
 
-    void print() {
-        foreach (node_id; source.statements)
+    void print(SyntaxTree ast) {
+        foreach (node_id; ast.statements)
             print(node_id);
     }
 
     void print(AstNodeId node, string prefix = "") {
         str.put(prefix);
 
-        str.put(source.match!(const(char)[])(
+        str.put(analyzer.match!(const(char)[])(
             node,
-            (Char* n) => format("%s", n.kind),
-            (String* n) => format("%s", n.kind),
-            (Integer* n) => format("%s (%s)", n.kind, n.value),
-            (SymbolRef* n) => format("%s", n.kind),
-            (AstNode* n) => format("%s", n.kind),
-            (Char* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
-            (String* n) => format("%s (%s)", n.kind, strings.string_of(n.value)),
-            (Integer* n) => format("%s (%s)", n.kind, n.value),
-            (SymbolRef* n) => format("%s (%s)", n.kind, strings.string_of(n.name_hash)),
-            (AstNode* n) => format("%s", n.kind)
+            (Char* n) => format("%s ", n.kind),
+            (String* n) => format("%s ", n.kind),
+            (Integer* n) => format("%s (%s) ", n.kind, n.value),
+            (SymbolRef* n) => format("%s ", n.kind),
+            (AstNode* n) => format("%s ", n.kind),
+            (Char* n) => format("%s (%s) ", n.kind, analyzer.string_of(n.value)),
+            (String* n) => format("%s (%s) ", n.kind, analyzer.string_of(n.value)),
+            (Integer* n) => format("%s (%s) ", n.kind, n.value),
+            (SymbolRef* n) => format("%s (%s) ", n.kind, analyzer.string_of(n.name_hash)),
+            (List* n) => format("%s (%s) ", n.kind, analyzer.children_of(node).length),
+            (AstNode* n) => format("%s ", n.kind)
         ));
 
-        source.match!void(
+        analyzer.match!void(
             node,
             (Function* n) {
                 write_named_children(node, "Params: ", "Return Type: ", "Body: ");
             },
             (List* n) {
-                str.put(format(" (%s)", source.children_of(node).length));
                 write_children(node, true);
             },
             (UnOp *n) {
@@ -135,15 +134,15 @@ struct AstPrinter {
 
     void write_children(AstNodeId n, bool numbered = false) {
         str.put("\n");
-        foreach (i, child; source.children_of(n))
-            write_child(child, i + 1 == source.children_of(n).length, numbered ? format("#%s", i) : "");
+        foreach (i, child; analyzer.children_of(n))
+            write_child(child, i + 1 == analyzer.children_of(n).length, numbered ? format("#%s ", i) : "");
     }
 
     void write_named_children(AstNodeId n, string[] names...)
-    in(names.length == source.children_of(n).length) {
+    in(names.length == analyzer.children_of(n).length) {
         str.put("\n");
-        foreach (i, child; source.children_of(n)) {
-            write_child(child, i + 1 == source.children_of(n).length, names[i]);
+        foreach (i, child; analyzer.children_of(n)) {
+            write_child(child, i + 1 == analyzer.children_of(n).length, names[i]);
         }
     }
 

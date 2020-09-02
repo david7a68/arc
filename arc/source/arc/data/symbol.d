@@ -1,6 +1,7 @@
 module arc.data.symbol;
 
 import arc.data.hash : Hash;
+import arc.data.type : TypeId;
 
 struct SymbolId {
     uint value;
@@ -20,6 +21,7 @@ struct Symbol {
 
     Kind kind;
     Hash name;
+    TypeId type_id;
 }
 
 struct GlobalSymbolTable {
@@ -46,11 +48,13 @@ public:
 
     SymbolId make_symbol(Symbol.Kind kind, Hash name) {
         const id = SymbolId(cast(uint) _symbols.length);
+
         _symbols ~= Symbol(kind, name);
+
         return id;
     }
 
-    Symbol* symbol_of(SymbolId id) {
+    Symbol* opIndex(SymbolId id) {
         return &_symbols[id.value];
     }
 

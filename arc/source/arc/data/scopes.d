@@ -13,7 +13,7 @@ struct Scope {
     }
 
     void add(SymbolId id) {
-        _symbols[id] = _all_symbols.symbol_of(id);
+        _symbols[id] = (*_all_symbols)[id];
     }
 
     SymbolId lookup(Hash name) {

@@ -3,6 +3,7 @@ module arc.analysis.source_analyzer;
 import arc.analysis.lexer;
 import arc.analysis.parser;
 import arc.data.ast;
+import arc.data.hash;
 import arc.data.scopes;
 import arc.data.span;
 import arc.data.stringtable;
@@ -37,6 +38,10 @@ public:
 
     StringTable* string_table() return { return &_string_table; }
 
+    const(char)[] string_of(Hash hash) {
+        return _string_table[hash];
+    }
+
     SyntaxTree ast_of(Source* source) {
         return _syntax_source_map.require(source, parse(&_parse_context, source));
     }
@@ -49,19 +54,33 @@ public:
         return _ast_allocator.span_of(id);
     }
 
-    const(char)[] name_of(AstNodeId id) {
-        auto symbol = symbol_of(id);
-        return symbol ? _string_table.string_of(symbol.name) : [];
+    ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
+        return _ast_allocator.match!ReturnType(id, ops);
+    }
+
+    AstNodeId[] children_of(AstNodeId id) {
+        return _ast_allocator.children_of(id);
     }
 
     Symbol* symbol_of(AstNodeId id) {
         // dfmt off
         return _ast_allocator.match!(Symbol*)(id,
-            (ListMember* lm) => _symbol_table.symbol_of(lm.symbol),
-            (Definition* df) => _symbol_table.symbol_of(df.symbol),
-            (Variable* vr) => _symbol_table.symbol_of(vr.symbol),
+            (ListMember* lm) => _symbol_table[lm.symbol],
+            (Definition* df) => _symbol_table[df.symbol],
+            (Variable* vr) => _symbol_table[vr.symbol],
+            (SymbolRef* sr) {
+                // Implement symbol searching here. We depend on all source
+                // files being present by the time this is called. Otherwise
+                // there is no way to reliably resolve imported symbols.
+                return null;
+            },
             (AstNodeId* n) => null);
         // dfmt on
+    }
+
+    const(char)[] name_of(AstNodeId id) {
+        auto symbol = symbol_of(id);
+        return symbol ? _string_table[symbol.name] : [];
     }
 
     /// Retrieves the declaration site of a `SymbolRef`.

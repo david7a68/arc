@@ -41,7 +41,7 @@ public:
         import arc.output.ast_printer : print_ast;
         import std.stdio : writeln;
 
-        writeln(print_ast(ast, source_analyzer.string_table));
+        writeln(print_ast(&source_analyzer, ast));
         report_errors(&reporter, ast.source);
     }
 }
