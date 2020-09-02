@@ -30,19 +30,41 @@ import arc.memory;
 }
 
 @("Virtual Array") unittest {
-    struct T {
-        int a, b;
+    {
+        struct T {
+            int a, b;
+        }
+
+        auto va = VirtualArray!T(1.kib);
+
+        foreach(i; 0 .. 20) {
+            assert(va.length == i);
+            va ~= T(i, 20 - i);
+        }
+
+        foreach (i; 0 .. 20) {
+            assert(va[i] == T(i, 20 - i));
+            assert(va[i] is va.base_ptr[i]);
+        }
     }
 
-    auto va = VirtualArray!T(1.kib);
+    {
+        alias T = byte[3];
 
-    foreach(i; 0 .. 20)
-        va ~= T(i, 20 - i);
-    
-    assert(va[1] is va.base_ptr[1]);
+        auto va = VirtualArray!T(1.kib);
 
-    foreach (i; 0 .. 20) {
-        assert(va[i] == T(i, 20 - i));
-        assert(va[i] is va.base_ptr[i]);
+        foreach (byte i; 0 .. 20) {
+            assert(va.length == i);
+            T t;
+            t[0] = i;
+            t[1] = cast(byte) (20 - i);
+            t[2] = -i;
+            va ~= t;
+        }
+
+        foreach (i; 0 .. 20) {
+            assert(va[i] == [i, 20 - i, -i]);
+            assert(va[i].ptr is va.base_ptr[i].ptr);
+        }
     }
 }

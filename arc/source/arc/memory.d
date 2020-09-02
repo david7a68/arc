@@ -72,9 +72,9 @@ public:
      For simplicity, this function will always return memory aligned to the
      standard alignment, which is described at the top of the struct.
      */
-    void[] alloc(size_t n)
+    void[] alloc(size_t n, size_t alignment = standard_alignment)
     in (alloc_size_for(n) <= capacity) {
-        const alloc_size = alloc_size_for(n);
+        const alloc_size = alloc_size_for(n, alignment);
         const alignment_offset = alloc_size - n; // This subtraction could be avoided by unpacking alloc_size
         auto next_after_alloc = _next_alloc_start + alloc_size;
 
@@ -134,7 +134,7 @@ struct VirtualArray(T) {
     size_t bytes_allocated() { return _vm.bytes_allocated; }
 
     size_t bytes_reserved() { return _vm.bytes_reserved; }
-    
+
     size_t length() { return _vm.bytes_allocated / T.sizeof; }
     
     size_t capacity() { return _vm.bytes_reserved / T.sizeof; }
@@ -149,7 +149,7 @@ struct VirtualArray(T) {
 
     ref VirtualArray!T opOpAssign(string op = "~")(T object)
     in (length < capacity) {
-        *(cast(PtrType!T) _vm.alloc(T.sizeof)) = object;
+        *(cast(PtrType!T) _vm.alloc(T.sizeof, T.alignof)) = object;
         return this;
     }
 
