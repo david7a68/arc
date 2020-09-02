@@ -13,75 +13,75 @@ import std.stdio : writefln;
     auto symbols = new GlobalSymbolTable(64);
     auto errors = Reporter();
     auto strings = StringTable();
-    ParseContext ctx = {
-        reporter: &errors,
-        token_buffer: new Token[](64),
-        string_table: &strings,
-        nodes: new AstAllocator(),
-        symbols: symbols,
-        scopes: new ScopeAllocator(symbols),
-    };
+    auto parser = new Parser(
+        &errors,
+        new Token[](64),
+        &strings,
+        new AstAllocator(),
+        new ScopeAllocator(symbols),
+        symbols,
+    );
 
-    value_literals(errors, ctx);
+    value_literals(errors, parser);
 
-    simple_prefix_expressions(errors, ctx);
+    simple_prefix_expressions(errors, parser);
     
-    simple_infix_expressions(errors, ctx);
+    simple_infix_expressions(errors, parser);
     
-    simple_list_expressions(errors, ctx);
+    simple_list_expressions(errors, parser);
 
-    function_literals(errors, ctx);
+    function_literals(errors, parser);
 
-    complex_expressions(errors, ctx);
+    complex_expressions(errors, parser);
 
-    simple_statements(errors, ctx);
+    simple_statements(errors, parser);
 }
 
-void value_literals(ref Reporter errors, ref ParseContext ctx) {
+void value_literals(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`a`), SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`2`), Integer));
-        assert(check_types(errors, ctx.parse_expr(`'a'`), Char));
-        assert(check_types(errors, ctx.parse_expr(`"a"`), String));
+        assert(check_types(errors, parser.expr(`a`), SymbolRef));
+        assert(check_types(errors, parser.expr(`2`), Integer));
+        assert(check_types(errors, parser.expr(`'a'`), Char));
+        assert(check_types(errors, parser.expr(`"a"`), String));
     }
 }
 
-void simple_prefix_expressions(ref Reporter errors, ref ParseContext ctx) {
+void simple_prefix_expressions(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`-1`), Negate, Integer));
-        assert(check_types(errors, ctx.parse_expr(`not a`), Not, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`!a`), Not, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`*a`), Dereference, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`import a`), Import, SymbolRef));
+        assert(check_types(errors, parser.expr(`-1`), Negate, Integer));
+        assert(check_types(errors, parser.expr(`not a`), Not, SymbolRef));
+        assert(check_types(errors, parser.expr(`!a`), Not, SymbolRef));
+        assert(check_types(errors, parser.expr(`*a`), Dereference, SymbolRef));
+        assert(check_types(errors, parser.expr(`import a`), Import, SymbolRef));
     }
 }
 
-void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
+void simple_infix_expressions(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`a<b`), Less, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a<=b`), LessEqual, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a>b`), Greater, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a>=b`), GreaterEqual, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a==b`), Equal, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a!=b`), NotEqual, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a and b`), And, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a or b`), Or, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a+b`), Add, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a-b`), Subtract, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a*b`), Multiply, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a/b`), Divide, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a^b`), Power, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a.b`), Access, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a::b`), StaticAccess, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a()`), Call, SymbolRef, List));
-        assert(check_types(errors, ctx.parse_expr(`a[]`), Call, SymbolRef, List));
-        assert(check_types(errors, ctx.parse_expr(`a b`), Call, SymbolRef, SymbolRef));
-        assert(check_types(errors, ctx.parse_expr(`a 1`), Call, SymbolRef, Integer));
-        assert(check_types(errors, ctx.parse_expr(`a 'a'`), Call, SymbolRef, Char));
-        assert(check_types(errors, ctx.parse_expr(`a "b"`), Call, SymbolRef, String));
+        assert(check_types(errors, parser.expr(`a<b`), Less, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a<=b`), LessEqual, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a>b`), Greater, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a>=b`), GreaterEqual, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a==b`), Equal, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a!=b`), NotEqual, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a and b`), And, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a or b`), Or, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a+b`), Add, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a-b`), Subtract, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a*b`), Multiply, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a/b`), Divide, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a^b`), Power, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a.b`), Access, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a::b`), StaticAccess, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a()`), Call, SymbolRef, List));
+        assert(check_types(errors, parser.expr(`a[]`), Call, SymbolRef, List));
+        assert(check_types(errors, parser.expr(`a b`), Call, SymbolRef, SymbolRef));
+        assert(check_types(errors, parser.expr(`a 1`), Call, SymbolRef, Integer));
+        assert(check_types(errors, parser.expr(`a 'a'`), Call, SymbolRef, Char));
+        assert(check_types(errors, parser.expr(`a "b"`), Call, SymbolRef, String));
 
         // Testing Precedence Parsing in Increasing Order
-        assert(check_types(errors, ctx.parse_expr(`1 < a and b == 2`),
+        assert(check_types(errors, parser.expr(`1 < a and b == 2`),
             And,
                 Less,
                     Integer,
@@ -90,14 +90,14 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
                     SymbolRef,
                     Integer));
         
-        assert(check_types(errors, ctx.parse_expr(`a < 1 == true`),
+        assert(check_types(errors, parser.expr(`a < 1 == true`),
             Equal,
                 Less,
                     SymbolRef,
                     Integer,
                 SymbolRef));
         
-        assert(check_types(errors, ctx.parse_expr(`1 + 2 < a - -b`),
+        assert(check_types(errors, parser.expr(`1 + 2 < a - -b`),
             Less,
                 Add,
                     Integer,
@@ -107,19 +107,19 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
                     Negate,
                         SymbolRef));
         
-        assert(check_types(errors, ctx.parse_expr(`-2 - b`),
+        assert(check_types(errors, parser.expr(`-2 - b`),
             Subtract,
                 Negate,
                     Integer,
                 SymbolRef));
 
-        assert(check_types(errors, ctx.parse_expr(`*a.b`),
+        assert(check_types(errors, parser.expr(`*a.b`),
             Dereference,
                 Access,
                     SymbolRef,
                     SymbolRef));
 
-        assert(check_types(errors, ctx.parse_expr(`2 * x ^ 3 + 3 / y - 1`),
+        assert(check_types(errors, parser.expr(`2 * x ^ 3 + 3 / y - 1`),
             Subtract,                   // 2 * x ^ 3 + 3 / y - 1
                 Add,                    // 2 * x ^ 3 + 3 / y
                     Multiply,           // 2 * x ^ 3
@@ -132,7 +132,7 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
                         SymbolRef,
                 Integer));
         
-        assert(check_types(errors, ctx.parse_expr(`a.b ^ c::d`),
+        assert(check_types(errors, parser.expr(`a.b ^ c::d`),
             Power,
                 Access,
                     SymbolRef,
@@ -141,7 +141,7 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
                     SymbolRef,
                     SymbolRef));
 
-        assert(check_types(errors, ctx.parse_expr(`a.b::c()`),
+        assert(check_types(errors, parser.expr(`a.b::c()`),
             Call,
                 StaticAccess,
                     Access,
@@ -150,21 +150,21 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
                     SymbolRef,
                 List));
 
-        assert(check_types(errors, ctx.parse_expr(`a b 2`),
+        assert(check_types(errors, parser.expr(`a b 2`),
             Call,
                 SymbolRef,
                 Call,
                     SymbolRef,
                     Integer));
         
-        assert(check_types(errors, ctx.parse_expr(`a() 'b'`),
+        assert(check_types(errors, parser.expr(`a() 'b'`),
             Call,                       // a() 'b'
                 Call,                   // a()
                     SymbolRef,
                     List,
                 Char));
         
-        assert(check_types(errors, ctx.parse_expr(`a() b()`),
+        assert(check_types(errors, parser.expr(`a() b()`),
             Call,
                 Call,
                     SymbolRef,
@@ -175,13 +175,13 @@ void simple_infix_expressions(ref Reporter errors, ref ParseContext ctx) {
     }
 }
 
-void simple_list_expressions(ref Reporter errors, ref ParseContext ctx) {
+void simple_list_expressions(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`()`), List));
-        assert(check_types(errors, ctx.parse_expr(`[]`), List));
-        assert(check_types(errors, ctx.parse_expr(`(a)`), List, ListMember, InferredType, SymbolRef));
+        assert(check_types(errors, parser.expr(`()`), List));
+        assert(check_types(errors, parser.expr(`[]`), List));
+        assert(check_types(errors, parser.expr(`(a)`), List, ListMember, InferredType, SymbolRef));
         
-        assert(check_types(errors, ctx.parse_expr(`[a:=1, b:R, c:T=d]`),
+        assert(check_types(errors, parser.expr(`[a:=1, b:R, c:T=d]`),
             List,
                 ListMember,
                     InferredType,
@@ -194,7 +194,7 @@ void simple_list_expressions(ref Reporter errors, ref ParseContext ctx) {
                     SymbolRef
         ));
 
-        assert(check_types(errors, ctx.parse_expr(`(((())))`),
+        assert(check_types(errors, parser.expr(`(((())))`),
             List,
                 ListMember,
                     InferredType,
@@ -207,14 +207,14 @@ void simple_list_expressions(ref Reporter errors, ref ParseContext ctx) {
                                     List
         ));
 
-        assert(check_error(errors, ctx.parse_expr(`(a=b)`), ArcError.TokenExpectMismatch));
-        assert(check_error(errors, ctx.parse_expr(`(!)`), ArcError.TokenExpectMismatch));
+        assert(check_error(errors, parser.expr(`(a=b)`), ArcError.TokenExpectMismatch));
+        assert(check_error(errors, parser.expr(`(!)`), ArcError.TokenExpectMismatch));
     }
 }
 
-void function_literals(ref Reporter errors, ref ParseContext ctx) {
+void function_literals(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`(a) -> b`),
+        assert(check_types(errors, parser.expr(`(a) -> b`),
             FunctionSignature,
                 List,
                     ListMember,
@@ -222,7 +222,7 @@ void function_literals(ref Reporter errors, ref ParseContext ctx) {
                         SymbolRef,
                 SymbolRef));
         
-        assert(check_types(errors, ctx.parse_expr(`(a) => b`),
+        assert(check_types(errors, parser.expr(`(a) => b`),
             Function,
                 List,
                     ListMember,
@@ -232,19 +232,19 @@ void function_literals(ref Reporter errors, ref ParseContext ctx) {
                 SymbolRef));
         
 
-        assert(check_types(errors, ctx.parse_expr(`() => {}`),
+        assert(check_types(errors, parser.expr(`() => {}`),
             Function,
                 List,
                 InferredType,
                 Block));
 
-        assert(check_types(errors, ctx.parse_expr(`() => T {}`),
+        assert(check_types(errors, parser.expr(`() => T {}`),
             Function,
                 List,
                 SymbolRef,
                 Block));
         
-        assert(check_types(errors, ctx.parse_expr(`(() -> T)`),
+        assert(check_types(errors, parser.expr(`(() -> T)`),
             List,
                 ListMember,
                     InferredType,
@@ -252,7 +252,7 @@ void function_literals(ref Reporter errors, ref ParseContext ctx) {
                         List,
                         SymbolRef));
         
-        assert(check_types(errors, ctx.parse_expr(`(T) -> () -> tf()`),
+        assert(check_types(errors, parser.expr(`(T) -> () -> tf()`),
             FunctionSignature,      // (T) -> () -> tf()
                 List,               // (T)
                     ListMember,
@@ -264,7 +264,7 @@ void function_literals(ref Reporter errors, ref ParseContext ctx) {
                         SymbolRef,
                         List));
         
-        assert(check_types(errors, ctx.parse_expr(`(() => 1)`),
+        assert(check_types(errors, parser.expr(`(() => 1)`),
             List,
                 ListMember,
                     InferredType,
@@ -276,9 +276,9 @@ void function_literals(ref Reporter errors, ref ParseContext ctx) {
 }
 
 /// More involved expressions that mix subexpression types.
-void complex_expressions(ref Reporter errors, ref ParseContext ctx) {
+void complex_expressions(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_expr(`(import a)::c`),
+        assert(check_types(errors, parser.expr(`(import a)::c`),
             StaticAccess,
                 List,
                     ListMember,
@@ -289,22 +289,22 @@ void complex_expressions(ref Reporter errors, ref ParseContext ctx) {
     }
 }
 
-void simple_statements(ref Reporter errors, ref ParseContext ctx) {
+void simple_statements(ref Reporter errors, Parser parser) {
     with (AstNode.Kind) {
-        assert(check_types(errors, ctx.parse_stmt(`{}`), Block));
-        assert(check_types(errors, ctx.parse_stmt(`loop {}`), Loop));
-        assert(check_types(errors, ctx.parse_stmt(`break;`), Break));
-        assert(check_types(errors, ctx.parse_stmt(`continue;`), Continue));
-        assert(check_types(errors, ctx.parse_stmt(`return;`), Return, None));
-        assert(check_types(errors, ctx.parse_stmt(`return 1;`), Return, Integer));
+        assert(check_types(errors, parser.stmt(`{}`), Block));
+        assert(check_types(errors, parser.stmt(`loop {}`), Loop));
+        assert(check_types(errors, parser.stmt(`break;`), Break));
+        assert(check_types(errors, parser.stmt(`continue;`), Continue));
+        assert(check_types(errors, parser.stmt(`return;`), Return, None));
+        assert(check_types(errors, parser.stmt(`return 1;`), Return, Integer));
 
-        assert(check_types(errors, ctx.parse_stmt(`if 1 {}`),
+        assert(check_types(errors, parser.stmt(`if 1 {}`),
             If,
                 Integer,
                 Block,
                 None));
         
-        assert(check_types(errors, ctx.parse_stmt(`if a and not b {} else {}`),
+        assert(check_types(errors, parser.stmt(`if a and not b {} else {}`),
             If,
                 And,
                     SymbolRef,
@@ -313,12 +313,12 @@ void simple_statements(ref Reporter errors, ref ParseContext ctx) {
                 Block,
                 Block));
 
-        assert(check_types(errors, ctx.parse_stmt(`def a := 1;`),
+        assert(check_types(errors, parser.stmt(`def a := 1;`),
             Definition,
                 InferredType,
                 Integer));
 
-        assert(check_types(errors, ctx.parse_stmt(`def a : () -> T = () => 3;`),
+        assert(check_types(errors, parser.stmt(`def a : () -> T = () => 3;`),
             Definition,
                 FunctionSignature,
                     List,
@@ -328,43 +328,42 @@ void simple_statements(ref Reporter errors, ref ParseContext ctx) {
                     InferredType,
                     Integer));
 
-        assert(check_types(errors, ctx.parse_stmt(`a := 3;`), Variable, InferredType, Integer));
-        assert(check_types(errors, ctx.parse_stmt(`a : T[] = 3;`),
+        assert(check_types(errors, parser.stmt(`a := 3;`), Variable, InferredType, Integer));
+        assert(check_types(errors, parser.stmt(`a : T[] = 3;`),
             Variable,
                 Call,
                     SymbolRef,
                     List,
                 Integer));
 
-        assert(check_types(errors, ctx.parse_stmt(`a = 3;`), Assign, SymbolRef, Integer));
+        assert(check_types(errors, parser.stmt(`a = 3;`), Assign, SymbolRef, Integer));
 
-        assert(check_types(errors, ctx.parse_stmt(`{break;}`), Block, Break));
-        assert(check_types(errors, ctx.parse_stmt(`{continue;}`), Block, Continue));
-        assert(check_types(errors, ctx.parse_stmt(`{return;}`), Block, Return, None));
-        assert(check_types(errors, ctx.parse_stmt(`{return 'a';}`), Block, Return, Char));
+        assert(check_types(errors, parser.stmt(`{break;}`), Block, Break));
+        assert(check_types(errors, parser.stmt(`{continue;}`), Block, Continue));
+        assert(check_types(errors, parser.stmt(`{return;}`), Block, Return, None));
+        assert(check_types(errors, parser.stmt(`{return 'a';}`), Block, Return, Char));
 
-        assert(check_types(errors, ctx.parse_stmt(`loop {break;}`), Loop, Break));
-        assert(check_types(errors, ctx.parse_stmt(`loop {continue;}`), Loop, Continue));
-        assert(check_types(errors, ctx.parse_stmt(`loop {return;}`), Loop, Return, None));
-        assert(check_types(errors, ctx.parse_stmt(`loop {return 'a';}`), Loop, Return, Char));
+        assert(check_types(errors, parser.stmt(`loop {break;}`), Loop, Break));
+        assert(check_types(errors, parser.stmt(`loop {continue;}`), Loop, Continue));
+        assert(check_types(errors, parser.stmt(`loop {return;}`), Loop, Return, None));
+        assert(check_types(errors, parser.stmt(`loop {return 'a';}`), Loop, Return, Char));
 
-        assert(check_types(errors, ctx.parse_stmt(`a;`), SymbolRef));
-        assert(check_types(errors, ctx.parse_stmt(`1 + 1;`), Add, Integer, Integer));
+        assert(check_types(errors, parser.stmt(`a;`), SymbolRef));
+        assert(check_types(errors, parser.stmt(`1 + 1;`), Add, Integer, Integer));
     }
 }
 
-alias parse_stmt = parse!"stmt";
-alias parse_expr = parse!"expr";
+alias stmt = parse!"stmt";
+alias expr = parse!"expr";
 
-SyntaxTree parse(string op)(ref ParseContext ctx, string text) {
+SyntaxTree parse(string op)(Parser parser, string text) {
     import arc.source : Source;
 
     // IMPORTANT!!! WE DELIBERATELY ESCAPE THIS POINTER.
     // DO NOT USE SyntaxTree.source !!!!!
     auto source = Source("", text, 0);
 
-    ctx.reporter.clear();
-    mixin("return arc.analysis.parser.parse_" ~ op ~ "(&ctx, &source);");
+    mixin("return parser.parse_" ~ op ~ "(&source);");
 }
 
 bool check_types(ref Reporter reporter, SyntaxTree result, AstNode.Kind[] expected...) {
@@ -380,6 +379,8 @@ bool check_types(ref Reporter reporter, SyntaxTree result, AstNode.Kind[] expect
 }
 
 bool check_error(ref Reporter reporter, SyntaxTree result, ArcError.Code error) {
+    scope (exit) reporter.clear();
+
     if (!type_equivalent(result, AstNode.Kind.Invalid))
         return false;
 

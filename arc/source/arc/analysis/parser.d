@@ -3,18 +3,103 @@ module arc.analysis.parser;
 import arc.analysis.lexer;
 import arc.data.ast;
 import arc.data.scopes;
+import arc.data.stringtable : StringTable;
 import arc.data.symbol;
 import arc.reporter : ArcError, Reporter, tprint;
 import arc.source : Source;
 
-alias TT = Token.Type;
+interface IParser {
+    // I seem to rewrite the parser every few months. To make my life a little
+    // easier, the interface and implementation are split, so that I don't have
+    // to make changes to anything that touches this ever single time.
 
-struct ParseContext {
-    import arc.data.stringtable : StringTable;
+    /**
+        Parses a source text to produce an abstract syntax tree. Any identifiers
+     that are encountered will be inserted into the string table, and any
+     declarations inserted into the symbol table. As blocks and lists are
+     encountered, a scope tree will be constructed in parallel to the syntax
+     tree which will be accessible by every `AstNode`'s `outer_scope_id` member.
+
+
+        If parse errors are encountered, the parser will attempt to partially
+     recover and continue parsing in order to identify further parse errors up
+     to an implementation-defined limit. However, the entire file will be marked
+     invalid, and a single `Invalid` node will be returned. Any parse errors
+     will be passed on to a `reporter` passed to the parser before the `parse()`
+     function was called. It is an error for no `reporter` to be present.
+
+
+        The memory managers `AstAllocator`, `ScopeAllocator`, and
+     `GlobalSymbolTable` may assume that a parse action was successful and that
+     any allocation will not be freed except when all of the manager's objects
+     are no longer needed and the allocator itself is discarded.
+     */
+    SyntaxTree parse(Source* source);
+
+    debug {
+        /**
+            A debug parse function that parses a single statement and then
+         stops. All other considerations are identical to `parse()`.
+         */
+        SyntaxTree parse_stmt(Source* source);
+
+        /**
+            A debug parse function that parses a single expression and then
+         stops. All other considerations are identical to `parse()`.
+         */
+        SyntaxTree parse_expr(Source* source);
+    }
+}
+
+final class Parser : IParser {
 
     enum default_max_parse_errors = 5;
 
 public:
+    this(Reporter* reporter,
+            Token[] token_buffer,
+            StringTable* string_table,
+            AstAllocator nodes,
+            ScopeAllocator* scopes,
+            GlobalSymbolTable* symbols) {
+        this.reporter = reporter;
+        this.token_buffer = token_buffer;
+        this.string_table = string_table;
+        this.nodes = nodes;
+        this.scopes = scopes;
+        this.symbols = symbols;
+    }
+
+    override SyntaxTree parse(Source* source) {
+        auto parser = ParserImpl(this, source.text);
+
+        AstNodeId[] statements;
+
+        size_t encountered_errors;
+        while (encountered_errors < max_parse_errors && !parser.is_done) {
+            auto stmt = parser.stmt();
+            statements ~= stmt;
+
+            if (!nodes.ast_of(stmt).is_valid)
+                encountered_errors++;
+        }
+
+        return SyntaxTree(nodes, source, statements);
+    }
+
+    debug {
+        override SyntaxTree parse_stmt(Source* source) {
+           auto parser = ParserImpl(this, source.text);
+           return SyntaxTree(nodes, source, [parser.stmt()]);
+        }
+
+        override SyntaxTree parse_expr(Source* source) {
+           auto parser = ParserImpl(this, source.text);
+           return SyntaxTree(nodes, source, [parser.expr()]);
+        }
+    }
+
+private:
     Reporter* reporter;
     Token[] token_buffer;
     StringTable* string_table;
@@ -24,45 +109,24 @@ public:
     uint max_parse_errors = default_max_parse_errors;
 }
 
-SyntaxTree parse(ParseContext* ctx, Source* source) {
-    auto parser = Parser(ctx, source.text);
-    AstNodeId[] statements;
-
-    size_t encountered_errors;
-    while (encountered_errors < ctx.max_parse_errors && !parser.is_done) {
-        auto stmt = parser.stmt();
-        statements ~= stmt;
-
-        if (!ctx.nodes.ast_of(stmt).is_valid)
-            encountered_errors++;
-    }
-
-    return SyntaxTree(ctx.nodes, source, statements);
-}
-
-debug {
-    SyntaxTree parse_stmt(ParseContext* ctx, Source* source) {
-        auto parser = Parser(ctx, source.text);
-        return SyntaxTree(ctx.nodes, source, [parser.stmt()]);
-    }
-
-    SyntaxTree parse_expr(ParseContext* ctx, Source* source) {
-        auto parser = Parser(ctx, source.text);
-        return SyntaxTree(ctx.nodes, source, [parser.expr()]);
-    }
-}
-
 private:
 
-struct Parser {
+alias TT = Token.Type;
+
+/**
+ The ParserImpl contains per-parse state as well as the actual parser
+ implementation. This was done so that module state and per-action state can
+ remain separate, making things a little cleaner.
+ */
+struct ParserImpl {
     import arc.data.hash : Hash;
     import arc.data.span : Span;
 
 public:
-    this(ParseContext* context, const(char)[] source) {
-        _context = context;
-        _tokens = TokenBuffer(source, context.token_buffer, context.string_table);
-        _scope_id = _context.scopes.make_scope(_context.scopes.null_scope_id);
+    this(Parser parser, const(char)[] source) {
+        _parser = parser;
+        _tokens = TokenBuffer(source, parser.token_buffer, parser.string_table);
+        _scope_id = _parser.scopes.make_scope(_parser.scopes.null_scope_id);
     }
 
     bool is_done() {
@@ -88,17 +152,17 @@ public:
                 return decl!Definition(take().span, Symbol.Kind.Constant, take(required(TT.TokName)));
             default:
                 if (token.type == TokName && next.type == Colon)
-                        return decl!Variable(token.span, Symbol.Kind.Variable, take());
+                    return decl!Variable(token.span, Symbol.Kind.Variable, take());
 
                 auto lhs = expr();
                 if (skip(token.type == Equals)) {
-                    return alloc(_context.nodes.span_of(lhs), BinOp(AstNode.Kind.Assign, _scope_id, lhs, expr()));
+                    return alloc(_parser.nodes.span_of(lhs), BinOp(AstNode.Kind.Assign, _scope_id, lhs, expr()));
                 }
                 return lhs;
             }
         }();
 
-        switch (_context.nodes.ast_of(stmt).kind) with (AstNode.Kind) {
+        switch (_parser.nodes.ast_of(stmt).kind) with (AstNode.Kind) {
         case Block:
         case If:
         case Loop:
@@ -107,11 +171,11 @@ public:
         default:
             const end = token;
             if (take(required(TT.Semicolon))) {
-                _context.nodes.span_of(stmt) += end.span;
+                _parser.nodes.span_of(stmt) += end.span;
                 return stmt;
             }
 
-            return alloc(_context.nodes.span_of(stmt), arc.data.ast.Invalid(_scope_id));
+            return alloc(_parser.nodes.span_of(stmt), arc.data.ast.Invalid(_scope_id));
         }
     }
 
@@ -121,7 +185,7 @@ public:
 
 private:
     // dfmt off
-    AstNodeId none() { return _context.nodes.none; }
+    AstNodeId none() { return _parser.nodes.none; }
     // dfmt on
 
     alias block = seq!(Block, stmt, TT.Lbrace, TT.Rbrace);
@@ -134,8 +198,8 @@ private:
 
         skip(required(TT.Colon));
 
-        auto symbol = _context.symbols.make_symbol(kind, name.key);
-        _context.scopes.scope_of(_scope_id).add(symbol);
+        auto symbol = _parser.symbols.make_symbol(kind, name.key);
+        _parser.scopes.scope_of(_scope_id).add(symbol);
 
         return alloc!Node(prefix, Node(
                 _scope_id,
@@ -153,7 +217,7 @@ private:
         auto span = take().span;
         auto e = expr(Precedence.Call);
 
-        if (_context.nodes.ast_of(e).is_valid)
+        if (_parser.nodes.ast_of(e).is_valid)
             return alloc(span, UnOp(kind, _scope_id, e));
 
         return alloc(span, Invalid(_scope_id));
@@ -185,10 +249,10 @@ private:
     }
 
     AstNodeId infix(alias fn, Infix[] ops)(Precedence p, AstNodeId lhs) {
-        for (Infix op = ops[token.type]; _context.nodes.ast_of(lhs).is_valid && p <= op.prec; op = ops[token.type]) {
+        for (Infix op = ops[token.type]; _parser.nodes.ast_of(lhs).is_valid && p <= op.prec; op = ops[token.type]) {
             skip(op.skip_token);
             auto rhs = fn(cast(Precedence)(op.prec + op.is_left_associative));
-            auto span = _context.nodes.span_of(lhs) + _context.nodes.span_of(rhs);
+            auto span = _parser.nodes.span_of(lhs) + _parser.nodes.span_of(rhs);
             lhs = alloc(span, BinOp(op.kind, _scope_id, lhs, rhs));
         }
         return lhs;
@@ -200,7 +264,7 @@ private:
         auto start = take(required(lhs)).span;
 
         auto outer_scope = _scope_id;
-        _scope_id = _context.scopes.make_scope(_scope_id);
+        _scope_id = _parser.scopes.make_scope(_scope_id);
         scope (exit)
             _scope_id = outer_scope;
 
@@ -209,7 +273,7 @@ private:
             auto node = member();
 
             const is_bad = delim && !(is_done || token.type == rhs || skip(required(delim)));
-            if (!_context.nodes.ast_of(node).is_valid || is_bad) {
+            if (!_parser.nodes.ast_of(node).is_valid || is_bad) {
                 destroy(array);
                 return alloc(start, Invalid(outer_scope));
             }
@@ -229,8 +293,8 @@ private:
 
     AstNodeId list_member() {
         AstNodeId lm(Span span, AstNodeId type, AstNodeId expr) {
-            if (_context.nodes.ast_of(type).is_valid && _context.nodes.ast_of(expr).is_valid)
-                return alloc(span, ListMember(_scope_id, _context.symbols.none, type, expr));
+            if (_parser.nodes.ast_of(type).is_valid && _parser.nodes.ast_of(expr).is_valid)
+                return alloc(span, ListMember(_scope_id, _parser.symbols.none, type, expr));
             return alloc(span, Invalid(_scope_id));
         }
 
@@ -240,9 +304,9 @@ private:
 
         // (a)
         auto e = expr();
-        if (_context.nodes.ast_of(e).is_valid)
-            return alloc(_context.nodes.span_of(e), ListMember(_scope_id, _context.symbols.none, inferred_type(), e));
-        return alloc(_context.nodes.span_of(e), Invalid(_scope_id));
+        if (_parser.nodes.ast_of(e).is_valid)
+            return alloc(_parser.nodes.span_of(e), ListMember(_scope_id, _parser.symbols.none, inferred_type(), e));
+        return alloc(_parser.nodes.span_of(e), Invalid(_scope_id));
     }
 
     AstNodeId list(TT open, TT close)() {
@@ -271,16 +335,16 @@ private:
 
         // a => t {}
         if (token.type == TT.Lbrace)
-            return alloc(_context.nodes.span_of(params), Function(_scope_id, params, perhaps_body, block()));
+            return alloc(_parser.nodes.span_of(params), Function(_scope_id, params, perhaps_body, block()));
 
         // a => b
-        return alloc(_context.nodes.span_of(params), Function(_scope_id, params, inferred_type(), perhaps_body));
+        return alloc(_parser.nodes.span_of(params), Function(_scope_id, params, inferred_type(), perhaps_body));
     }
 
     // () -> RetType
     AstNodeId function_type(AstNodeId params) {
         skip(required(TT.RArrow));
-        return alloc(_context.nodes.span_of(params), FunctionSignature(_scope_id, params, expr()));
+        return alloc(_parser.nodes.span_of(params), FunctionSignature(_scope_id, params, expr()));
     }
 
     alias _tokens this;
@@ -305,22 +369,22 @@ private:
             return true;
 
         report_expect_mismatch(
-            token,
-            "An unexpected token was encountered. Expected a %s, but got a %s instead",
-            type, token.type);
+                token,
+                "An unexpected token was encountered. Expected a %s, but got a %s instead",
+                type, token.type);
 
         return false;
     }
 
     AstNodeId alloc(T)(Span location, T node) {
         if (node.is_valid)
-            return _context.nodes.save_node(location, node);
+            return _parser.nodes.save_node(location, node);
         else
-            return _context.nodes.save_node(location, Invalid(node.outer_scope_id));
+            return _parser.nodes.save_node(location, Invalid(node.outer_scope_id));
     }
 
     AstNodeId alloc(T : Invalid)(Span location, T node) {
-        return _context.nodes.save_node!T(location, node);
+        return _parser.nodes.save_node!T(location, node);
     }
 
     AstNodeId inferred_type() {
@@ -329,12 +393,12 @@ private:
 
     void report_expect_mismatch(Args...)(Token got, string message, Args args) {
         if (got.type == TT.Done)
-            _context.reporter.error(ArcError.UnexpectedEOF, got.span, "Unexpected end of file");
+            _parser.reporter.error(ArcError.UnexpectedEOF, got.span, "Unexpected end of file");
         else
-            _context.reporter.error(ArcError.TokenExpectMismatch, got.span, message, args);
+            _parser.reporter.error(ArcError.TokenExpectMismatch, got.span, message, args);
     }
 
-    ParseContext* _context;
+    Parser _parser;
     ScopeId _scope_id;
     TokenBuffer _tokens;
 }

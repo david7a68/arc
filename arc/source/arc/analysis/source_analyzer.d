@@ -1,7 +1,7 @@
 module arc.analysis.source_analyzer;
 
 import arc.analysis.lexer;
-import arc.analysis.parser;
+import arc.analysis.parser : IParser, Parser;
 import arc.data.ast;
 import arc.data.hash;
 import arc.data.scopes;
@@ -26,7 +26,7 @@ public:
         _ast_allocator = new AstAllocator();
         _scope_allocator = ScopeAllocator(&_symbol_table);
 
-        _parse_context = ParseContext(
+        _parser = new Parser(
             _reporter,
             _token_buffer,
             &_string_table,
@@ -43,7 +43,7 @@ public:
     }
 
     SyntaxTree ast_of(Source* source) {
-        return _syntax_source_map.require(source, parse(&_parse_context, source));
+        return _syntax_source_map.require(source, _parser.parse(source));
     }
 
     AstNode* ast_of(AstNodeId id) {
@@ -102,7 +102,7 @@ private:
     ScopeAllocator _scope_allocator;
 
     Token[4096] _token_buffer;
-    ParseContext _parse_context;
+    IParser _parser;
 
     /// Uses GC because I'm lazy right now.
     SyntaxTree[Source*] _syntax_source_map;
