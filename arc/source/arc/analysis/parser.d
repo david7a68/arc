@@ -54,16 +54,16 @@ interface IParser {
 final class Parser : IParser {
 
     enum default_max_parse_errors = 5;
+    enum token_buffer_size = 4096;
 
 public:
     this(Reporter* reporter,
-            Token[] token_buffer,
             StringTable* string_table,
             AstAllocator nodes,
             ScopeAllocator* scopes,
             GlobalSymbolTable* symbols) {
         this.reporter = reporter;
-        this.token_buffer = token_buffer;
+        this.token_buffer = new Token[](token_buffer_size);
         this.string_table = string_table;
         this.nodes = nodes;
         this.scopes = scopes;

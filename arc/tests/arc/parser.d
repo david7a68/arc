@@ -15,7 +15,6 @@ import std.stdio : writefln;
     auto strings = StringTable();
     auto parser = new Parser(
         &errors,
-        new Token[](64),
         &strings,
         new AstAllocator(),
         new ScopeAllocator(symbols),

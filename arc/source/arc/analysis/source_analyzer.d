@@ -28,7 +28,6 @@ public:
 
         _parser = new Parser(
             _reporter,
-            _token_buffer,
             &_string_table,
             _ast_allocator,
             &_scope_allocator,
@@ -101,7 +100,6 @@ private:
     AstAllocator _ast_allocator;
     ScopeAllocator _scope_allocator;
 
-    Token[4096] _token_buffer;
     IParser _parser;
 
     /// Uses GC because I'm lazy right now.
