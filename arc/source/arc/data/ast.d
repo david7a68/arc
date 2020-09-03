@@ -44,8 +44,6 @@ struct AstNodeId {
 struct AstNode {
     import std.bitmanip : bitfields;
 
-    static assert(typeof(this).sizeof == 8);
-
     enum Kind : ubyte {
         None,
         Invalid,
@@ -109,10 +107,12 @@ public:
     Kind kind;
     TypeId type_id;
     ScopeId outer_scope_id;
+    Span location;
 
-    this(Kind kind, ScopeId scope_id) {
+    this(Kind kind, ScopeId scope_id, Span location) {
         this.kind = kind;
         this.outer_scope_id = scope_id;
+        this.location = location;
     }
 
     /// Checks if the node is of `AstNode.Kind.Invalid` kind. No further
@@ -131,64 +131,50 @@ alias String = Value!(AstNode.Kind.String, Hash);
 alias Char = Value!(AstNode.Kind.Char, Hash);
 
 struct Value(AstNode.Kind node_kind, T) {
-    static assert(typeof(this).sizeof <= 16);
-
     mixin ast_header;
     T value;
 
-    this(ScopeId outer_scope_id, T value) {
-        header = AstNode(node_kind, outer_scope_id);
+    this(ScopeId outer_scope_id, Span location, T value) {
+        header = AstNode(node_kind, outer_scope_id, location);
         this.value = value;
     }
 }
 
 struct SymbolRef {
-    static assert(typeof(this).sizeof == 20);
-
     mixin ast_header;
     SymbolId declaration;
     Hash name_hash;
 
-    this(ScopeId outer_scope_id, Hash name_hash) {
-        header = AstNode(AstNode.Kind.SymbolRef, outer_scope_id);
+    this(ScopeId outer_scope_id, Span location, Hash name_hash) {
+        header = AstNode(AstNode.Kind.SymbolRef, outer_scope_id, location);
         this.name_hash = name_hash;
     }
 }
 
 struct Import {
-    static assert(typeof(this).sizeof == 16);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.Import, "call_path");
     ScopeId imported_file;
 }
 
 struct UnOp {
-    static assert(typeof(this).sizeof == 16);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.InferredType, "operand");
     SymbolId op_symbol_id;
 }
 
 struct BinOp {
-    static assert(typeof(this).sizeof == 20);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.InferredType, "lhs", "rhs");
     SymbolId op_symbol_id;
 }
 
 struct Function {
-    static assert(typeof(this).sizeof == 20);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.Function, "parameters", "result", "body");
 }
 
 struct FunctionSignature {
-    static assert(typeof(this).sizeof == 16);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.FunctionSignature, "parameters", "result");
 }
@@ -198,14 +184,12 @@ alias Block = Sequence!(AstNode.Kind.Block);
 alias Loop = Sequence!(AstNode.Kind.Loop);
 
 struct Sequence(AstNode.Kind node_kind) {
-    static assert(typeof(this).sizeof == 32);
-
     mixin ast_header;
     ScopeId seq_scope_id;
     AstNodeId[] members;
 
-    this(ScopeId outer_scope_id, ScopeId new_scope_id, AstNodeId[] members) {
-        header = AstNode(node_kind, outer_scope_id);
+    this(ScopeId outer_scope_id, Span location, ScopeId new_scope_id, AstNodeId[] members) {
+        header = AstNode(node_kind, outer_scope_id, location);
         seq_scope_id = new_scope_id;
         this.members = members;
     }
@@ -216,14 +200,12 @@ alias Definition = Declaration!(AstNode.Kind.Definition);
 alias Variable = Declaration!(AstNode.Kind.Variable);
 
 struct Declaration(AstNode.Kind node_kind) {
-    static assert(typeof(this).sizeof == 20);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.None, "type_expr", "init_expr");
     SymbolId symbol;
 
-    this(ScopeId outer_scope_id, SymbolId symbol, AstNodeId type_expr_id, AstNodeId init_expr_id) {
-        header = AstNode(node_kind, outer_scope_id);
+    this(ScopeId outer_scope_id, Span location, SymbolId symbol, AstNodeId type_expr_id, AstNodeId init_expr_id) {
+        header = AstNode(node_kind, outer_scope_id, location);
         parts = [type_expr_id, init_expr_id];
         this.symbol = symbol;
     }
@@ -233,25 +215,19 @@ alias Break = HeaderOnly!(AstNode.Kind.Break);
 alias Continue = HeaderOnly!(AstNode.Kind.Continue);
 
 struct HeaderOnly(AstNode.Kind node_kind) {
-    static assert(typeof(this).sizeof == 8);
-
     mixin ast_header;
 
-    this(ScopeId outer_scope_id) {
-        header = AstNode(node_kind, outer_scope_id);
+    this(ScopeId outer_scope_id, Span location) {
+        header = AstNode(node_kind, outer_scope_id, location);
     }
 }
 
 struct Return {
-    static assert(typeof(this).sizeof == 12);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.Return, "value");
 }
 
 struct If {
-    static assert(typeof(this).sizeof == 20);
-
     mixin ast_header;
     mixin arity!(AstNode.Kind.If, "condition", "pass_branch", "fail_branch");
 }
@@ -318,14 +294,12 @@ final class AstAllocator {
 public:
     this() {
         _id_node_map = VirtualArray!(AstNode*)(max_nodes);
-        _id_span_map = VirtualArray!Span(max_nodes);
 
-        _marker_none_id = save_node(Span(), None(ScopeId()));
+        _marker_none_id = save_node(None(ScopeId(), Span()));
     }
 
     ~this() {
         destroy(_id_node_map);
-        destroy(_id_span_map);
     }
 
     // dfmt off
@@ -336,11 +310,6 @@ public:
     /// Accesses the `AstNode` identified by an `AstNodeId`.
     AstNode* ast_of(AstNodeId id) {
         return _id_node_map[id.value];
-    }
-
-    /// Accesses the `Span` of a node identified by an `AstNodeId`.
-    ref Span span_of(AstNodeId id) {
-        return _id_span_map[id.value];
     }
 
     /// Convenience function to retrieve any children that a node may have as an
@@ -424,14 +393,13 @@ public:
 
     /// Saves a node and its span, returning the `AstNodeId` by which they may
     /// be retrieved.
-    AstNodeId save_node(Node)(Span location, Node node) {
+    AstNodeId save_node(Node)(Node node) {
         const id = AstNodeId(cast(uint) _id_node_map.length);
 
         // If we wanted, we could put all of these into a single VM object.
         auto n = new Node();
         *n = node;
         _id_node_map ~= &n.header;
-        _id_span_map ~= location;
 
         return id;
     }
@@ -441,8 +409,6 @@ private:
 
     /// (AstNodeId) -> AstNode*
     VirtualArray!(AstNode*) _id_node_map;
-    /// (AstNodeId) -> Span
-    VirtualArray!Span _id_span_map;
 }
 
 private:
@@ -488,13 +454,13 @@ mixin template arity(AstNode.Kind node_kind, Names...) {
             auto array_parts = names.map!(s => s ~ ", ");
 
             if (node_kind == AstNode.Kind.InferredType)
-                return "this(AstNode.Kind kind, ScopeId outer_scope_id, %-(%s%)) {
-                    header = AstNode(kind, outer_scope_id);
+                return "this(AstNode.Kind kind, ScopeId outer_scope_id, Span location, %-(%s%)) {
+                    header = AstNode(kind, outer_scope_id, location);
                     parts = [%-(%s%)];
                 }".format(params, array_parts);
             else
-                return "this(ScopeId outer_scope_id, %-(%s%)) {
-                    header = AstNode(AstNode.Kind.%s, outer_scope_id);
+                return "this(ScopeId outer_scope_id, Span location, %-(%s%)) {
+                    header = AstNode(AstNode.Kind.%s, outer_scope_id, location);
                     parts = [%-(%s%)];
                 }".format(params, node_kind, array_parts);
         }(Names));

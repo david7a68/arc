@@ -49,10 +49,6 @@ public:
         return _ast_allocator.ast_of(id);
     }
 
-    Span span_of(AstNodeId id) {
-        return _ast_allocator.span_of(id);
-    }
-
     ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
         return _ast_allocator.match!ReturnType(id, ops);
     }

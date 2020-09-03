@@ -141,13 +141,13 @@ public:
             case TokLoop:
                 return seq!(Loop, stmt, Lbrace, Rbrace)(take(required(TokLoop)).span);
             case TokBreak:
-                return alloc(take.span, Break(_scope_id));
+                return alloc(Break(_scope_id, take().span));
             case TokContinue:
-                return alloc(take.span, Continue(_scope_id));
+                return alloc(Continue(_scope_id, take().span));
             case TokReturn:
-                return alloc(take().span, Return(_scope_id, is_at_end_of_expr ? none : expr()));
+                return alloc(Return(_scope_id, take().span, is_at_end_of_expr ? none : expr()));
             case TokIf:
-                return alloc(take().span, If(_scope_id, expr(), block(), skip(token.type == TokElse) ? stmt() : none));
+                return alloc(If(_scope_id, take().span, expr(), block(), skip(token.type == TokElse) ? stmt() : none));
             case TokDef:
                 return decl!Definition(take().span, Symbol.Kind.Constant, take(required(TT.TokName)));
             default:
@@ -156,7 +156,7 @@ public:
 
                 auto lhs = expr();
                 if (skip(token.type == Equals)) {
-                    return alloc(_parser.nodes.span_of(lhs), BinOp(AstNode.Kind.Assign, _scope_id, lhs, expr()));
+                    return alloc(BinOp(AstNode.Kind.Assign, _scope_id, _parser.nodes.ast_of(lhs).location, lhs, expr()));
                 }
                 return lhs;
             }
@@ -171,11 +171,11 @@ public:
         default:
             const end = token;
             if (take(required(TT.Semicolon))) {
-                _parser.nodes.span_of(stmt) += end.span;
+                _parser.nodes.ast_of(stmt).location += end.span;
                 return stmt;
             }
 
-            return alloc(_parser.nodes.span_of(stmt), arc.data.ast.Invalid(_scope_id));
+            return alloc(arc.data.ast.Invalid(_scope_id, _parser.nodes.ast_of(stmt).location));
         }
     }
 
@@ -201,8 +201,9 @@ private:
         auto symbol = _parser.symbols.make_symbol(kind, name.key);
         _parser.scopes.scope_of(_scope_id).add(symbol);
 
-        return alloc!Node(prefix, Node(
+        return alloc!Node(Node(
                 _scope_id,
+                prefix,
                 symbol,
                 token.type != TT.Equals ? expr() : inferred_type(),
                 skip(token.type == TT.Equals) ? expr(Precedence.Logic) : none));
@@ -218,9 +219,9 @@ private:
         auto e = expr(Precedence.Call);
 
         if (_parser.nodes.ast_of(e).is_valid)
-            return alloc(span, UnOp(kind, _scope_id, e));
+            return alloc(UnOp(kind, _scope_id, span, e));
 
-        return alloc(span, Invalid(_scope_id));
+        return alloc(Invalid(_scope_id, span));
     }
 
     AstNodeId prefix() {
@@ -231,10 +232,10 @@ private:
         case Minus:         return unary(AstNode.Kind.Negate);
         case Star:          return unary(AstNode.Kind.Dereference);
         case TokImport:     return unary(AstNode.Kind.Import);
-        case TokName:       return alloc(token.span, SymbolRef(_scope_id, take().key));
-        case TokInteger:    return alloc(token.span, Integer(_scope_id, take().value));
-        case TokString:     return alloc(token.span, String(_scope_id, take().key));
-        case TokChar:       return alloc(token.span, Char(_scope_id, take().key));
+        case TokName:       return alloc(SymbolRef(_scope_id, token.span, take().key));
+        case TokInteger:    return alloc(Integer(_scope_id, token.span, take().value));
+        case TokString:     return alloc(String(_scope_id, token.span, take().key));
+        case TokChar:       return alloc(Char(_scope_id, token.span, take().key));
         case Lparen:        return list!(Lparen, Rparen)();
         case Lbracket:      return list!(Lbracket, Rbracket)();
         default:
@@ -243,7 +244,7 @@ private:
                 ? "The expression ended unexpectedly with %s."
                 : "The token \"%s\" cannot start a prefix expression",
                 token.type);
-            return alloc(token.span, arc.data.ast.Invalid(_scope_id));
+            return alloc(arc.data.ast.Invalid(_scope_id, token.span));
         }
         // dfmt on
     }
@@ -252,8 +253,8 @@ private:
         for (Infix op = ops[token.type]; _parser.nodes.ast_of(lhs).is_valid && p <= op.prec; op = ops[token.type]) {
             skip(op.skip_token);
             auto rhs = fn(cast(Precedence)(op.prec + op.is_left_associative));
-            auto span = _parser.nodes.span_of(lhs) + _parser.nodes.span_of(rhs);
-            lhs = alloc(span, BinOp(op.kind, _scope_id, lhs, rhs));
+            auto span = _parser.nodes.ast_of(lhs).location + _parser.nodes.ast_of(rhs).location;
+            lhs = alloc(BinOp(op.kind, _scope_id, span, lhs, rhs));
         }
         return lhs;
     }
@@ -275,7 +276,7 @@ private:
             const is_bad = delim && !(is_done || token.type == rhs || skip(required(delim)));
             if (!_parser.nodes.ast_of(node).is_valid || is_bad) {
                 destroy(array);
-                return alloc(start, Invalid(outer_scope));
+                return alloc(Invalid(outer_scope, start));
             }
 
             while (token.type == delim)
@@ -285,17 +286,17 @@ private:
 
         const span = prefix + token.span + start;
         if (skip(required(rhs)))
-            return alloc(span, Node(outer_scope, _scope_id, array));
+            return alloc(Node(outer_scope, span, _scope_id, array));
 
         destroy(array);
-        return alloc(span, Invalid(outer_scope));
+        return alloc(Invalid(outer_scope, span));
     }
 
     AstNodeId list_member() {
         AstNodeId lm(Span span, AstNodeId type, AstNodeId expr) {
             if (_parser.nodes.ast_of(type).is_valid && _parser.nodes.ast_of(expr).is_valid)
-                return alloc(span, ListMember(_scope_id, _parser.symbols.none, type, expr));
-            return alloc(span, Invalid(_scope_id));
+                return alloc(ListMember(_scope_id, span, _parser.symbols.none, type, expr));
+            return alloc(Invalid(_scope_id, span));
         }
 
         // (a : T = 1)
@@ -305,8 +306,8 @@ private:
         // (a)
         auto e = expr();
         if (_parser.nodes.ast_of(e).is_valid)
-            return alloc(_parser.nodes.span_of(e), ListMember(_scope_id, _parser.symbols.none, inferred_type(), e));
-        return alloc(_parser.nodes.span_of(e), Invalid(_scope_id));
+            return alloc(ListMember(_scope_id, _parser.nodes.ast_of(e).location, _parser.symbols.none, inferred_type(), e));
+        return alloc(Invalid(_scope_id, _parser.nodes.ast_of(e).location));
     }
 
     AstNodeId list(TT open, TT close)() {
@@ -329,22 +330,22 @@ private:
 
         // a => {}
         if (token.type == TT.Lbrace)
-            return alloc(token.span, Function(_scope_id, params, inferred_type(), block()));
+            return alloc(Function(_scope_id, token.span, params, inferred_type(), block()));
 
         auto perhaps_body = expr();
 
         // a => t {}
         if (token.type == TT.Lbrace)
-            return alloc(_parser.nodes.span_of(params), Function(_scope_id, params, perhaps_body, block()));
+            return alloc(Function(_scope_id, _parser.nodes.ast_of(params).location, params, perhaps_body, block()));
 
         // a => b
-        return alloc(_parser.nodes.span_of(params), Function(_scope_id, params, inferred_type(), perhaps_body));
+        return alloc(Function(_scope_id, _parser.nodes.ast_of(params).location, params, inferred_type(), perhaps_body));
     }
 
     // () -> RetType
     AstNodeId function_type(AstNodeId params) {
         skip(required(TT.RArrow));
-        return alloc(_parser.nodes.span_of(params), FunctionSignature(_scope_id, params, expr()));
+        return alloc(FunctionSignature(_scope_id, _parser.nodes.ast_of(params).location, params, expr()));
     }
 
     alias _tokens this;
@@ -376,19 +377,19 @@ private:
         return false;
     }
 
-    AstNodeId alloc(T)(Span location, T node) {
+    AstNodeId alloc(T)(T node) {
         if (node.is_valid)
-            return _parser.nodes.save_node(location, node);
+            return _parser.nodes.save_node(node);
         else
-            return _parser.nodes.save_node(location, Invalid(node.outer_scope_id));
+            return _parser.nodes.save_node(Invalid(node.outer_scope_id, node.location));
     }
 
-    AstNodeId alloc(T : Invalid)(Span location, T node) {
-        return _parser.nodes.save_node!T(location, node);
+    AstNodeId alloc(T : Invalid)(T node) {
+        return _parser.nodes.save_node!T(node);
     }
 
     AstNodeId inferred_type() {
-        return alloc(Span(), InferredType(_scope_id));
+        return alloc(InferredType(_scope_id, Span()));
     }
 
     void report_expect_mismatch(Args...)(Token got, string message, Args args) {
