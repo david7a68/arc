@@ -60,8 +60,8 @@ public:
     this(Reporter* reporter,
             StringTable* string_table,
             AstAllocator nodes,
-            ScopeAllocator* scopes,
-            GlobalSymbolTable* symbols) {
+            ScopeAllocator scopes,
+            GlobalSymbolTable symbols) {
         this.reporter = reporter;
         this.token_buffer = new Token[](token_buffer_size);
         this.string_table = string_table;
@@ -104,8 +104,8 @@ private:
     Token[] token_buffer;
     StringTable* string_table;
     AstAllocator nodes;
-    ScopeAllocator* scopes;
-    GlobalSymbolTable* symbols;
+    ScopeAllocator scopes;
+    GlobalSymbolTable symbols;
     uint max_parse_errors = default_max_parse_errors;
 }
 
@@ -199,14 +199,18 @@ private:
         skip(required(TT.Colon));
 
         auto symbol = _parser.symbols.make_symbol(kind, name.key);
-        _parser.scopes.scope_of(_scope_id).add(symbol);
 
-        return alloc!Node(Node(
+        auto decl = alloc!Node(Node(
                 _scope_id,
                 prefix,
                 symbol,
                 token.type != TT.Equals ? expr() : inferred_type(),
                 skip(token.type == TT.Equals) ? expr(Precedence.Logic) : none));
+        
+        _parser.symbols[symbol].declaration_id = decl;
+        _parser.scopes.scope_of(_scope_id).add(symbol);
+
+        return decl;
     }
 
     bool is_at_end_of_expr() {

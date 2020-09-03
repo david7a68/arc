@@ -32,6 +32,7 @@ public:
         import std.file : readText;
 
         auto src = sources.put(options.first_file, readText(options.first_file));
+        source_analyzer.add_source(src);
         auto ast = source_analyzer.ast_of(src);
 
         print_ast(ast);

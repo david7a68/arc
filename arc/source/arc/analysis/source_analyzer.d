@@ -22,27 +22,38 @@ public:
         _reporter = reporter;
 
         // _string_table does not have a constructor
-        _symbol_table = GlobalSymbolTable(initial_symbol_table_size);
+        _symbol_table = new GlobalSymbolTable(initial_symbol_table_size);
+
         _ast_allocator = new AstAllocator();
-        _scope_allocator = ScopeAllocator(&_symbol_table);
+        _scope_allocator = new ScopeAllocator(_symbol_table);
 
         _parser = new Parser(
             _reporter,
             &_string_table,
             _ast_allocator,
-            &_scope_allocator,
-            &_symbol_table
+            _scope_allocator,
+            _symbol_table
         );
     }
 
-    StringTable* string_table() return { return &_string_table; }
+    /**
+     Initial entry point into syntax analysis.
 
-    const(char)[] string_of(Hash hash) {
-        return _string_table[hash];
+     Adding a source file will cause its syntax tree to be generated, and any
+     imported files to be added recursively.
+     */
+    void add_source(Source* source) {
+        _syntax_source_map.require(source, _parser.parse(source));
     }
 
+    /**
+     Retrieves the syntax tree of a file that has been previously processed.
+
+     It is an error to call this function with a source that has not been passed
+     to `add_source(Source*)`.
+     */
     SyntaxTree ast_of(Source* source) {
-        return _syntax_source_map.require(source, _parser.parse(source));
+        return _syntax_source_map[source];
     }
 
     AstNode* ast_of(AstNodeId id) {
@@ -57,34 +68,34 @@ public:
         return _ast_allocator.children_of(id);
     }
 
-    Symbol* symbol_of(AstNodeId id) {
-        // dfmt off
-        return _ast_allocator.match!(Symbol*)(id,
-            (ListMember* lm) => _symbol_table[lm.symbol],
-            (Definition* df) => _symbol_table[df.symbol],
-            (Variable* vr) => _symbol_table[vr.symbol],
+    const(char)[] name_of(SymbolId id) {
+        return _string_table[_symbol_table[id].name];
+    }
+
+    SymbolId symbol_id_of(AstNodeId id) {
+        return _ast_allocator.match!SymbolId(id,
+            (ListMember* lm) => lm.symbol,
+            (Definition* df) => df.symbol,
+            (Variable* vr) => vr.symbol,
             (SymbolRef* sr) {
-                // Implement symbol searching here. We depend on all source
-                // files being present by the time this is called. Otherwise
-                // there is no way to reliably resolve imported symbols.
-                return null;
+                if (sr.declaration != SymbolId())
+                    return sr.declaration;
+
+                auto scope_ = _scope_allocator.scope_of(sr.outer_scope_id);
+                
+                SymbolId symbol;
+                for (Scope* s = scope_; s && symbol == SymbolId(); s = s.parent)
+                    symbol = s.get_local_id(sr.name_hash);
+                
+                return symbol;
             },
-            (AstNodeId* n) => null);
-        // dfmt on
+            (AstNode* n) => SymbolId());
     }
 
-    const(char)[] name_of(AstNodeId id) {
-        auto symbol = symbol_of(id);
-        return symbol ? _string_table[symbol.name] : [];
-    }
+    StringTable* string_table() return { return &_string_table; }
 
-    /// Retrieves the declaration site of a `SymbolRef`.
-    AstNode* declaration_of(AstNodeId id) {
-        assert(false, "Not Implemented");
-    }
-
-    TypeId type_of(AstNodeId id) {
-        assert(false, "Not Implemented");
+    const(char)[] string_of(Hash hash) {
+        return _string_table[hash];
     }
 
 private:

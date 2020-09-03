@@ -2,6 +2,14 @@ module arc.data.hash;
 
 struct Hash {
     ubyte[8] value;
+
+    ulong toHash() const {
+        return *(cast(ulong*) &value[0]);
+    }
+
+    bool opEquals(Hash other) const {
+        return value == other.value;
+    }
 }
 
 /**

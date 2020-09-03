@@ -3,6 +3,7 @@ module arc.output.ast_printer;
 import arc.analysis.source_analyzer;
 import arc.data.ast;
 import arc.data.stringtable;
+import arc.data.symbol;
 import std.format : format;
 
 const(char[]) print_ast(SourceAnalyzer* analyzer, SyntaxTree ast) {
@@ -114,22 +115,20 @@ struct AstPrinter {
             (If* n) {
                 write_named_children(node, "Condition: ", "Body: ", "Else: ");
             },
-            (ListMember* n) {
-                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
-                write_named_children(node, "Type: ", "Expr: ");
+            (SymbolRef* n) {
+                str.put(format("[ref %s] \n", analyzer.symbol_id_of(node)));
             },
-            (Definition* n) {
-                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
-                write_named_children(node, "Type: ", "Expr: ");
-            },
-            (Variable* n) {
-                // str.put(format(" %s", n.symbol ? strings.string_of(n.symbol.name) : "Unnamed"));
-                write_named_children(node, "Type: ", "Expr: ");
-            },
-            (AstNode* n) {
-                write_children(node);
-            }
-        );
+            (ListMember* n) => write_symbol(node, "Type: ", "Expr: "),
+            (Definition* n) => write_symbol(node, "Type: ", "Expr: "),
+            (Variable* n) => write_symbol(node, "Type: ", "Expr: "),
+            (AstNode* n) => write_children(node));
+    }
+
+    void write_symbol(AstNodeId n, string[] parts...) {
+        auto symbol = analyzer.symbol_id_of(n);
+        str.put(format(`"%s" [decl %s]`, analyzer.name_of(symbol), symbol));
+
+        write_named_children(n, parts);
     }
 
     void write_children(AstNodeId n, bool numbered = false) {

@@ -1,5 +1,6 @@
 module arc.data.symbol;
 
+import arc.data.ast: AstNodeId;
 import arc.data.hash : Hash;
 import arc.data.type : TypeId;
 
@@ -21,10 +22,11 @@ struct Symbol {
 
     Kind kind;
     Hash name;
+    AstNodeId declaration_id;
     TypeId type_id;
 }
 
-struct GlobalSymbolTable {
+final class GlobalSymbolTable {
     import arc.memory : VirtualArray;
 
     enum max_symbols = SymbolId.value.max + 1;
