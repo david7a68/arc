@@ -12,7 +12,7 @@ statement = def ';'
 
     loop = 'loop' block ;
 
-    escape = 'break' | 'continue' | 'return' ;
+    escape = 'break' | 'continue' | ('return' expr?) ;
 
     expr = primary | prefix | binary;
 
@@ -34,7 +34,9 @@ statement = def ';'
                             | name ':' type '=' expr
                             ;
 
-            function = list '->' expr block? ;
+            function = list '=>' expr block? ;
+
+            function_type = list '->' expr ;
 
             path = name ('::' name)* ;
 
@@ -63,11 +65,3 @@ statement = def ';'
                | 'and'
                | 'or'
                ;
-
-type = access
-     | list
-     | function_type
-     | name
-     ;
-
-    function_type = type_list '->' type ;

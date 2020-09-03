@@ -2,8 +2,10 @@ module arc.analysis.source_analyzer;
 
 import arc.analysis.lexer;
 import arc.analysis.parser : IParser, Parser;
+import arc.analysis.typer;
 import arc.data.ast;
 import arc.data.hash;
+import arc.data.type;
 import arc.data.scopes;
 import arc.data.span;
 import arc.data.stringtable;
@@ -26,6 +28,7 @@ public:
 
         _ast_allocator = new AstAllocator();
         _scope_allocator = new ScopeAllocator(_symbol_table);
+        _type_allocator = new ArcTypeAllocator();
 
         _parser = new Parser(
             _reporter,
@@ -34,6 +37,8 @@ public:
             _scope_allocator,
             _symbol_table
         );
+
+        _typer = new Typer(_type_allocator, _ast_allocator, &_string_table, _symbol_table, _scope_allocator);
     }
 
     /**
@@ -43,7 +48,15 @@ public:
      imported files to be added recursively.
      */
     void add_source(Source* source) {
-        _syntax_source_map.require(source, _parser.parse(source));
+        auto ast = _syntax_source_map.require(source, _parser.parse(source));
+
+        // inject builtin symbols
+        if (ast.statements) {
+            auto top_scope = _scope_allocator.scope_of(ast_of(ast.statements[0]).outer_scope_id);
+
+            foreach (builtin_type; _typer.builtin_type_symbols)
+                top_scope.add(builtin_type);
+        }
     }
 
     /**
@@ -82,14 +95,22 @@ public:
                     return sr.declaration;
 
                 auto scope_ = _scope_allocator.scope_of(sr.outer_scope_id);
-                
+
                 SymbolId symbol;
                 for (Scope* s = scope_; s && symbol == SymbolId(); s = s.parent)
                     symbol = s.get_local_id(sr.name_hash);
-                
+
                 return symbol;
             },
             (AstNode* n) => SymbolId());
+    }
+
+    TypeId type_id_of(AstNodeId id) {
+        return _typer.type_id_of(id);
+    }
+
+    ArcType* type_of(AstNodeId id) {
+        return _type_allocator.type_of(type_id_of(id));
     }
 
     StringTable* string_table() return { return &_string_table; }
@@ -104,10 +125,12 @@ private:
     StringTable _string_table;
     GlobalSymbolTable _symbol_table;
 
+    IParser _parser;
     AstAllocator _ast_allocator;
     ScopeAllocator _scope_allocator;
 
-    IParser _parser;
+    Typer _typer;
+    ArcTypeAllocator _type_allocator;
 
     /// Uses GC because I'm lazy right now.
     SyntaxTree[Source*] _syntax_source_map;

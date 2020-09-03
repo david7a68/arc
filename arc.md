@@ -60,32 +60,7 @@ head : ListNode = ListNode(null);
 * Logic (and or == < > <= >= != is !is ^)
 * Constants
 
-### Ideas
+## Symbol Resolution Algorithm
 
-```arc
-if (a, b, ...) := list {
-    // list is at least two elements long, and we've taken the first two
-}
-```
-
-```arc
-// decompose the list returned by func into at least 4 parts
-(a, _, _, x, ...) := func();
-```
-
-```arc
-// decompose the list into three parts: first, middle, end;
-(a, b := ..., c) := func();
-```
-
-```arc
-// decompose the list into three parts, where the first part is of T type
-(a : T, ..., b) := func();
-```
-
-```arc
-fib := match v {
-    0 or 1 => 1,
-    n := _ => fib(n - 1) + fib(n - 2)
-};
-```
+* Lexical scopes
+* Top-level declarations must either have a type specifier, or have their types inferrable by their initialization expression

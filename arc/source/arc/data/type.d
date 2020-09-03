@@ -1,44 +1,53 @@
 module arc.data.type;
 
 import arc.data.hash : Hash;
-import arc.data.symbol : Symbol;
+import arc.data.symbol : SymbolId;
+
+struct TypeId {
+    ushort value;
+}
 
 struct ArcType {
     enum Kind {
-        None,
-        Inferred,
-        Void,
-        List,
-        Function,
+        Unknown,
+        TypeError,
+        Type,
         Integer,
-        Character,
-        String,
-        Pointer,
+        ConstInteger,
+        Char,
     }
 
 public:
     Kind kind;
 
-    size_t id;
+    SymbolId declaration;
+
+    size_t size;
     size_t alignment;
-    size_t num_bytes;
+}
 
-    void[] default_value;
+final class ArcTypeAllocator {
+    import arc.memory: VirtualArray;
 
-    union {
-        ArcType* base_type;
-        ListMemberType[] members;
-        FunctionType function_type;
+    enum max_types = (cast(size_t) TypeId.value.max) + 1;
+
+public:
+    this() {
+        _id_type_map = VirtualArray!ArcType(max_types);
     }
-}
 
-struct ListMemberType {
-    Hash name;
-    ArcType* type;
-    size_t position;
-}
+    ArcType* type_of(TypeId id) {
+        return &_id_type_map[id.value];
+    }
 
-struct FunctionType {
-    ListMemberType[] parameters;
-    ArcType* return_type;
+    TypeId save_type(ArcType type) {
+        const id = TypeId(cast(ushort) _id_type_map.length);
+
+        _id_type_map ~= type;
+
+        return id;
+    }
+
+private:
+    VirtualArray!ArcType _id_type_map;
 }

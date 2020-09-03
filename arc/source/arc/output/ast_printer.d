@@ -93,6 +93,8 @@ struct AstPrinter {
             (AstNode* n) => format("%s ", n.kind)
         ));
 
+        str.put(format(` <%s> `, analyzer.name_of(analyzer.type_of(node).declaration)));
+
         analyzer.match!void(
             node,
             (Function* n) {
