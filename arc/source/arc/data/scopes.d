@@ -13,32 +13,36 @@ struct Scope {
     }
 
     void add(SymbolId id) {
-        _symbols[id] = (*_all_symbols)[id];
+        _symbols[_all_symbols[id].name] = id;
     }
 
-    SymbolId lookup(Hash name) {
-        return SymbolId(0);
+    SymbolId get_local_id(Hash hash) {
+        return _symbols.get(hash, SymbolId());
+    }
+
+    Symbol* get_local(Hash hash) {
+        return _all_symbols[get_local_id(hash)];
     }
 
 private:
-    this(Scope* parent, GlobalSymbolTable* gst) {
+    this(Scope* parent, GlobalSymbolTable gst) {
         _parent = parent;
         _all_symbols = gst;
     }
 
     Scope* _parent;
-    GlobalSymbolTable* _all_symbols;
-    Symbol*[SymbolId] _symbols;
+    GlobalSymbolTable _all_symbols;
+    SymbolId[Hash] _symbols;
 }
 
-struct ScopeAllocator {
+final class ScopeAllocator {
     import arc.memory : VirtualArray;
 
     // 96 gib
     enum max_scopes = (cast(size_t) ScopeId.value.max) + 1;
 
 public:
-    this(GlobalSymbolTable* gst) {
+    this(GlobalSymbolTable gst) {
         _symbols = gst;
         
         _scopes = VirtualArray!Scope(max_scopes);
@@ -68,7 +72,7 @@ public:
     }
 
 private:
-    GlobalSymbolTable* _symbols;
+    GlobalSymbolTable _symbols;
 
     VirtualArray!Scope _scopes;
 
