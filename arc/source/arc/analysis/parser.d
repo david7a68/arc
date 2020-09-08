@@ -80,7 +80,7 @@ public:
             auto stmt = parser.stmt();
             statements ~= stmt;
 
-            if (!nodes.ast_of(stmt).is_valid)
+            if (!nodes[stmt].is_valid)
                 encountered_errors++;
         }
 
@@ -156,13 +156,13 @@ public:
 
                 auto lhs = expr();
                 if (skip(token.type == Equals)) {
-                    return alloc(BinOp(AstNode.Kind.Assign, _scope_id, _parser.nodes.ast_of(lhs).location, lhs, expr()));
+                    return alloc(BinOp(AstNode.Kind.Assign, _scope_id, _parser.nodes[lhs].location, lhs, expr()));
                 }
                 return lhs;
             }
         }();
 
-        switch (_parser.nodes.ast_of(stmt).kind) with (AstNode.Kind) {
+        switch (_parser.nodes[stmt].kind) with (AstNode.Kind) {
         case Block:
         case If:
         case Loop:
@@ -171,11 +171,11 @@ public:
         default:
             const end = token;
             if (take(required(TT.Semicolon))) {
-                _parser.nodes.ast_of(stmt).location += end.span;
+                _parser.nodes[stmt].location += end.span;
                 return stmt;
             }
 
-            return alloc(arc.data.ast.Invalid(_scope_id, _parser.nodes.ast_of(stmt).location));
+            return alloc(arc.data.ast.Invalid(_scope_id, _parser.nodes[stmt].location));
         }
     }
 
@@ -222,7 +222,7 @@ private:
         auto span = take().span;
         auto e = expr(Precedence.Call);
 
-        if (_parser.nodes.ast_of(e).is_valid)
+        if (_parser.nodes[e].is_valid)
             return alloc(UnOp(kind, _scope_id, span, e));
 
         return alloc(Invalid(_scope_id, span));
@@ -254,10 +254,10 @@ private:
     }
 
     AstNodeId infix(alias fn, Infix[] ops)(Precedence p, AstNodeId lhs) {
-        for (Infix op = ops[token.type]; _parser.nodes.ast_of(lhs).is_valid && p <= op.prec; op = ops[token.type]) {
+        for (Infix op = ops[token.type]; _parser.nodes[lhs].is_valid && p <= op.prec; op = ops[token.type]) {
             skip(op.skip_token);
             auto rhs = fn(cast(Precedence)(op.prec + op.is_left_associative));
-            auto span = _parser.nodes.ast_of(lhs).location + _parser.nodes.ast_of(rhs).location;
+            auto span = _parser.nodes[lhs].location + _parser.nodes[rhs].location;
             lhs = alloc(BinOp(op.kind, _scope_id, span, lhs, rhs));
         }
         return lhs;
@@ -278,7 +278,7 @@ private:
             auto node = member();
 
             const is_bad = delim && !(is_done || token.type == rhs || skip(required(delim)));
-            if (!_parser.nodes.ast_of(node).is_valid || is_bad) {
+            if (!_parser.nodes[node].is_valid || is_bad) {
                 destroy(array);
                 return alloc(Invalid(outer_scope, start));
             }
@@ -298,7 +298,7 @@ private:
 
     AstNodeId list_member() {
         AstNodeId lm(Span span, AstNodeId type, AstNodeId expr) {
-            if (_parser.nodes.ast_of(type).is_valid && _parser.nodes.ast_of(expr).is_valid)
+            if (_parser.nodes[type].is_valid && _parser.nodes[expr].is_valid)
                 return alloc(ListMember(_scope_id, span, _parser.symbols.none, type, expr));
             return alloc(Invalid(_scope_id, span));
         }
@@ -309,9 +309,9 @@ private:
 
         // (a)
         auto e = expr();
-        if (_parser.nodes.ast_of(e).is_valid)
-            return alloc(ListMember(_scope_id, _parser.nodes.ast_of(e).location, _parser.symbols.none, inferred_type(), e));
-        return alloc(Invalid(_scope_id, _parser.nodes.ast_of(e).location));
+        if (_parser.nodes[e].is_valid)
+            return alloc(ListMember(_scope_id, _parser.nodes[e].location, _parser.symbols.none, inferred_type(), e));
+        return alloc(Invalid(_scope_id, _parser.nodes[e].location));
     }
 
     AstNodeId list(TT open, TT close)() {
@@ -340,16 +340,16 @@ private:
 
         // a => t {}
         if (token.type == TT.Lbrace)
-            return alloc(Function(_scope_id, _parser.nodes.ast_of(params).location, params, perhaps_body, block()));
+            return alloc(Function(_scope_id, _parser.nodes[params].location, params, perhaps_body, block()));
 
         // a => b
-        return alloc(Function(_scope_id, _parser.nodes.ast_of(params).location, params, inferred_type(), perhaps_body));
+        return alloc(Function(_scope_id, _parser.nodes[params].location, params, inferred_type(), perhaps_body));
     }
 
     // () -> RetType
     AstNodeId function_type(AstNodeId params) {
         skip(required(TT.RArrow));
-        return alloc(FunctionSignature(_scope_id, _parser.nodes.ast_of(params).location, params, expr()));
+        return alloc(FunctionSignature(_scope_id, _parser.nodes[params].location, params, expr()));
     }
 
     alias _tokens this;
@@ -383,13 +383,13 @@ private:
 
     AstNodeId alloc(T)(T node) {
         if (node.is_valid)
-            return _parser.nodes.save_node(node);
+            return _parser.nodes.save(node);
         else
-            return _parser.nodes.save_node(Invalid(node.outer_scope_id, node.location));
+            return _parser.nodes.save(Invalid(node.outer_scope_id, node.location));
     }
 
     AstNodeId alloc(T : Invalid)(T node) {
-        return _parser.nodes.save_node!T(node);
+        return _parser.nodes.save!T(node);
     }
 
     AstNodeId inferred_type() {

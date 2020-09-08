@@ -400,7 +400,7 @@ bool type_equivalent(SyntaxTree tree, AstNode.Kind[] expected...) {
     AstNode.Kind[] tree_types;
     void flatten(AstNodeId[] nodes) {
         foreach (n; nodes) {
-            tree_types ~= tree.ast_of(n).kind;
+            tree_types ~= tree[n].kind;
             flatten(tree.children_of(n));
         }
     }

@@ -26,19 +26,19 @@ public:
         // _string_table does not have a constructor
         _symbol_table = new GlobalSymbolTable(initial_symbol_table_size);
 
-        _ast_allocator = new AstAllocator();
+        _nodes = new AstAllocator();
         _scope_allocator = new ScopeAllocator(_symbol_table);
-        _type_allocator = new ArcTypeAllocator();
+        _types = new ArcTypeAllocator();
 
         _parser = new Parser(
             _reporter,
             &_string_table,
-            _ast_allocator,
+            _nodes,
             _scope_allocator,
             _symbol_table
         );
 
-        _typer = new Typer(_type_allocator, _ast_allocator, &_string_table, _symbol_table, _scope_allocator);
+        _typer = new Typer(_types, _nodes, &_string_table, _symbol_table, _scope_allocator);
     }
 
     /**
@@ -70,15 +70,15 @@ public:
     }
 
     AstNode* ast_of(AstNodeId id) {
-        return _ast_allocator.ast_of(id);
+        return _nodes[id];
     }
 
     ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
-        return _ast_allocator.match!ReturnType(id, ops);
+        return _nodes.match!ReturnType(id, ops);
     }
 
     AstNodeId[] children_of(AstNodeId id) {
-        return _ast_allocator.children_of(id);
+        return _nodes.children_of(id);
     }
 
     const(char)[] name_of(SymbolId id) {
@@ -86,7 +86,7 @@ public:
     }
 
     SymbolId symbol_id_of(AstNodeId id) {
-        return _ast_allocator.match!SymbolId(id,
+        return _nodes.match!SymbolId(id,
             (ListMember* lm) => lm.symbol,
             (Definition* df) => df.symbol,
             (Variable* vr) => vr.symbol,
@@ -110,7 +110,7 @@ public:
     }
 
     ArcType* type_of(AstNodeId id) {
-        return _type_allocator.type_of(type_id_of(id));
+        return &_types[type_id_of(id)];
     }
 
     StringTable* string_table() return { return &_string_table; }
@@ -126,11 +126,11 @@ private:
     GlobalSymbolTable _symbol_table;
 
     IParser _parser;
-    AstAllocator _ast_allocator;
+    AstAllocator _nodes;
     ScopeAllocator _scope_allocator;
 
     Typer _typer;
-    ArcTypeAllocator _type_allocator;
+    ArcTypeAllocator _types;
 
     /// Uses GC because I'm lazy right now.
     SyntaxTree[Source*] _syntax_source_map;

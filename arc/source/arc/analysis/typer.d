@@ -32,10 +32,10 @@ public:
                 if (lm.type_id != TypeId())
                     return lm.type_id;
 
-                if (_nodes.ast_of(lm.type_expr).kind != AstNode.Kind.InferredType)
+                if (_nodes[lm.type_expr].kind != AstNode.Kind.InferredType)
                     lm.type_id = type_id_of(lm.type_expr);
-                else
-                    lm.type_id = type_id_of(lm.init_expr);
+                // else
+                //     lm.type_id = type_id_of(lm.init_expr);
 
                 return lm.type_id;
             },
@@ -43,10 +43,10 @@ public:
                 if (df.type_id != TypeId())
                     return df.type_id;
 
-                if (_nodes.ast_of(df.type_expr).kind != AstNode.Kind.InferredType)
+                if (_nodes[df.type_expr].kind != AstNode.Kind.InferredType)
                     df.type_id = type_id_of(df.type_expr);
-                else
-                    df.type_id = type_id_of(df.init_expr);
+                // else
+                //     df.type_id = type_id_of(df.init_expr);
 
                 return df.type_id;
             },
@@ -54,10 +54,10 @@ public:
                 if (vr.type_id != TypeId())
                     return vr.type_id;
 
-                if (_nodes.ast_of(vr.type_expr).kind != AstNode.Kind.InferredType)
+                if (_nodes[vr.type_expr].kind != AstNode.Kind.InferredType)
                     vr.type_id = type_id_of(vr.type_expr);
-                else
-                    vr.type_id = type_id_of(vr.init_expr);
+                // else
+                //     vr.type_id = type_id_of(vr.init_expr);
 
                 return vr.type_id;
             },
@@ -95,7 +95,7 @@ private:
     void initialize_builtin_types(StringTable* strings, GlobalSymbolTable symbols) {
         SymbolId make_type(ArcType.Kind kind, string name, size_t size, size_t alignment) {
             const symbol = symbols.make_symbol(Symbol.Kind.TypeName, strings.intern(name));
-            const type = _types.save_type(ArcType(kind, symbol, size, alignment));
+            const type = _types.save(ArcType(kind, symbol, size, alignment));
             symbols[symbol].type_id = type;
 
             return symbol;

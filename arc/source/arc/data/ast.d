@@ -23,18 +23,12 @@
  */
 module arc.data.ast;
 
-import arc.data.span;
-import arc.data.symbol: SymbolId;
-import arc.data.scopes: ScopeId;
 import arc.data.hash;
+import arc.data.scopes : ScopeId;
+import arc.data.span;
+import arc.data.symbol : SymbolId;
 import arc.data.type;
-
-/**
- Global identifier for an AST node.
- */
-struct AstNodeId {
-    uint value;
-}
+import arc.indexed_allocator;
 
 /**
  The AstNode contains the bare minimum of information necessary to make a
@@ -240,7 +234,7 @@ struct SyntaxTree {
 
 public:
     this(AstAllocator allocator, Source* source, AstNodeId[] statements) {
-        _allocator = allocator;
+        _nodes = allocator;
         _statements = statements;
         _source = source;
     }
@@ -248,7 +242,7 @@ public:
     Source* source() { return _source; }
 
     AstNodeId none() {
-        return _allocator.none;
+        return _nodes.none;
     }
 
     /// Retrieves the list of statements contained within the parsed syntax
@@ -257,59 +251,40 @@ public:
         return _statements;
     }
 
-    AstNode* ast_of(AstNodeId id) {
-        return _allocator.ast_of(id);
+    AstNode* opIndex(AstNodeId id) {
+        return _nodes[id];
     }
 
     AstNodeId[] children_of(AstNodeId id) {
-        return _allocator.children_of(id);
+        return _nodes.children_of(id);
     }
 
     ReturnType match(ReturnType, Ops...)(AstNodeId id, Ops ops) if (Ops.length > 0) {
-        return _allocator.match!ReturnType(id, ops);
+        return _nodes.match!ReturnType(id, ops);
     }
 
 private:
-    AstAllocator _allocator;
+    AstAllocator _nodes;
     AstNodeId[] _statements;
     Source* _source;
 }
 
-/// This is a class only because I want a zero-argument constructor.
-final class AstAllocator {
-    import arc.memory : VirtualMemory, VirtualArray;
+alias AstNodeId = AllocIndex!(uint, AstNode*);
 
-    // 64 gib for both AstNode* and Span
-    enum max_nodes = (cast(size_t) AstNodeId.value.max) + 1;
+final class AstAllocator : SimpleIndexedAllocator!(uint, AstNode*) {
+    const AstNodeId none;
 
-    /*
-    Note: The implementation currently makes use of the GC to allocate nodes.
-    Both nodes and arrays could theoretically be allocated out of an VM arena,
-    but I'm too lazy to implement that right now. I do not expect that the
-    implementation would be too complex, though some reworking of the API will
-    be necessary. Given that the only user of the API is the parser, that should
-    not e too much of a burden.
-    */
-
-public:
     this() {
-        _id_node_map = VirtualArray!(AstNode*)(max_nodes);
-
-        _marker_none_id = save_node(None(ScopeId(), Span()));
+        super();
+        none = save(None(ScopeId(), Span()));
     }
 
-    ~this() {
-        destroy(_id_node_map);
-    }
+    alias save = SimpleIndexedAllocator!(uint, AstNode*).save;
 
-    // dfmt off
-    /// The id of the marker `None` AST node.
-    AstNodeId none() { return _marker_none_id; }
-    // dfmt on
-
-    /// Accesses the `AstNode` identified by an `AstNodeId`.
-    AstNode* ast_of(AstNodeId id) {
-        return _id_node_map[id.value];
+    AstNodeId save(Node)(Node node) {
+        auto n = new Node();
+        *n = node;
+        return save(cast(AstNode*) n);
     }
 
     /// Convenience function to retrieve any children that a node may have as an
@@ -359,7 +334,7 @@ public:
                 return;
         }
 
-        auto node = ast_of(id);
+        auto node = this[id];
         // dfmt off
         switch (node.kind) {
             case AstNode.Kind.Invalid:            return dispatch!Invalid(node, ops);
@@ -390,25 +365,6 @@ public:
         }
         // dfmt on
     }
-
-    /// Saves a node and its span, returning the `AstNodeId` by which they may
-    /// be retrieved.
-    AstNodeId save_node(Node)(Node node) {
-        const id = AstNodeId(cast(uint) _id_node_map.length);
-
-        // If we wanted, we could put all of these into a single VM object.
-        auto n = new Node();
-        *n = node;
-        _id_node_map ~= &n.header;
-
-        return id;
-    }
-
-private:
-    AstNodeId _marker_none_id;
-
-    /// (AstNodeId) -> AstNode*
-    VirtualArray!(AstNode*) _id_node_map;
 }
 
 private:
