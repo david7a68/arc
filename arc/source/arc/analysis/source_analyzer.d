@@ -14,17 +14,11 @@ import arc.reporter : Reporter;
 import arc.source : Source;
 
 struct SourceAnalyzer {
-
-    enum initial_string_table_size = 128;
-    enum initial_symbol_table_size = 64;
-    enum initial_syntax_map_size = 64;
-
-public:
     this(Reporter* reporter) {
         _reporter = reporter;
 
         // _string_table does not have a constructor
-        _symbol_table = new GlobalSymbolTable(initial_symbol_table_size);
+        _symbol_table = new GlobalSymbolTable();
 
         _nodes = new AstAllocator();
         _scope_allocator = new ScopeAllocator(_symbol_table);

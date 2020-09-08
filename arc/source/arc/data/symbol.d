@@ -3,10 +3,7 @@ module arc.data.symbol;
 import arc.data.ast: AstNodeId;
 import arc.data.hash : Hash;
 import arc.data.type : TypeId;
-
-struct SymbolId {
-    uint value;
-}
+import arc.indexed_allocator;
 
 struct Symbol {
     enum Kind : ubyte {
@@ -26,41 +23,19 @@ struct Symbol {
     TypeId type_id;
 }
 
-final class GlobalSymbolTable {
-    import arc.memory : VirtualArray;
+alias SymbolId = AllocIndex!(uint, Symbol);
 
-    enum max_symbols = SymbolId.value.max + 1;
+final class GlobalSymbolTable : SimpleIndexedAllocator!(uint, Symbol) {
+    const SymbolId none;
+    const SymbolId unresolved;
 
-public:
-    this(size_t initial_size) {
-        _symbols = VirtualArray!Symbol(max_symbols);
-        _symbols.reserve(initial_size);
-
-        _none = make_symbol(Symbol.Kind.None, Hash());
-        _unresolved = make_symbol(Symbol.Kind.Unresolved, Hash());
-    }
-
-    SymbolId unresolved() {
-        return _unresolved;
-    }
-
-    SymbolId none() {
-        return _none;
+    this() {
+        super();
+        none = save(Symbol(Symbol.Kind.None));
+        unresolved = save(Symbol(Symbol.Kind.Unresolved));
     }
 
     SymbolId make_symbol(Symbol.Kind kind, Hash name) {
-        const id = SymbolId(cast(uint) _symbols.length);
-
-        _symbols ~= Symbol(kind, name);
-
-        return id;
+        return save(Symbol(kind, name));
     }
-
-    Symbol* opIndex(SymbolId id) {
-        return &_symbols[id.value];
-    }
-
-private:
-    VirtualArray!Symbol _symbols;
-    SymbolId _none, _unresolved;
 }

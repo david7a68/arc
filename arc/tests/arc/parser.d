@@ -10,7 +10,7 @@ import arc.reporter;
 import std.stdio : writefln;
 
 @("Parsing and AST Construction") unittest {
-    auto symbols = new GlobalSymbolTable(64);
+    auto symbols = new GlobalSymbolTable();
     auto errors = Reporter();
     auto strings = StringTable();
     auto parser = new Parser(

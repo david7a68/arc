@@ -18,7 +18,7 @@ struct Scope {
     }
 
     Symbol* get_local(Hash hash) {
-        return _all_symbols[get_local_id(hash)];
+        return &_all_symbols[get_local_id(hash)];
     }
 
 private:
