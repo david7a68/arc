@@ -1,8 +1,11 @@
 module arc.ast;
 
+import shard.array : Array;
 import shard.pad : pad_bytes;
+import arc.lexer : Token;
 
 alias NodeIndex = uint;
+alias TokenIndex = uint;
 
 struct SyntaxTree {
     // dfmt off
@@ -10,15 +13,30 @@ struct SyntaxTree {
     Array!Token     tokens;
     Array!AstNode   nodes;
     Array!NodeIndex node_data;
+    Array!AstError  errors;
     // dfmt on
+}
+
+struct AstError {
+    enum Kind : ubyte {
+        token_expect_mismatch
+    }
+
+    Kind kind;
+    TokenIndex token_index;
+    TokenType expected_type;
+
+    static AstError token_expect_mismatch(TokenIndex index, TokenType expected) {
+        return AstError(Kind.token_expect_mismatch, index, expected);
+    }
 }
 
 struct AstNode {
     enum Kind : ubyte {
         invalid,
 
-        /// data_a: [name, type, value]
-        /// data_b: next declaration
+        /// data_a: [name_hash_lo, name_hash_hi]
+        /// data_b: [type, value]
         let_decl,
         /// ditto
         def_decl,

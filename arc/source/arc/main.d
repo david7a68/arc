@@ -15,13 +15,19 @@ struct CompilerOptions {
 
 void main(string[] args) {
     CompilerOptions options;
-    const help = getopt(
+    // dfmt off
+    const result = getopt(
         args,
-        "colorize", "Toggles colorized console output. Defaults to true.", &options.colorize,
-        "memory-stats", "Toggles output of memory usage statistics after compilation completes. Defaults to true.", &options.memory_stats,
+        "colorize",
+            "Toggles colorized console output. Defaults to true.",
+            &options.colorize,
+        "memory-stats",
+            "Toggles output of memory usage statistics after compilation completes. Defaults to true.",
+            &options.memory_stats,
     );
+    // dfmt on
 
-    if (help.helpWanted) {
+    if (result.helpWanted) {
 
     }
 
@@ -45,7 +51,12 @@ void run(const ref CompilerOptions options) {
     memory.get_sys_stats(sys_stats);
 
     if (options.memory_stats) {
-        logger.info("Memory Statistics:\n\tTemp Memory Region Size: %s\n\tMax Non-Temp Memory Used: %s\n\t# System Allocations: %s\n\t# Leaked System Allocations",
+        logger.info(
+"Memory Statistics:
+    Temp Memory Region Size: %s
+    Max Non-Temp Memory Used: %s
+    # System Allocations: %s
+    # Leaked System Allocations",
             memory.temp_region_size,
             sys_stats.most_bytes_allocated,
             sys_stats.total_allocations,

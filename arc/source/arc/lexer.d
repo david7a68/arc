@@ -1,5 +1,6 @@
 module arc.lexer;
 
+import shard.memory : Allocator;
 import shard.array : Array;
 
 struct Token {
@@ -29,7 +30,7 @@ struct Token {
     uint start;
     uint end;
 
-    bool opCast(T: bool)() { return type != Type.none; }
+    bool opCast(T: bool)() const { return type != Type.none; }
 }
 
 /// Returns `true` if `type` matches one of the types in `types`.
@@ -40,22 +41,22 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
-size_t tokenize_text(const char[] source, ref Array!Token tokens) {
-    // Approximate source-chars-to-tokens ratio, reserving at least 1 token.
-    tokens.reserve((source.length + 8) / 8);
-    tokens.clear();
-
+void lex_tokens(const char[] source, ref Array!Token tokens) {
     const start = source.ptr;
     const end = source.ptr + source.length;
     auto cursor = source.ptr;
 
-    auto t = _scan_token(start, cursor, end);
-    while (t.type != Token.Type.done) {
+    // Approximate source-chars-to-tokens ratio, reserving at least 1 token.
+    tokens.reserve(allocator, (source.length + 8) / 8);
+
+    while (true) {
+        const t = _scan_token(start, cursor, end);
         tokens.push_back(t);
-        t = _scan_token(start, cursor, end);
+        if (t == Token.Type.Done)
+            break;
     }
 
-    return tokens.length;
+    return tokens;
 }
 
 private:
