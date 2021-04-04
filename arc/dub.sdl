@@ -4,6 +4,8 @@ authors "David"
 copyright "Copyright © 2020, David"
 license "proprietary"
 
+dependency "shard" path="./vendor/shard"
+
 configuration "executable" {
     targetType "executable"
 }

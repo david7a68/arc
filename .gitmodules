@@ -1,0 +1,3 @@
+[submodule "arc/vendor/shard"]
+	path = arc/vendor/shard
+	url = https://github.com/straivers/shard.git
