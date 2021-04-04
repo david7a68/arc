@@ -1,16 +1,19 @@
 module arc.main;
 
+import std.stdio;
+import std.file;
 import std.getopt : getopt;
 import shard.memory.mem_api;
 import shard.memory.tracker : MemoryStats;
 import shard.os.api;
 import shard.logger;
 import arc.log_out;
+import arc.parser;
 
 struct CompilerOptions {
     bool colorize = true;
     bool memory_stats = false;
-    string[] files;
+    string[] extra_args;
 }
 
 void main(string[] args) {
@@ -31,7 +34,7 @@ void main(string[] args) {
 
     }
 
-    options.files = args[1 .. $];
+    options.extra_args = args[1 .. $];
     run(options);
 }
 
@@ -45,13 +48,29 @@ void run(const ref CompilerOptions options) {
     const sink_id = logger.add_sink(sink);
     scope (exit) logger.remove_sink(sink_id);
 
-    logger.info("Arc Compiler v0.0.0");
+    logger.all("Arc Compiler v0.0.0");
+
+    if (options.extra_args.length == 1) {
+        const file_name = options.extra_args[0];
+        if (file_name.length <= 4 || file_name[$ - 4 .. $] != ".arc")
+            logger.error("The source file argument must end with the '.arc' extension.");
+        else if (!exists(file_name))
+            logger.error("The source file \"%s\" could not be found.", file_name);
+        else {
+            logger.all("Source file found, compiling would go here.");
+            // File ok, compilation starts here.
+        }
+    }
+    else if (options.extra_args.length == 0)
+        logger.error("At least one source file is needed for useful work to be done. Simply add it to the command line as something like the following:\n    `arc <options> main.arc`");
+    else
+        logger.error("Only one source file is needed for the compiler to build a project. All dependent files in the same project will be found automatically. If you are attempting to include a separate project as a dependency, such functionality is not yet supported.");
 
     MemoryStats sys_stats;
     memory.get_sys_stats(sys_stats);
 
     if (options.memory_stats) {
-        logger.info(
+        logger.all(
 "Memory Statistics:
     Temp Memory Region Size: %s
     Max Non-Temp Memory Used: %s

@@ -47,16 +47,14 @@ void lex_tokens(const char[] source, ref Array!Token tokens) {
     auto cursor = source.ptr;
 
     // Approximate source-chars-to-tokens ratio, reserving at least 1 token.
-    tokens.reserve(allocator, (source.length + 8) / 8);
+    tokens.reserve((source.length + 8) / 8);
 
     while (true) {
         const t = _scan_token(start, cursor, end);
         tokens.push_back(t);
-        if (t == Token.Type.Done)
+        if (t.type == Token.Type.done)
             break;
     }
-
-    return tokens;
 }
 
 private:

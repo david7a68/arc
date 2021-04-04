@@ -2,7 +2,7 @@ module arc.log_out;
 
 import core.stdc.stdio : printf;
 import shard.buffer_writer : TypedWriter;
-import shard.logger : LogEvent, LogEventSink;
+import shard.logger : LogLevel, LogEvent, LogEventSink;
 import std.format : formattedWrite;
 
 final class CompilerOut : LogEventSink {
@@ -25,6 +25,8 @@ final class CompilerOut : LogEventSink {
                 writer.put(colors[event.level]);
             
             debug writer.formattedWrite!"{%s:%s} "(event.module_name, event.line);
+            if (event.level > LogLevel.All)
+                writer.formattedWrite!"%s: "(event.level);
             writer.put(event.message[0 .. event.message_length]);
             writer.put(clear_colors);
             writer.put("\n\0");
