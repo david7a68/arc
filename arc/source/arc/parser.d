@@ -56,4 +56,42 @@ struct ParseContext {
             // do stuff
         }
     }
+
+    NodeIndex prefix() {
+        // dfmt off
+        switch (token.type) with (TT) {
+            case identifier: {
+                // intern ident string
+                auto ident = AstNode.identifier(take(), token_cursor);
+                return ast.nodes.push_back(ident);
+            }
+            case int_literal: {
+                auto i_lit = AstNode.literal!"int"(take(), token_cursor);
+                return ast.nodes.push_back(i_lit);
+            }
+            case char_literal: {
+                auto c_lit = AstNode.literal!"char"(take(), token_cursor);
+                return ast.nodes.push_back(c_lit);
+            }
+            case string_literal: {
+                auto s_lit = AstNode.literal!"string"(take(), token_cursor);
+                return ast.nodes.push_back(s_lit);
+            }
+            case not: {
+                auto not = AstNode.unary!"not"(take(), expr());
+                ast.nodes.push_back(not);
+                return not;
+            }
+            case minus: {
+                auto neg = AstNode.unary!"negate"(take(), expr());
+                ast.nodes.push_back(neg);
+                return neg;
+            }
+        }
+        // dfmt on
+    }
+
+    NodeIndex expr() {
+        return prefix();
+    }
 }

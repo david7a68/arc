@@ -41,7 +41,16 @@ struct AstNode {
         /// ditto
         def_decl,
 
+        /// data_a: name token
+        /// data_b: intern id
         identifier,
+
+        /// data_a: token index
+        int_literal,
+        /// ditto
+        char_literal,
+        /// ditto
+        string_literal,
 
         /// data_a: operand
         /// data_b: unused
@@ -128,9 +137,44 @@ struct AstNode {
     }
 
     Kind kind;
-    mixin pad_bytes!3;
+    mixin pad_bytes!1;
+
+    ushort length;
+    uint source_offset;
+
     NodeIndex data_a;
     NodeIndex data_b;
 
-    static assert(AstNode.sizeof == 12);
+    static assert(AstNode.sizeof == 16);
+
+    static identifier(Token t, TokenIndex index) {
+        auto n = AstNode(Kind.identifier, t);
+        n.data_a = index;
+        return n;
+    }
+
+    static literal(string s)(Token t, TokenIndex index) {
+        mixin("n = AstNode(Kind." ~ s ~ "_literal, t);");
+        n.data_a = index;
+        return n;
+    }
+
+    static unary(string s)(Token t, TokenIndex operand_index) {
+        mixin("n = AstNode(Kind." ~ s ~ "_literal, t");
+        n.data_a = operand_index;
+        return n;
+    }
+
+    static binary(string s)(NodeIndex lhs, NodeIndex rhs, uint span_start, uint span_end) {
+        mixin("n = AstNode(Kind." ~ s ~ ", span_start, span_end");
+        n.data_a = lhs;
+        n.data_b = rhs;
+        return n;
+    }
+
+    this(AstNode.Kind kind, uint span_start, uint span_end) {
+        this.kind = kind;
+        source_offset = span_start;
+        length = span_end - span_start;
+    }
 }
