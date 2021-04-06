@@ -1,14 +1,13 @@
 module arc.main;
 
-import std.stdio;
-import std.file;
+import std.file : exists, read_text = readText;
 import std.getopt : getopt;
 import shard.memory.mem_api;
 import shard.memory.tracker : MemoryStats;
 import shard.os.api;
 import shard.logger;
 import arc.log_out;
-import arc.parser;
+import arc.unit : CompilationUnit;
 
 struct CompilerOptions {
     bool colorize = true;
@@ -53,24 +52,27 @@ void run(const ref CompilerOptions options) {
     if (options.extra_args.length == 1) {
         const file_name = options.extra_args[0];
         if (file_name.length <= 4 || file_name[$ - 4 .. $] != ".arc")
-            logger.error("The source file argument must end with the '.arc' extension.");
+            logger.fatal("The source file argument must end with the '.arc' extension.");
         else if (!exists(file_name))
-            logger.error("The source file \"%s\" could not be found.", file_name);
+            logger.fatal("The source file \"%s\" could not be found.", file_name);
         else {
             logger.all("Source file found, compiling would go here.");
-            // File ok, compilation starts here.
+            auto cu = CompilationUnit(file_name);
+            // work_queue.add_compilation_unit(cu);
+            // while (work_queue.has_work)
+            //     work_queue.execute();
         }
     }
     else if (options.extra_args.length == 0)
-        logger.error("At least one source file is needed for useful work to be done. Simply add it to the command line as something like the following:\n    `arc <options> main.arc`");
+        logger.fatal("At least one source file is needed for useful work to be done. Simply add it to the command line as something like the following:\n    `arc <options> main.arc`");
     else
-        logger.error("Only one source file is needed for the compiler to build a project. All dependent files in the same project will be found automatically. If you are attempting to include a separate project as a dependency, such functionality is not yet supported.");
+        logger.fatal("Only one source file is needed for the compiler to build a project. All dependent files in the same project will be found automatically. If you are attempting to include a separate project as a dependency, such functionality is not yet supported.");
 
     MemoryStats sys_stats;
     memory.get_sys_stats(sys_stats);
 
     if (options.memory_stats) {
-        logger.all(
+        logger.info(
 "Memory Statistics:
     Temp Memory Region Size: %s
     Max Non-Temp Memory Used: %s

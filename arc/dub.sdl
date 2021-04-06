@@ -6,13 +6,11 @@ license "proprietary"
 
 dependency "shard" path="./vendor/shard"
 
-configuration "executable" {
-    targetType "executable"
-}
+// configuration "executable" {
+//     targetType "executable"
+// }
 
-configuration "unittest" {
-    dependency "silly" version="~>1.0.2"
-    excludedSourceFiles "source/app.d"
-    sourcePaths "source" "tests"
-    importPaths "source" "tests"
-}
+// configuration "unittest" {
+//     dependency "silly" version="~>1.0.2"
+//     excludedSourceFiles "source/arc/main.d"
+// }

@@ -5,7 +5,6 @@ def b := 2;
 
 def c := b;
 
+let d := 3;
 
-d := 3;
-
-e : char = 'a';
+let e : char = 'a';
