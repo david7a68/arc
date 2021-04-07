@@ -1,20 +1,19 @@
 module arc.ast;
 
-import shard.array : Array;
-import shard.pad : pad_bytes;
 import arc.lexer : Token;
+import shard.array : UnmanagedArray;
+import shard.pad : pad_bytes;
 
 alias NodeIndex = uint;
 alias TokenIndex = uint;
 
 struct SyntaxTree {
     // dfmt off
-    const char[]    source;
-    Array!Token     tokens;
-    Array!AstNode   nodes;
-    Array!NodeIndex node_data;
-    Array!AstError  errors;
+    UnmanagedArray!AstNode   nodes;
+    UnmanagedArray!NodeIndex node_data;
+    UnmanagedArray!AstError  errors;
     // dfmt on
+    static assert(SyntaxTree.sizeof == 48);
 }
 
 struct AstError {
