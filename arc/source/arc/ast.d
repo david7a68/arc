@@ -39,14 +39,18 @@ struct AstNode {
     enum Kind : ubyte {
         invalid,
 
-        /// data_a: [name_hash_lo, name_hash_hi]
+        /// data_a: first declaration
+        /// data_b: # of declarations
+        root,
+
+        /// data_a: name hash 32
         /// data_b: [type, value]
         let_declaration,
         /// ditto
         def_declaration,
 
         /// data_a: name token
-        /// data_b: intern id
+        /// data_b: name hash 32
         identifier,
 
         /// data_a: token index

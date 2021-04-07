@@ -135,15 +135,15 @@ Token _scan_token(const char* base, ref const(char)* current, const char* end, S
             else
                 return make_token(equals, 0);
 
-        case '\'':
+        case '\'': {
             current++;
             const length = *current == '\\' ? 2 : 1;
 
             if (current < end && *(current + length) == '\'')
                 return make_token(char_literal, length + 1);
             return make_token(invalid, current - start);
-
-        case '"':
+        }
+        case '"': {
             current++;
             for (; current < end; current++) {
                 const c = *current;
@@ -156,33 +156,36 @@ Token _scan_token(const char* base, ref const(char)* current, const char* end, S
             const length = current - start;
             if (current == end)
                 return make_token(invalid, length);
+            // TODO: unescape string, strings.save(str, unescaped_str);
             return make_token(string_literal, 1);
-
+        }
         case 'a': .. case 'z':
         case 'A': .. case 'Z':
-        case '_':
-        loop: for (; current < end; current++) switch (*current) {
-            case 'a': .. case 'z':
-            case 'A': .. case 'Z':
-            case '0': .. case '9':
-            case '_':
-                continue;
-            default:
-                break loop;
-            }
+        case '_': {
+            loop: for (; current < end; current++) switch (*current) {
+                case 'a': .. case 'z':
+                case 'A': .. case 'Z':
+                case '0': .. case '9':
+                case '_':
+                    continue;
+                default:
+                    break loop;
+                }
 
-            const type = _keywords.get(start[0 .. current - start], identifier);
-            auto token = make_token(type, 0);
-            token.string_id = type == identifier ? strings.save(start[0 .. current - start]) : StringId();
-            return token;
-
-        case '0': .. case '9':
+                auto str = start[0 .. current - start];
+                const type = _keywords.get(str, identifier);
+                auto token = make_token(type, 0);
+                token.string_id = type == identifier ? strings.save(str) : StringId();
+                return token;
+        }
+        case '0': .. case '9': {
             while (current < end && (('0' <= *current
                     && *current <= '9') || *current == '_'))
                 current++;
             auto token = make_token(int_literal, 0);
+             token.string_id = strings.save(start[0 .. current - start]);
             return token;
-
+        }                                                           
         default:
             return make_token(invalid, 1);
         }
