@@ -1,6 +1,6 @@
 module arc.lexer;
 
-import shard.memory : Allocator;
+import arc.string_store : StringStore, StringId;
 import shard.array : Array;
 
 struct Token {
@@ -29,6 +29,7 @@ struct Token {
     Type type;
     uint start;
     uint end;
+    StringId string_id;
 
     bool opCast(T: bool)() const { return type != Type.none; }
 }
@@ -41,7 +42,7 @@ bool matches_one(Token.Type type, const Token.Type[] types...) {
     return false;
 }
 
-void lex_tokens(const char[] source, ref Array!Token tokens) {
+void lex_tokens(const char[] source, StringStore* strings, ref Array!Token tokens) {
     const start = source.ptr;
     const end = source.ptr + source.length;
     auto cursor = source.ptr;
@@ -50,7 +51,7 @@ void lex_tokens(const char[] source, ref Array!Token tokens) {
     tokens.reserve((source.length + 8) / 8);
 
     while (true) {
-        const t = _scan_token(start, cursor, end);
+        const t = _scan_token(start, cursor, end, strings);
         tokens.push_back(t);
         if (t.type == Token.Type.done)
             break;
@@ -85,7 +86,7 @@ shared static this() {
 
  This function will identify keywords as distinct from symbols.
  */
-Token _scan_token(const char* base, ref const(char)* current, const char* end, /*StringTable* stringtable*/) {
+Token _scan_token(const char* base, ref const(char)* current, const char* end, StringStore* strings) {
     auto start = current;
 
     auto make_token(Token.Type t, size_t advance_n) {
@@ -154,7 +155,7 @@ Token _scan_token(const char* base, ref const(char)* current, const char* end, /
 
             const length = current - start;
             if (current == end)
-                make_token(invalid, length);
+                return make_token(invalid, length);
             return make_token(string_literal, 1);
 
         case 'a': .. case 'z':
@@ -171,7 +172,9 @@ Token _scan_token(const char* base, ref const(char)* current, const char* end, /
             }
 
             const type = _keywords.get(start[0 .. current - start], identifier);
-            return make_token(type, 0);
+            auto token = make_token(type, 0);
+            token.string_id = type == identifier ? strings.save(start[0 .. current - start]) : StringId();
+            return token;
 
         case '0': .. case '9':
             while (current < end && (('0' <= *current
