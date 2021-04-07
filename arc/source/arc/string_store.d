@@ -1,11 +1,13 @@
 module arc.string_store;
 
-import shard.memory : gib, Allocator, VirtualAllocator, page_size;
+import core.stdc.string : memset;
+import shard.hash : Hash32, hash32_of;
 import shard.math_util : round_to_next;
-import shard.hash : Hash64, hash64_of;
+import shard.memory : Allocator, gib, page_size, VirtualAllocator;
 import shard.pad : pad_bytes;
 import std.algorithm : filter;
-import core.stdc.string : memset;
+
+public import shard.hash : StringId = Hash32;
 
 /**
 Fixed-location store for interning strings.
@@ -36,13 +38,13 @@ struct StringStore {
         return _num_saved;
     }
 
-    Hash64 save(const char[] str) {
-        const hash = hash64_of(str);
+    StringId save(const char[] str) {
+        const hash = hash32_of(str);
         ulong index = hash.value % _entries.length, probes = 0;
         while (true) {
             auto slot = &_entries[index];
 
-            if (slot.hash == Hash64()) {
+            if (slot.hash == Hash32()) {
                 if (_chars_written + str.length > max_string_store_size)
                     assert(0, "String store at capacity!");
 
@@ -89,7 +91,7 @@ struct StringStore {
         assert(0, "Unreachable");
     }
 
-    const(char[]) get(Hash64 id) {
+    const(char[]) get(StringId id) {
         ulong index = id.value % _entries.length, probes = 0;
         while (probes < _max_probes && _entries[index].hash != id) {
             index = (index + 1) % _entries.length;
@@ -107,11 +109,11 @@ struct StringStore {
 
 private:
     struct Entry {
-        Hash64 hash;
+        Hash32 hash;
         uint first;
         uint one_past_last;
 
-        static assert(Entry.sizeof == 16);
+        static assert(Entry.sizeof == 12);
     }
 
     void _rehash() {
@@ -119,15 +121,15 @@ private:
 
         rehash: while (true) {
             map_entries: for (auto i = 0; i < _entries.length; i++) {
-                auto entry = &_entries[i];
+                const entry = &_entries[i];
 
-                if (_entries[i].hash == Hash64())
+                if (_entries[i].hash == Hash32())
                     continue map_entries;
 
                 ulong index = entry.hash.value % new_entries.length, probes = 0;
 
                 // Find empty slot.
-                while (probes < _max_probes && new_entries[index].hash != Hash64()) {
+                while (probes < _max_probes && new_entries[index].hash != Hash32()) {
                     index = (index + 1) % new_entries.length;
                     probes++;
 
@@ -144,7 +146,7 @@ private:
                     continue rehash;
                 }
 
-                assert(new_entries[index].hash == Hash64());
+                assert(new_entries[index].hash == Hash32());
                 new_entries[index] = *entry;
 
             }
